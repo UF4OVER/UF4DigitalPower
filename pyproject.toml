@@ -1,0 +1,13 @@
+[project]
+name = "f4cp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pyqt-fluent-widgets[full]",
+    "pillow>=10.0.0",
+]
+
+[tool.uv]
+constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
