@@ -1,11 +1,13 @@
 import sys
 
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import QUrl, Qt
 from PyQt5.QtGui import QDesktopServices, QIcon
-from PyQt5.QtWidgets import QHBoxLayout, QFrame, QApplication
+from PyQt5.QtWidgets import QApplication, QHBoxLayout, QFrame
+
 from qfluentwidgets import (NavigationItemPosition, MessageBox, setTheme, Theme, MSFluentWindow,
                             NavigationAvatarWidget, qrouter, SubtitleLabel, setFont)
 from qfluentwidgets import FluentIcon as FIF
+
 
 
 class Widget(QFrame):
@@ -78,6 +80,8 @@ class Window(MSFluentWindow):
 
 
 if __name__ == '__main__':
+    # Must be called before creating any windows
+
     app = QApplication(sys.argv)
     w = Window()
     w.show()

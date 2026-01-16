@@ -43,7 +43,7 @@ def test_generate_ico_sizes_creates_files(tmp_path: Path) -> None:
     _make_test_image(src, (512, 512))
 
     out = tmp_path / "out"
-    paths = generate_ico_sizes(src, out_dir=out, sizes=(16, 32), prefix="FACP")
+    paths = generate_ico_sizes(src, out_dir=out, sizes=(16, 32), prefix="FACP", rounded=False)
     assert len(paths) == 2
     for p in paths:
         assert Path(p).exists()
@@ -52,7 +52,19 @@ def test_generate_ico_sizes_creates_files(tmp_path: Path) -> None:
         assert img.size[0] in (16, 32)
 
 
+def test_generate_ico_rounded_corners(tmp_path: Path) -> None:
+    src = tmp_path / "src.png"
+    _make_test_image(src, (512, 512))
+
+    out = tmp_path / "out"
+    (ico_path,) = generate_ico_sizes(src, out_dir=out, sizes=(64,), prefix="FACP", rounded=True, rounded_radius_ratio=0.25)
+
+    img = Image.open(ico_path).convert("RGBA")
+    # Top-left corner should be transparent-ish due to rounded corners
+    r, g, b, a = img.getpixel((0, 0))
+    assert a < 10
+
+
 def test_missing_input_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         generate_square_pngs(tmp_path / "missing.png", out_dir=tmp_path / "out")
-

@@ -250,6 +250,7 @@ def _parse_sizes_csv(text: str) -> List[int]:
     return items
 
 
+
 def generate_all_assets(
         out_dir: Path | str = DEFAULT_ASSETS_DIR,
         prefix: str = "F4CP",
@@ -258,6 +259,7 @@ def generate_all_assets(
         size_2to1: Tuple[int, int] = DEFAULT_2TO1_SIZE,
         ico_rounded: bool = True,
         ico_rounded_radius_ratio: float = 0.22,
+        generate_tiles: bool = True,
 ) -> dict[str, object]:
     """脚本内一键生成所有资产文件（不需要命令行参数）。
 
