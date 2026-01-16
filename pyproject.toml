@@ -11,9 +11,71 @@ authors = [
 ]
 dependencies = [
     "pyqt-fluent-widgets[full]",
-    "pillow>=10.0.0",
     "cx-freeze>=8.5.3",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pillow>=10.0.0",
+    "pytest>=7.0",
+]
+
+
 [tool.uv]
 constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
+
+
+[tool.cxfreeze]
+executables = [
+    { script = "start.py",base = "gui", target_name = "F4CP", icon = "Assets/F4CP_ICO_256.ico" }
+]
+
+[tool.cxfreeze.build_exe]
+
+build_exe = "build/exe"
+
+includes = [
+    "PyQt5.QtCore",
+    "PyQt5.QtGui",
+    "PyQt5.QtWidgets",
+    "qfluentwidgets",
+    "qframelesswindow",
+]
+
+packages = [
+    "Pages",
+    "Core",
+    "Config",
+]
+
+# 注意：Config/config_ini.py 里使用 Path("config.ini")，且 frozen 时 BaseDir=exe 同级
+# 所以这里把 config.ini 直接放到 exe 同级，避免运行时找不到
+include_files = [
+    "Assets",
+    ["Config/config.ini", "config.ini"],
+]
+
+# Qt/GUI 相关建议不要进 zip（减少插件/资源加载问题；也便于排查缺文件）
+zip_include_packages = ["*"]
+zip_exclude_packages = [
+    "PyQt5",
+    "qfluentwidgets",
+    "qframelesswindow",
+]
+
+excludes = [
+    "PIL",
+    "scipy",
+    "matplotlib",
+    "backports",
+    "lib2to3",
+    "setuptools",
+    "tkinter",
+    "unittest",
+    "pydoc",
+]
+
+optimize = 2
+
+# Windows 运行时更稳（避免目标机器缺 VC++ runtime）
+include_msvcr = true
