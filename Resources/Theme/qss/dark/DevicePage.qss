@@ -1,0 +1,27 @@
+/* Log / console (plain/text edit used for device log) */
+QWidget#DevicePage QPlainTextEdit,
+QWidget#DevicePage QTextEdit,
+QWidget#DevicePage PlainTextEdit {
+    color: #ffffff; /* primary text color for dark theme */
+    background: transparent;
+}
+
+/* Read-only logs slightly muted to reduce contrast */
+QWidget#DevicePage QPlainTextEdit[readOnly="true"],
+QWidget#DevicePage QTextEdit[readOnly="true"] {
+    color: #dcdcdc;
+}
+
+/* Input line used for TX */
+QWidget#DevicePage QLineEdit,
+QWidget#DevicePage LineEdit {
+    color: #ffffff;
+    background: rgba(255,255,255,0.03);
+}
+
+/* Selection styling (keeps selection readable on dark backgrounds) */
+QWidget#DevicePage QTextEdit::selection,
+QWidget#DevicePage QPlainTextEdit::selection {
+    background: #3d6fb3;
+    color: #ffffff;
+}

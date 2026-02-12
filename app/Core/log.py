@@ -11,10 +11,11 @@
 # -------------------------------
 import logging
 from datetime import datetime
-from pathlib import Path
+
+from app.Config import SettingMangerInstance as SMI
 
 # 日志文件夹路径
-LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR = SMI.BaseDir / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 # 按年月日_时分生成文件名

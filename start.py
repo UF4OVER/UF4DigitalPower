@@ -1,91 +1,124 @@
+# coding:utf-8
 import sys
 
-from PyQt5.QtCore import QUrl, Qt
-from PyQt5.QtGui import QDesktopServices, QIcon
-from PyQt5.QtWidgets import QApplication, QHBoxLayout, QFrame
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QStackedWidget, QHBoxLayout
 
-from qfluentwidgets import (NavigationItemPosition, MessageBox, setTheme, Theme, MSFluentWindow,
-                            NavigationAvatarWidget, qrouter, SubtitleLabel, setFont)
+from qfluentwidgets import (NavigationInterface,
+                            NavigationItemPosition,
+                            isDarkTheme,
+                            FluentWidget,
+                            Theme,
+                            setTheme,
+                            FluentWidgetTitleBar)
 from qfluentwidgets import FluentIcon as FIF
+from qframelesswindow import StandardTitleBar, FramelessWindow
 
-from Config import SettingMangerInstance
-from Core import logger
-
-
-class Widget(QFrame):
-
-    def __init__(self, text: str, parent=None):
-        super().__init__(parent=parent)
-        self.label = SubtitleLabel(text, self)
-        self.hBoxLayout = QHBoxLayout(self)
-
-        setFont(self.label, 24)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.hBoxLayout.addWidget(self.label, 1, Qt.AlignCenter)
-        self.setObjectName(text.replace(' ', '-'))
+from app.Config import AppIconPath, cfg
+from app.Pages import DevicePage, SettingsPage, HomePage, F4CPpowerPage
+from app.Core import logger, StyleSheet
 
 
-class Window(MSFluentWindow):
+class Window(FluentWidget):
 
     def __init__(self):
         super().__init__()
 
-        # create sub interface
-        self.homeInterface = Widget('Home Interface', self)
-        self.appInterface = Widget('Application Interface', self)
-        self.videoInterface = Widget('Video Interface', self)
-        self.libraryInterface = Widget('library Interface', self)
+        self.setTitleBar(FluentWidgetTitleBar(self))
 
+        self.hBoxLayout = QHBoxLayout(self)
+        self.navigationInterface = NavigationInterface(self, showMenuButton=True)
+        self.stackWidget = QStackedWidget(self)
+
+        # create sub interface
+        self.homeInterface = HomePage(self)
+        self.deviceInterface = DevicePage(self)
+        self.F4CPpowerInterface = F4CPpowerPage(self) # F4CP power page will be implemented in the future
+
+        self.settingInterface = SettingsPage(self)
+
+        self.initLayout()
         self.initNavigation()
         self.initWindow()
 
+    def initLayout(self):
+        self.hBoxLayout.setSpacing(1)
+        self.hBoxLayout.setContentsMargins(0, self.titleBar.height(), 0, 0)
+
+        self.hBoxLayout.addWidget(self.navigationInterface)
+        self.hBoxLayout.addWidget(self.stackWidget)
+
+        self.hBoxLayout.setStretchFactor(self.stackWidget, 1)
+
     def initNavigation(self):
-        self.addSubInterface(self.homeInterface, FIF.HOME, '主页', FIF.HOME_FILL)
-        self.addSubInterface(self.appInterface, FIF.APPLICATION, '应用')
-        self.addSubInterface(self.videoInterface, FIF.VIDEO, '视频')
+        # enable acrylic effect
+        self.navigationInterface.setAcrylicEnabled(True)
 
-        self.addSubInterface(self.libraryInterface, FIF.BOOK_SHELF, '库', FIF.LIBRARY_FILL,
-                             NavigationItemPosition.BOTTOM)
 
-        # 添加自定义导航组件
-        self.navigationInterface.addItem(
-            routeKey='Help',
-            icon=FIF.HELP,
-            text='帮助',
-            onClick=self.showMessageBox,
-            selectable=False,
-            position=NavigationItemPosition.BOTTOM,
+        self.addSubInterface(
+            self.homeInterface,
+            FIF.HOME,
+            "主页")
+        self.addSubInterface(
+            self.deviceInterface,
+            FIF.DEVELOPER_TOOLS,
+            'TVLCOM')
+        self.addSubInterface(
+            self.F4CPpowerInterface,
+            FIF.POWER_BUTTON,
+            'F4CP Power',
         )
 
-        self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
+        self.navigationInterface.addSeparator()
+
+        self.addSubInterface(
+            self.settingInterface,
+            FIF.SETTING,
+            '设置',
+            NavigationItemPosition.BOTTOM)
+
+        self.stackWidget.currentChanged.connect(self.onCurrentInterfaceChanged)
+        self.stackWidget.setCurrentIndex(0)
 
     def initWindow(self):
-        self.resize(900, 700)
-        self.setWindowIcon(QIcon(':/qfluentwidgets/images/logo.png'))
-        self.setWindowTitle('PyQt-Fluent-Widgets')
+        self.resize(1200, 800)
+        self.setWindowIcon(QIcon(AppIconPath))
+        self.setWindowTitle('Fluor4CellPower')
+
+        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
         desktop = QApplication.desktop().availableGeometry()
         w, h = desktop.width(), desktop.height()
         self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
 
-    def showMessageBox(self):
-        w = MessageBox(
-            '支持作者🥰',
-            '个人开发不易，如果这个项目帮助到了您，可以考虑请作者喝一瓶快乐水🥤。您的支持就是作者开发和维护项目的动力🚀',
-            self
+    def addSubInterface(self, interface, icon, text: str, position=NavigationItemPosition.TOP, parent=None):
+        """ add sub interface """
+        self.stackWidget.addWidget(interface)
+        self.navigationInterface.addItem(
+            routeKey=interface.objectName(),
+            icon=icon,
+            text=text,
+            onClick=lambda: self.switchTo(interface),
+            position=position,
+            tooltip=text,
+            parentRouteKey=parent.objectName() if parent else None
         )
-        logger.info('Show message box to ask for donation.')
-        w.yesButton.setText('来啦老弟')
-        w.cancelButton.setText('下次一定')
 
-        if w.exec():
-            QDesktopServices.openUrl(QUrl("https://qfluentwidgets.com/zh/price/"))
+    def switchTo(self, widget):
+        self.stackWidget.setCurrentWidget(widget)
+
+    def onCurrentInterfaceChanged(self, index):
+        widget = self.stackWidget.widget(index)
+        self.navigationInterface.setCurrentItem(widget.objectName())
 
 
 if __name__ == '__main__':
-    # Must be called before creating any windows
-
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+    logger.info("Application started")
     app = QApplication(sys.argv)
     w = Window()
     w.show()
-    app.exec()
+    app.exec_()
