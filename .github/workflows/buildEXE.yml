@@ -43,7 +43,7 @@ jobs:
       # === 运行你的 UPX 压缩脚本 ===
       - name: Compress binaries with UPX
         run: |
-          python Scripts/upx_zip.py
+          python Script/upx_zip.py
 
       # === 打包成 zip 分发 ===
       - name: Package build into zip
