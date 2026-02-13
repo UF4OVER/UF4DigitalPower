@@ -31,7 +31,7 @@ jobs:
 
       - name: Build with cx_Freeze
         run: |
-          cxfreeze build -s  
+          uv run cxfreeze build
 
       # === 下载并准备 UPX ===
       - name: Download UPX
