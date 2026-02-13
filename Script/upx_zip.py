@@ -28,7 +28,7 @@ def compress_with_upx(directory):
             continue
 
         for file in files:
-            if file.endswith(('.exe', '.dll', 'pyd')):
+            if file.lower().endswith(('.exe', '.dll', '.pyd')):  # 规范大小写
                 file_path = os.path.join(root, file)
                 try:
                     subprocess.run(['upx.exe', '--best', file_path], check=True)
