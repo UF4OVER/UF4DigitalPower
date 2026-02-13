@@ -62,7 +62,6 @@ zip_exclude_packages = [
 ]
 
 excludes = [
-    # NOTE: GUI 程序不需要科学计算栈时，显式排除可避免生成 numpy.libs/scipy.libs
     "numpy",
     "numpy.core",
     "numpy.linalg",

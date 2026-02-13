@@ -19,11 +19,12 @@ from qfluentwidgets import (
     CardWidget, BodyLabel, StrongBodyLabel,
     PrimaryPushButton, PushButton,
     DoubleSpinBox, ComboBox,
-    TextEdit, LargeTitleLabel
+    TextEdit, LargeTitleLabel, SimpleCardWidget
 
 )
 
-class OutputControlCard(CardWidget):
+
+class OutputControlCard(SimpleCardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -64,10 +65,11 @@ class OutputControlCard(CardWidget):
         layout.addSpacing(16)
         layout.addLayout(btnLayout)
 
+
 # =========================
 # 数据卡片（V I P 组）
 # =========================
-class PowerGroupCard(CardWidget):
+class PowerGroupCard(SimpleCardWidget):
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
 
@@ -103,7 +105,7 @@ class PowerGroupCard(CardWidget):
 # =========================
 # 紧凑 PID 组件
 # =========================
-class CompactPID(CardWidget):
+class CompactPID(SimpleCardWidget):
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
 
@@ -144,6 +146,7 @@ class CompactPID(CardWidget):
         btnLayout.addWidget(PrimaryPushButton("保存"))
         btnLayout.addWidget(PushButton("读取"))
         layout.addLayout(btnLayout)
+
 
 class F4CPpowerPage(QWidget):
     def __init__(self, parent=None):
@@ -206,13 +209,13 @@ class F4CPpowerPage(QWidget):
 
         statusLayout.addWidget(StrongBodyLabel("系统状态"))
 
-        boardTempLabel= BodyLabel("板载温度:")
+        boardTempLabel = BodyLabel("板载温度:")
         coreTempLabel = BodyLabel("核心温度:")
         fanSpeedLabel = BodyLabel("风扇转速:")
 
         self.boardTempValue = BodyLabel("0.0 ℃")
-        self.coreTempValue  = BodyLabel("0.0 ℃")
-        self.fanSpeedValue  = BodyLabel("0 RPM")
+        self.coreTempValue = BodyLabel("0.0 ℃")
+        self.fanSpeedValue = BodyLabel("0 RPM")
 
         temp_layout = QGridLayout()
         temp_layout.setHorizontalSpacing(10)
@@ -272,5 +275,3 @@ class F4CPpowerPage(QWidget):
         logLayout.addWidget(self.logEdit)
 
         mainLayout.addWidget(logCard)
-
-
