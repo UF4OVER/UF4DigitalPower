@@ -11,4 +11,3 @@
 # -------------------------------
 from .set_stylesheet import *
 from .serial_session import *
-from .log import *

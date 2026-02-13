@@ -112,6 +112,9 @@ class Window(FluentWidget):
         widget = self.stackWidget.widget(index)
         self.navigationInterface.setCurrentItem(widget.objectName())
 
+    def close(self):
+        logger.warning("Application closed")
+        super().close()
 
 if __name__ == '__main__':
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)

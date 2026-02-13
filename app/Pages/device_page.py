@@ -256,7 +256,8 @@ class DevicePage(QWidget):
     def _append_log(self, text: str):
         ts = time.strftime('%H:%M:%S')
         msg = f'[{ts}] {text}'
-        logger.info(msg)
+
+        logger.info(text)
 
         # choose color based on message content/type
         lc = text.strip()

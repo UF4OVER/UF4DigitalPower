@@ -1,0 +1,179 @@
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-14 14:13
+#  @FileName: config.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact : 
+#  @Python  : 
+# -------------------------------
+import sys
+import logging
+from functools import cached_property
+from os import makedirs
+from pathlib import Path
+
+from typing import Union
+
+from PyQt5.QtCore import QSettings
+from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator,
+                            Theme, __version__)
+
+from pathlib import Path
+from datetime import datetime
+
+
+def _baseDir():
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    else:
+        return Path(__file__).resolve().parent.parent.parent
+
+# 日志文件夹路径
+LOG_DIR = _baseDir() / "Logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+# 按年月日_时分生成文件名
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+LOG_PATH = LOG_DIR / f"{timestamp}.log"
+
+# 创建日志器
+logger = logging.getLogger("MCServerLauncher")
+logger.setLevel(logging.DEBUG)
+
+# 控制台输出
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+
+# 文件输出
+file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+
+# 日志格式
+formatter = logging.Formatter(
+    "[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
+console_handler.setFormatter(formatter)
+file_handler.setFormatter(formatter)
+
+if not logger.hasHandlers():
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+
+class SettingsManager:
+    def __init__(self, config_path: Path):
+        self.config_path = str(config_path.resolve())
+        self.settings = QSettings(self.config_path, QSettings.Format.IniFormat)
+
+    def get(self, section: str, option: str, fallback: Union[str, int, bool] = None) -> Union[str, int, bool]:
+        key = f"{section}/{option}"
+        if self.settings.contains(key):
+            value = self.settings.value(key)
+            if isinstance(fallback, bool):
+                logger.info(f"Fallback value: {fallback}")
+                return value.lower() == 'true' if isinstance(value, str) else bool(value)
+            if isinstance(fallback, int):
+                try:
+                    return int(value)
+                except ValueError:
+                    return fallback
+            return value
+        return fallback
+
+    def set(self, section: str, option: str, value: Union[str, int, bool]):
+        key = f"{section}/{option}"
+        logger.info(f"Setting {key} to {value}")
+        self.settings.setValue(key, value)
+        self.settings.sync()
+    @cached_property
+    def BaseDir(self) -> Path:
+        """
+        return: 应用程序的基础目录Path对象
+        """
+        return _baseDir()
+
+    @cached_property
+    def AssetsDir(self) -> Path:
+        """
+        return: Assets目录的Path对象
+        """
+        _assetsDir = self.BaseDir / "Resources" / "Assets"
+        if not _assetsDir.exists():
+            logger.warning(f"Assets directory not found at {self.BaseDir / 'Resources' / 'Assets'}. Please check the path.")
+            makedirs(_assetsDir, exist_ok=True)
+        return _assetsDir
+
+    @cached_property
+    def ConfigDir(self) -> Path:
+        """
+        return: Config目录的Path对象
+        """
+        _configDir = self.BaseDir / "Resources" / "Config"
+        if not _configDir.exists():
+            logger.warning(f"Config directory not found at {self.BaseDir / 'Resources' / 'Config'}. Please check the path.")
+            makedirs(_configDir, exist_ok=True)
+        return _configDir
+
+    @cached_property
+    def ThemeDir(self) -> Path:
+        """
+        return: Theme目录的Path对象
+        """
+        _themeDir = self.BaseDir / "Resources" / "Theme"
+        if not _themeDir.exists():
+            logger.warning(f"Theme directory not found at {self.BaseDir / 'Resources' / 'Theme'}. Please check the path.")
+            makedirs(_themeDir, exist_ok=True)
+        return _themeDir
+
+    @cached_property
+    def FontDir(self) -> Path:
+        """
+        return: Font目录的Path对象
+        """
+        _fontDir = self.BaseDir / "Resources" / "Font"
+        if not _fontDir.exists():
+            logger.warning(f"Font directory not found at {self.BaseDir / 'Resources' / 'Font'}. Please check the path.")
+            makedirs(_fontDir, exist_ok=True)
+        return _fontDir
+
+
+
+def isWin11():
+    return sys.platform == 'win32' and sys.getwindowsversion().build >= 22000
+
+
+class Config(QConfig):
+    """ Config of application """
+
+    micaEnabled = ConfigItem("MainWindow", "MicaEnabled", isWin11(), BoolValidator())
+
+    # software update
+    checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
+
+
+YEAR = 2026
+AUTHOR = "UF4OVER"
+VERSION = __version__
+HELP_URL = "https://hepi.ng"
+REPO_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets"
+EXAMPLE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/tree/master/examples"
+FEEDBACK_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/issues"
+RELEASE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/releases/latest"
+ZH_SUPPORT_URL = "https://qfluentwidgets.com/zh/price/"
+EN_SUPPORT_URL = "https://qfluentwidgets.com/price/"
+
+
+SettingMangerInstance = SettingsManager(config_path=Path("config.ini"))
+AppIconPath = str(SettingMangerInstance.AssetsDir / "F4CP_ICO_256.ico")
+
+# -------------------------------config of qfluentwidgets-------------------------------
+cfg = Config()
+cfg.themeMode.value = Theme.AUTO
+_config_json_path = SettingMangerInstance.ConfigDir / "config.json"
+if _config_json_path.exists():
+    makedirs(_config_json_path.parent, exist_ok=True)
+    logger.debug(f"Config json file found at {_config_json_path}")
+qconfig.load(SettingMangerInstance.ConfigDir / "config.json", cfg)

@@ -9,4 +9,4 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .config_ini import *
+from .config import *

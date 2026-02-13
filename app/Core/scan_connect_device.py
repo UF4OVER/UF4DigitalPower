@@ -20,6 +20,7 @@ class DeviceScanner(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.serial = None
+
     def scanDevices(self):
         """
         扫描当前系统串口，返回匹配 VID/PID 的设备信息列表
@@ -44,7 +45,6 @@ class DeviceScanner(QObject):
                 devices.append(device_info)
 
         return devices
-
 
 
     def connectFirstDevice(self, baudrate=115200):

@@ -46,7 +46,7 @@ packages = [
     "app",
 ]
 
-# 注意：Config/config_ini.py 里使用 Path("config.ini")，且 frozen 时 BaseDir=exe 同级
+# 注意：Config/config.py 里使用 Path("config.ini")，且 frozen 时 BaseDir=exe 同级
 # 所以这里把 config.ini 直接放到 exe 同级，避免运行时找不到
 include_files = [
     "Resources",
