@@ -102,6 +102,12 @@ def listSerialPorts() -> list[str]:
 
     return [p.portName() for p in QSerialPortInfo.availablePorts()]
 
+def listSerialPortInfos() -> list[QSerialPortInfo]:
+    """
+    返回串口列表对象
+    :return: QSerialPortInfo
+    """
+    return QSerialPortInfo.availablePorts()
 
 @dataclass
 class SerialConfig:
@@ -115,11 +121,11 @@ class SerialConfig:
 
 
 class SerialSession(QObject):
-    def __init__(self, cfg: SerialConfig):
+    def __init__(self, cfg: SerialConfig,_event_receiver: Optional[QObject] = None):
         super().__init__()
 
         # 事件接收器
-        self._event_receiver: Optional[QObject] = None
+        self._event_receiver: Optional[QObject] = _event_receiver
 
         # 回调函数
         self.on_rx: Optional[Callable[[bytes], None]] = None
@@ -147,6 +153,7 @@ class SerialSession(QObject):
 
         with QMutexLocker(self._event_lock):
             self._event_receiver = receiver
+
 
     def open(self):
         if self.is_open:

@@ -34,6 +34,7 @@ from app.Core import logger
 from app.TVLCOM import const as tvl_const
 from app.TVLCOM.protocol import Protocol
 from app.TVLCOM.tlv import tlv_encode
+
 from qfluentwidgets import (
     BodyLabel,
     ComboBox,
@@ -74,9 +75,6 @@ class DevicePage(QWidget):
 
         self.setObjectName("DevicePage")  # 主题设置
         StyleSheet.DEVICE_PAGE.apply(self)
-        # 响应主题切换
-        from app.Config import cfg
-        cfg.themeChanged.connect(self._on_theme_changed)
 
         self.vBoxLayout = QVBoxLayout(self)
         m = 24
@@ -118,7 +116,7 @@ class DevicePage(QWidget):
         self.parseSwitch.setChecked(True)
         connLayout.addWidget(self.parseSwitch)
 
-        self.stateLabel = BodyLabel('Disconnected', connBar)
+        self.stateLabel = BodyLabel('未连接', connBar)
         connLayout.addWidget(self.stateLabel)
 
         connLayout.addStretch(1)
@@ -139,7 +137,7 @@ class DevicePage(QWidget):
         modeLabel = BodyLabel('发送模式', modeBar)  # NOQA 函数中的变量应小写
         modeLayout.addWidget(modeLabel)
         self.modeCombo = ComboBox(modeBar)
-        self.modeCombo.addItems(['Raw(HEX/ASCII)', 'TVLCOM(TLV)'])
+        self.modeCombo.addItems(['Raw(HEX/ASCII)', 'TVLCOM(TLV)'])  # NOQA
         modeLayout.addWidget(self.modeCombo)
 
         self.rawFmtCombo = ComboBox(modeBar)
@@ -469,7 +467,7 @@ class DevicePage(QWidget):
                 baud = QSerialPort.BaudRate.Baud9600
 
         cfg = SerialConfig(port=port, baudrate=baud)
-        self._session = SerialSession(cfg)
+        self._session = SerialSession(cfg, _event_receiver=self)
         # Use event mechanism: SerialSession will post events to this widget.
         # Do not assign callback handlers on the session; prefer events.
         try:
