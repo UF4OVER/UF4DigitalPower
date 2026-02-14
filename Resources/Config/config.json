@@ -8,8 +8,8 @@
             "Microsoft YaHei",
             "PingFang SC"
         ],
-        "ThemeColor": "#ff009faa",
-        "ThemeMode": "Light"
+        "ThemeColor": "#ffff3636",
+        "ThemeMode": "Dark"
     },
     "MainWindow": {
         "MicaEnabled": true

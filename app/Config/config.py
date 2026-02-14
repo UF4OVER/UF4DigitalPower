@@ -11,13 +11,14 @@
 # -------------------------------
 import sys
 import logging
-from functools import cached_property
+from functools import cached_property, cache
 from os import makedirs
 from pathlib import Path
 
 from typing import Union
 
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings,QTimer
+from PyQt5.QtGui import QFontDatabase, QFont
 from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator,
                             Theme, __version__)
 
@@ -68,12 +69,14 @@ class SettingsManager:
         self.config_path = str(config_path.resolve())
         self.settings = QSettings(self.config_path, QSettings.Format.IniFormat)
 
+        # QTimer.singleShot(0, self.loadFontToWidget)
+
     def get(self, section: str, option: str, fallback: Union[str, int, bool] = None) -> Union[str, int, bool]:
         key = f"{section}/{option}"
         if self.settings.contains(key):
             value = self.settings.value(key)
             if isinstance(fallback, bool):
-                logger.info(f"Fallback value: {fallback}")
+                logger.info(f"{self.__class__.__name__} Fallback value: {fallback}")
                 return value.lower() == 'true' if isinstance(value, str) else bool(value)
             if isinstance(fallback, int):
                 try:
@@ -85,7 +88,7 @@ class SettingsManager:
 
     def set(self, section: str, option: str, value: Union[str, int, bool]):
         key = f"{section}/{option}"
-        logger.info(f"Setting {key} to {value}")
+        logger.info(f"{self.__class__.__name__} Setting {key} to {value}")
         self.settings.setValue(key, value)
         self.settings.sync()
     @cached_property
@@ -102,8 +105,9 @@ class SettingsManager:
         """
         _assetsDir = self.BaseDir / "Resources" / "Assets"
         if not _assetsDir.exists():
-            logger.warning(f"Assets directory not found at {self.BaseDir / 'Resources' / 'Assets'}. Please check the path.")
+            logger.warning(f"{self.__class__.__name__} Assets directory not found at {self.BaseDir / 'Resources' / 'Assets'}. Please check the path.")
             makedirs(_assetsDir, exist_ok=True)
+        logger.info(f"{self.__class__.__name__} Assets directory path: {_assetsDir}")
         return _assetsDir
 
     @cached_property
@@ -113,8 +117,9 @@ class SettingsManager:
         """
         _configDir = self.BaseDir / "Resources" / "Config"
         if not _configDir.exists():
-            logger.warning(f"Config directory not found at {self.BaseDir / 'Resources' / 'Config'}. Please check the path.")
+            logger.warning(f"{self.__class__.__name__} Config directory not found at {self.BaseDir / 'Resources' / 'Config'}. Please check the path.")
             makedirs(_configDir, exist_ok=True)
+        logger.info(f"{self.__class__.__name__} Config directory path: {_configDir}")
         return _configDir
 
     @cached_property
@@ -124,8 +129,9 @@ class SettingsManager:
         """
         _themeDir = self.BaseDir / "Resources" / "Theme"
         if not _themeDir.exists():
-            logger.warning(f"Theme directory not found at {self.BaseDir / 'Resources' / 'Theme'}. Please check the path.")
+            logger.warning(f"{self.__class__.__name__} Theme directory not found at {self.BaseDir / 'Resources' / 'Theme'}. Please check the path.")
             makedirs(_themeDir, exist_ok=True)
+        logger.info(f"{self.__class__.__name__} Theme directory path: {_themeDir}")
         return _themeDir
 
     @cached_property
@@ -135,10 +141,52 @@ class SettingsManager:
         """
         _fontDir = self.BaseDir / "Resources" / "Font"
         if not _fontDir.exists():
-            logger.warning(f"Font directory not found at {self.BaseDir / 'Resources' / 'Font'}. Please check the path.")
+            logger.warning(f"{self.__class__.__name__} Font directory not found at {self.BaseDir / 'Resources' / 'Font'}. Please check the path.")
             makedirs(_fontDir, exist_ok=True)
+        logger.info(f"{self.__class__.__name__} Font directory path: {_fontDir}")
         return _fontDir
 
+    @cache
+    def loadFontToWidget(self, size: int) -> QFont | None:
+        """
+        从字体目录加载第一个可用的 OTF 字体
+
+        Args:
+            size: 字体大小
+
+        Returns:
+            QFont 对象，如果没有可用字体则返回 None
+        """
+        otf_files = list(self.FontDir.glob("*.otf"))
+
+        if not otf_files:
+            logger.warning(f" {self.__class__.__name__} No .otf files found in {self.FontDir}")
+            return None
+
+        for font_file in otf_files:
+            font_path = str(font_file.resolve())
+            logger.info(f"{self.__class__.__name__} Attempting to load font from {font_path}")
+            try:
+                font_id = QFontDatabase.addApplicationFont(font_path)
+                if font_id == -1:  # 检查是否加载成功
+                    logger.warning(f"{self.__class__.__name__} QFontDatabase failed to load font: {font_path}")
+                    continue  # 尝试下一个字体
+                font_families = QFontDatabase.applicationFontFamilies(font_id)
+                # 检查是否获取到字体族名
+                if not font_families:
+                    logger.warning(f"{self.__class__.__name__} No font families found for: {font_path}")
+                    continue  # 尝试下一个字体
+
+                font_family = font_families[0]
+                logger.info(f"{self.__class__.__name__} Successfully loaded font: {font_family} (ID: {font_id})")
+                return QFont(font_family, size)
+
+            except Exception as e:
+                logger.error(f"{self.__class__.__name__} Exception while loading font {font_path}: {e}")
+                continue  # 尝试下一个字体
+
+        logger.error(f"{self.__class__.__name__} Failed to load any font from {self.FontDir}")
+        return None
 
 
 def isWin11():
