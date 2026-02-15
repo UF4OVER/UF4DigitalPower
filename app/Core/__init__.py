@@ -11,3 +11,4 @@
 # -------------------------------
 from .set_stylesheet import *
 from .serial_session import *
+from .scan_connect_device import *

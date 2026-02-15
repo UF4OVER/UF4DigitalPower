@@ -9,7 +9,7 @@
             "PingFang SC"
         ],
         "ThemeColor": "#ffff3636",
-        "ThemeMode": "Dark"
+        "ThemeMode": "Light"
     },
     "MainWindow": {
         "MicaEnabled": true

@@ -25,23 +25,79 @@ from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator,
 from pathlib import Path
 from datetime import datetime
 
+class DirPaths:
 
-def _baseDir():
-    if getattr(sys, 'frozen', False):
-        return Path(sys.executable).resolve().parent
-    else:
-        return Path(__file__).resolve().parent.parent.parent
+    @cached_property
+    def BaseDir(self) -> Path:
+        """
+        return: 应用程序的基础目录Path对象
+        """
+        if getattr(sys, 'frozen', False):
+            return Path(sys.executable).resolve().parent
+        else:
+            return Path(__file__).resolve().parent.parent.parent
+
+    @cached_property
+    def AssetsDir(self) -> Path:
+        """
+        return: Assets目录的Path对象
+        """
+        _assetsDir = self.BaseDir / "Resources" / "Assets"
+        if not _assetsDir.exists():
+            makedirs(_assetsDir, exist_ok=True)
+        return _assetsDir
+
+    @cached_property
+    def ConfigDir(self) -> Path:
+        """
+        return: Config目录的Path对象
+        """
+        _configDir = self.BaseDir / "Resources" / "Config"
+        if not _configDir.exists():
+            makedirs(_configDir, exist_ok=True)
+        return _configDir
+
+    @cached_property
+    def ThemeDir(self) -> Path:
+        """
+        return: Theme目录的Path对象
+        """
+        _themeDir = self.BaseDir / "Resources" / "Theme"
+        if not _themeDir.exists():
+            makedirs(_themeDir, exist_ok=True)
+        return _themeDir
+
+    @cached_property
+    def FontDir(self) -> Path:
+        """
+        return: Font目录的Path对象
+        """
+        _fontDir = self.BaseDir / "Resources" / "Font"
+        if not _fontDir.exists():
+            makedirs(_fontDir, exist_ok=True)
+        return _fontDir
+
+    @cached_property
+    def LogDir(self) -> Path:
+        """
+        return: Logs目录的Path对象
+        """
+        _logDir = self.BaseDir / "Logs"
+        if not _logDir.exists():
+            makedirs(_logDir, exist_ok=True)
+        return _logDir
+
+_dirPaths = DirPaths()
 
 # 日志文件夹路径
-LOG_DIR = _baseDir() / "Logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR = _dirPaths.LogDir
 
 # 按年月日_时分生成文件名
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
 LOG_PATH = LOG_DIR / f"{timestamp}.log"
 
 # 创建日志器
-logger = logging.getLogger("MCServerLauncher")
+logger = logging.getLogger("F4CP")
 logger.setLevel(logging.DEBUG)
 
 # 控制台输出
@@ -62,6 +118,7 @@ file_handler.setFormatter(formatter)
 if not logger.hasHandlers():
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
+
 
 
 class SettingsManager:
@@ -91,61 +148,6 @@ class SettingsManager:
         logger.info(f"{self.__class__.__name__} Setting {key} to {value}")
         self.settings.setValue(key, value)
         self.settings.sync()
-    @cached_property
-    def BaseDir(self) -> Path:
-        """
-        return: 应用程序的基础目录Path对象
-        """
-        return _baseDir()
-
-    @cached_property
-    def AssetsDir(self) -> Path:
-        """
-        return: Assets目录的Path对象
-        """
-        _assetsDir = self.BaseDir / "Resources" / "Assets"
-        if not _assetsDir.exists():
-            logger.warning(f"{self.__class__.__name__} Assets directory not found at {self.BaseDir / 'Resources' / 'Assets'}. Please check the path.")
-            makedirs(_assetsDir, exist_ok=True)
-        logger.info(f"{self.__class__.__name__} Assets directory path: {_assetsDir}")
-        return _assetsDir
-
-    @cached_property
-    def ConfigDir(self) -> Path:
-        """
-        return: Config目录的Path对象
-        """
-        _configDir = self.BaseDir / "Resources" / "Config"
-        if not _configDir.exists():
-            logger.warning(f"{self.__class__.__name__} Config directory not found at {self.BaseDir / 'Resources' / 'Config'}. Please check the path.")
-            makedirs(_configDir, exist_ok=True)
-        logger.info(f"{self.__class__.__name__} Config directory path: {_configDir}")
-        return _configDir
-
-    @cached_property
-    def ThemeDir(self) -> Path:
-        """
-        return: Theme目录的Path对象
-        """
-        _themeDir = self.BaseDir / "Resources" / "Theme"
-        if not _themeDir.exists():
-            logger.warning(f"{self.__class__.__name__} Theme directory not found at {self.BaseDir / 'Resources' / 'Theme'}. Please check the path.")
-            makedirs(_themeDir, exist_ok=True)
-        logger.info(f"{self.__class__.__name__} Theme directory path: {_themeDir}")
-        return _themeDir
-
-    @cached_property
-    def FontDir(self) -> Path:
-        """
-        return: Font目录的Path对象
-        """
-        _fontDir = self.BaseDir / "Resources" / "Font"
-        if not _fontDir.exists():
-            logger.warning(f"{self.__class__.__name__} Font directory not found at {self.BaseDir / 'Resources' / 'Font'}. Please check the path.")
-            makedirs(_fontDir, exist_ok=True)
-        logger.info(f"{self.__class__.__name__} Font directory path: {_fontDir}")
-        return _fontDir
-
     @cache
     def loadFontToWidget(self, size: int) -> QFont | None:
         """
@@ -157,7 +159,7 @@ class SettingsManager:
         Returns:
             QFont 对象，如果没有可用字体则返回 None
         """
-        otf_files = list(self.FontDir.glob("*.otf"))
+        otf_files = list(_dirPaths.FontDir.glob("*.otf"))
 
         if not otf_files:
             logger.warning(f" {self.__class__.__name__} No .otf files found in {self.FontDir}")
@@ -188,7 +190,6 @@ class SettingsManager:
         logger.error(f"{self.__class__.__name__} Failed to load any font from {self.FontDir}")
         return None
 
-
 def isWin11():
     return sys.platform == 'win32' and sys.getwindowsversion().build >= 22000
 
@@ -213,15 +214,17 @@ RELEASE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/releases/latest"
 ZH_SUPPORT_URL = "https://qfluentwidgets.com/zh/price/"
 EN_SUPPORT_URL = "https://qfluentwidgets.com/price/"
 
+# -------------------------------config of application-------------------------------
+_iniPath = _dirPaths.ConfigDir / "config.ini"
 
-SettingMangerInstance = SettingsManager(config_path=Path("config.ini"))
-AppIconPath = str(SettingMangerInstance.AssetsDir / "F4CP_ICO_256.ico")
+SettingMangerInstance = SettingsManager(_iniPath)
+logger.info(f"SettingsManager initialized with config path: {_iniPath}")
 
 # -------------------------------config of qfluentwidgets-------------------------------
 cfg = Config()
 cfg.themeMode.value = Theme.AUTO
-_config_json_path = SettingMangerInstance.ConfigDir / "config.json"
-if _config_json_path.exists():
-    makedirs(_config_json_path.parent, exist_ok=True)
-    logger.debug(f"Config json file found at {_config_json_path}")
-qconfig.load(SettingMangerInstance.ConfigDir / "config.json", cfg)
+_config_json_path = _dirPaths.ConfigDir / "config.json"
+qconfig.load(_config_json_path, cfg)
+logger.info(f"Config loaded from {_config_json_path}")
+
+AppIconPath = str(_dirPaths.AssetsDir / "F4CP_ICO_256.ico")

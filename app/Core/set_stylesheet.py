@@ -12,7 +12,7 @@
 # coding: utf-8
 from enum import Enum
 
-from app.Config import SettingMangerInstance as SMI
+from app.Config import DirPathsInstance
 from qfluentwidgets import StyleSheetBase, Theme, qconfig
 
 
@@ -25,4 +25,4 @@ class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举
 
     def path(self, theme=Theme.AUTO):
         theme = qconfig.theme if theme == Theme.AUTO else theme
-        return str(SMI.ThemeDir / "qss" / theme.name.lower() / f"{self.value}.qss")
+        return str(DirPathsInstance.ThemeDir / "qss" / theme.name.lower() / f"{self.value}.qss")
