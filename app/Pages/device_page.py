@@ -433,12 +433,6 @@ class DevicePage(QWidget):
                 self.portCombo.setCurrentText(cur)
             return
 
-        # # 枚举不到时：提供常见 COM 列表，便于手动选择虚拟串口
-        # fallback = [f'COM{i}' for i in range(1, 257)]
-        # self.portCombo.addItems(fallback)
-        # if cur and cur in fallback:
-        #     self.portCombo.setCurrentText(cur)
-
     def toggle_connection(self):
         if self._session and self._session.is_open:
             self._disconnect()

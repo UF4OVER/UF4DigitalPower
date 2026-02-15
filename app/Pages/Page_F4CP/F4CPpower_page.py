@@ -26,6 +26,8 @@ class F4CPowerPage(QWidget, Ui_Frame):
         # 创建扫描器（不需要手动管理定时器）
         self._scanner = DeviceScanner(self, scan_interval=1000)  # 1秒扫描一次
 
+        self.__init_controlName()
+
         # 连接信号
         self._scanner.deviceConnected.connect(self._on_device_connected)
         self._scanner.deviceDisconnected.connect(self._on_device_disconnected)
@@ -34,7 +36,6 @@ class F4CPowerPage(QWidget, Ui_Frame):
         # 启动扫描
         self._scanner.start_scanning()
 
-        self.__init_controlName()
 
     def __init_controlName(self):
         self.hostNumber = self.lineEdit_2
@@ -44,27 +45,24 @@ class F4CPowerPage(QWidget, Ui_Frame):
     def _on_device_connected(self, session: SerialSession):
         """设备已连接"""
         logger.info(f"{self.__class__.__name__}: 设备已连接")
-        self.textOutput.append("✅ 设备已连接")
+        # self.textOutput.append("设备已连接")
 
         # 设置事件接收器
         session.set_event_receiver(self)
         session.on_tx = lambda b: self.textOutput.append(b)
 
-        # 更新UI状态
-        # self.status_label.setText("已连接")
-        # self.connect_btn.setEnabled(False)
-
     def _on_device_disconnected(self):
         """设备已断开"""
         logger.warning(f"{self.__class__.__name__}: 设备已断开")
-        self.textOutput.append("❌ 设备已断开，正在重新扫描...")
+        self.textOutput.append("设备已断开，正在重新扫描...")
 
         # 更新UI状态
         # self.status_label.setText("未连接 - 扫描中...")
 
     def _on_connection_error(self, error_msg: str):
         """连接错误"""
-        self.textOutput.append(f"⚠️ 连接错误: {error_msg}")
+        logger.error(f"{self.__class__.__name__}: 连接错误: {error_msg}")
+        # self.textOutput.append(f"⚠️ 连接错误: {error_msg}")
 
     def closeEvent(self, event):
         """页面关闭时清理"""

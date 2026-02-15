@@ -17,8 +17,8 @@ from .serial_session import SerialSession, SerialConfig
 from ..Config import SettingMangerInstance, logger
 
 try:
-    PORT_VID = SettingMangerInstance.get("port", "vid")
-    PORT_PID = SettingMangerInstance.get("port", "pid")
+    PORT_VID = int(SettingMangerInstance.get("port", "vid"))
+    PORT_PID = int(SettingMangerInstance.get("port", "pid"))
 
     if (PORT_VID and PORT_PID) is not None :
         pass
@@ -116,8 +116,6 @@ class DeviceScanner(QObject):
             if not self._serial_session.isOpen():
                 return False
 
-            # 方法2：尝试获取串口状态（某些实现支持）
-            # 如果 SerialSession 有底层 QSerialPort，可以进一步检查
             return True
 
         except Exception as e:
@@ -149,7 +147,8 @@ class DeviceScanner(QObject):
             session = SerialSession(cfg)
 
             # 验证连接是否成功打开
-            if not session.isOpen():
+            session.open()
+            if not session.is_open:
                 raise Exception("串口打开失败")
 
             # 连接成功
@@ -167,12 +166,26 @@ class DeviceScanner(QObject):
     def _find_matching_port(self):
         """扫描并返回第一个匹配的端口"""
         if PORT_VID == -1 or PORT_PID == -1:
+            logger.warning("DeviceScanner: VID/PID 未配置，跳过扫描")
             return None
 
         for port in QSerialPortInfo.availablePorts():
-            if (port.vendorIdentifier() == PORT_VID and
-                    port.productIdentifier() == PORT_PID):
-                logger.info(f"DeviceScanner: 找到匹配的端口 {port.portName()} (VID={PORT_VID}, PID={PORT_PID})")
+            vid = port.vendorIdentifier()
+            pid = port.productIdentifier()
+            port_name = port.portName()
+
+            # 调试日志（可选，生产环境可注释掉）
+            logger.debug(f"DeviceScanner: 检查端口 {port_name} (VID={vid}, PID={pid})")
+
+            # 跳过没有 VID/PID 的端口
+            if not port.hasVendorIdentifier() or not port.hasProductIdentifier():
+                continue
+
+            # 检查是否匹配（注意：没有 else return！）
+            if vid == PORT_VID and pid == PORT_PID:
+                logger.info(f"DeviceScanner: 匹配成功 {port_name} (VID={vid}, PID={pid})")
                 return port
 
+        # 循环结束都没找到才返回 None
+        logger.debug(f"DeviceScanner: 未找到匹配 VID={PORT_VID}, PID={PORT_PID} 的设备")
         return None
