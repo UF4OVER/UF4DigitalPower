@@ -1,7 +1,7 @@
 # coding:utf-8
 import sys
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QOperatingSystemVersion
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QStackedWidget, QHBoxLayout, QWidget
 
@@ -26,9 +26,8 @@ class Window(UMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setObjectName('Window')
-        self.updateFrameless()
-        # create sub interface
+        self.setObjectName("FluentAcrylicWindow")
+
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.F4CPowerInterface = F4CPowerPage()
@@ -36,6 +35,11 @@ class Window(UMainWindow):
 
         self.initNavigation()
         self.initWindow()
+
+        Bus.enableAcrylicBackground.connect(lambda a: self.setAcrylicEffectEnabled(a))
+
+        # StyleSheet.BASE_PAGE.apply(self)
+
 
     def initNavigation(self):
         # enable acrylic effect
@@ -50,8 +54,13 @@ class Window(UMainWindow):
     def initWindow(self):
         self.resize(1200, 800)
 
+        self.setTitleBar(StandardTitleBar(self))
+
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle('Fluor4CellPower')
+
+        self.titleBar.raise_()
+        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
         desktop = QApplication.desktop().availableGeometry()
         w, h = desktop.width(), desktop.height()
@@ -61,6 +70,28 @@ class Window(UMainWindow):
     def close(self):
         logger.warning("Application closed")
         super().close()
+
+    def setAcrylicEffectEnabled(self, enable: bool):
+        """ set acrylic effect enabled """
+
+        # todo : 亚克力背景与明暗主题切换问题
+        self.setStyleSheet(f"background:{'transparent' if enable else '#F2F2F2'}")
+        if enable:
+            self.windowEffect.setAcrylicEffect(self.winId(), "F2F2F299")
+            if QOperatingSystemVersion.current() != QOperatingSystemVersion.Windows10:
+                self.windowEffect.addShadowEffect(self.winId())
+
+            StyleSheet.HOME_PAGE.apply(self.homeInterface)
+            StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
+            StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
+
+        else:
+            self.windowEffect.addShadowEffect(self.winId())
+            self.windowEffect.removeBackgroundEffect(self.winId())
+
+            StyleSheet.HOME_PAGE.apply(self.homeInterface)
+            StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
+            StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
 
 
 if __name__ == '__main__':

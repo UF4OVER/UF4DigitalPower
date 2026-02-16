@@ -1,95 +1,75 @@
-# -*- coding: utf-8 -*-
-# -------------------------------
-#  @Project : F4CP
-#  @Time    : 2026 - 02-14 15:57
-#  @FileName: test_mafwindows.py
-#  @Software: PyCharm 2024.1.6 (Professional Edition)
-#  @System  : Windows 11 23H2
-#  @Author  : UF4
-#  @Contact : 
-#  @Python  : 
-# -------------------------------
+# coding:utf-8
 import sys
 
-from PyQt5.QtGui import QDesktopServices, QIcon
-from PyQt5.QtWidgets import QApplication, QFrame, QHBoxLayout
-from PyQt5.QtCore import Qt, QUrl
-from qfluentwidgets import (NavigationItemPosition, MessageBox, setTheme, Theme, MSFluentWindow,
-                            NavigationAvatarWidget, qrouter, SubtitleLabel, setFont)
-from qfluentwidgets import FluentIcon as FIF
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QLabel, QMenuBar, QMenu, QStatusBar, QTextEdit, QHBoxLayout
+
+from qframelesswindow import FramelessMainWindow, FramelessDialog
 
 
-class Widget(QFrame):
-
-    def __init__(self, text: str, parent=None):
-        super().__init__(parent=parent)
-        self.label = SubtitleLabel(text, self)
-        self.hBoxLayout = QHBoxLayout(self)
-
-        setFont(self.label, 24)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.hBoxLayout.addWidget(self.label, 1, Qt.AlignCenter)
-        self.setObjectName(text.replace(' ', '-'))
-
-
-
-class Window(MSFluentWindow):
+class MainWindow(FramelessMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Frameless Main Window")
 
-        # create sub interface
-        self.homeInterface = Widget('Home Interface', self)
-        self.appInterface = Widget('Application Interface', self)
-        self.videoInterface = Widget('Video Interface', self)
-        self.libraryInterface = Widget('library Interface', self)
+        # add menu bar
+        menuBar = QMenuBar(self.titleBar)
+        menu = QMenu('File(&F)', self)
+        menu.addAction('open')
+        menu.addAction('save')
+        menuBar.addMenu(menu)
+        menuBar.addAction('Edit(&E)')
+        menuBar.addAction('Select(&S)')
+        menuBar.addAction('Help(&H)', self.showHelpDialog)
+        self.titleBar.layout().insertWidget(0, menuBar, 0, Qt.AlignLeft)
+        self.titleBar.layout().insertStretch(1, 1)
+        self.setMenuWidget(self.titleBar)
 
-        self.initNavigation()
-        self.initWindow()
+        # add status bar
+        statusBar = QStatusBar(self)
+        statusBar.addWidget(QLabel('row 1'))
+        statusBar.addWidget(QLabel('column 1'))
+        self.setStatusBar(statusBar)
 
-    def initNavigation(self):
-        self.addSubInterface(self.homeInterface, FIF.HOME, '主页',)
-        self.addSubInterface(self.appInterface, FIF.APPLICATION, '应用')
-        self.addSubInterface(self.videoInterface, FIF.VIDEO, '视频')
+        # set central widget
+        self.textEdit = QTextEdit()
+        self.setCentralWidget(self.textEdit)
 
-        self.addSubInterface(self.libraryInterface, FIF.BOOK_SHELF, '库')
+        self.setStyleSheet("""
+            QMenuBar{background: #F0F0F0; padding: 5px 0}
+            QTextEdit{border: none; font-size: 15px}
+            QDialog > QLabel{font-size: 15px}
+        """)
 
-        # 添加自定义导航组件
-        self.navigationInterface.addItem(
-            routeKey='Help',
-            icon=FIF.HELP,
-            text='帮助',
-            onClick=self.showMessageBox,
-            selectable=False,
-            position=NavigationItemPosition.BOTTOM,
-        )
+    def showHelpDialog(self):
+        w = FramelessDialog(self)
 
-        self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
+        # add a label to dialog
+        w.setLayout(QHBoxLayout())
+        w.layout().addWidget(QLabel('Frameless Dialog'), 0, Qt.AlignCenter)
 
-    def initWindow(self):
-        self.resize(900, 700)
-        self.setWindowIcon(QIcon(':/qfluentwidgets/images/logo.png'))
-        self.setWindowTitle('PyQt-Fluent-Widgets')
+        # raise title bar
+        w.titleBar.raise_()
+        w.resize(300, 300)
 
-        desktop = QApplication.desktop().availableGeometry()
-        w, h = desktop.width(), desktop.height()
-        self.move(w//2 - self.width()//2, h//2 - self.height()//2)
-
-    def showMessageBox(self):
-        w = MessageBox(
-            '支持作者🥰',
-            '个人开发不易，如果这个项目帮助到了您，可以考虑请作者喝一瓶快乐水🥤。您的支持就是作者开发和维护项目的动力🚀',
-            self
-        )
-        w.yesButton.setText('来啦老弟')
-        w.cancelButton.setText('下次一定')
-
-        if w.exec():
-            QDesktopServices.openUrl(QUrl("https://qfluentwidgets.com/zh/price/"))
+        # disable resizing dialog
+        w.setResizeEnabled(False)
+        w.exec()
 
 
 if __name__ == '__main__':
+    # enable dpi scale
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+
     app = QApplication(sys.argv)
-    w = Window()
-    w.show()
+
+    # fix issue #50
+    app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
+
+    window = MainWindow()
+    window.show()
     app.exec()

@@ -23,6 +23,8 @@ class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举
     SETTINGS_PAGE = "SettingsPage"
     DEVICE_PAGE = "DevicePage"
 
+    BASE_PAGE = "FluentAcrylicWindow"
+
     def path(self, theme=Theme.AUTO):
         theme = qconfig.theme if theme == Theme.AUTO else theme
         return str(DirPathsInstance.ThemeDir / "qss" / theme.name.lower() / f"{self.value}.qss")

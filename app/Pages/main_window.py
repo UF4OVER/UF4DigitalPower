@@ -11,22 +11,23 @@
 # -------------------------------
 from typing import Union
 
-from PyQt5.QtWidgets import QFrame, QWidget, QVBoxLayout, QHBoxLayout, QApplication
-from PyQt5.QtCore import Qt, QRect, QSize
+from PyQt5.QtCore import QRect, QSize
 from PyQt5.QtGui import QIcon
-
-from qfluentwidgets import NavigationBar, FluentIconBase, NavigationItemPosition, NavigationBarPushButton, qrouter, \
-    FluentStyleSheet
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QApplication
+from qfluentwidgets import (NavigationBar,
+                            FluentIconBase,
+                            NavigationItemPosition,
+                            NavigationBarPushButton,
+                            qrouter,
+                            FluentStyleSheet
+                            )
 from qfluentwidgets.window.stacked_widget import StackedWidget
 from qframelesswindow import AcrylicWindow
-
 
 
 class UMainWindow(AcrylicWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
-
-        self.setWindowTitle("F4CP")
 
         self.hBoxLayout = QHBoxLayout(self)
         self.stackedWidget = StackedWidget(self)
@@ -41,11 +42,9 @@ class UMainWindow(AcrylicWindow):
         self.hBoxLayout.addWidget(self.navigationInterface)
         self.hBoxLayout.addWidget(self.stackedWidget, 1)
 
-        self.titleBar.raise_()
-        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-
     def addSubInterface(self, interface: QWidget, icon: Union[FluentIconBase, QIcon, str], text: str,
-                        selectedIcon=None, position=NavigationItemPosition.TOP, isTransparent=False) -> NavigationBarPushButton:
+                        selectedIcon=None, position=NavigationItemPosition.TOP,
+                        isTransparent=False) -> NavigationBarPushButton:
         """ add sub interface, the object name of `interface` should be set already
         before calling this method
 
@@ -99,6 +98,7 @@ class UMainWindow(AcrylicWindow):
 
         if isDelete:
             interface.deleteLater()
+
     def switchTo(self, interface: QWidget):
         self.stackedWidget.setCurrentWidget(interface, popOut=False)
 
@@ -126,4 +126,5 @@ class UMainWindow(AcrylicWindow):
             original system title bar rect
         """
         return QRect(size.width() - 75, 0 if self.isFullScreen() else 8, 75, size.height())
+
 
