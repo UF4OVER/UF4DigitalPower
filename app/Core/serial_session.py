@@ -113,7 +113,7 @@ def listSerialPortInfos() -> list[QSerialPortInfo]:
 @dataclass
 class SerialConfig:
     # 默认配置
-    port: str
+    port: str | None
     baudrate: QSerialPort.BaudRate = QSerialPort.BaudRate.Baud115200  # NOQA 115200 波特率
     bytesize: QSerialPort.DataBits = QSerialPort.DataBits.Data8  # 8位数据位
     parity: QSerialPort.Parity = QSerialPort.Parity.NoParity  # 无校验位

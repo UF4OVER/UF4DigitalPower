@@ -17,18 +17,21 @@ from qframelesswindow import StandardTitleBar, FramelessWindow, AcrylicWindow
 
 from app.Config import AppIconPath, cfg
 from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage
-from app.Core import logger, StyleSheet
+from app.Core import logger, StyleSheet,Bus
+from app.Pages.main_window import UMainWindow
 
 
-class Window(MSFluentWindow):
+class Window(UMainWindow):
 
     def __init__(self):
         super().__init__()
+
+        self.setObjectName('Window')
+        self.updateFrameless()
         # create sub interface
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.F4CPowerInterface = F4CPowerPage()
-
         self.settingInterface = SettingsPage(self)
 
         self.initNavigation()
@@ -46,18 +49,19 @@ class Window(MSFluentWindow):
 
     def initWindow(self):
         self.resize(1200, 800)
+
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle('Fluor4CellPower')
-
-        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
         desktop = QApplication.desktop().availableGeometry()
         w, h = desktop.width(), desktop.height()
         self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
 
+
     def close(self):
         logger.warning("Application closed")
         super().close()
+
 
 if __name__ == '__main__':
     logger.info("main is running")

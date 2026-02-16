@@ -2,16 +2,17 @@
     "Update": {
         "CheckUpdateAtStartUp": true
     },
+    "MainWindow": {
+        "EnableAcrylicBackground": false,
+        "MicaEnabled": true
+    },
     "QFluentWidgets": {
         "FontFamilies": [
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
         ],
-        "ThemeColor": "#ffff3636",
-        "ThemeMode": "Light"
-    },
-    "MainWindow": {
-        "MicaEnabled": true
+        "ThemeColor": "#ff009faa",
+        "ThemeMode": "Dark"
     }
 }

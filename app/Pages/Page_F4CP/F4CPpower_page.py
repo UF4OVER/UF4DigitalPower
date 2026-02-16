@@ -13,9 +13,25 @@
 from PyQt5.QtWidgets import QWidget
 
 from .F4CPui import Ui_Frame
-from ...Config import logger
-from ...Core import DeviceScanner
-from ...Core import SerialSession
+
+from ...Config import logger, SettingMangerInstance
+from ...Core import DeviceScanner, SerialSession, SerialConfig
+
+try:
+    PORT_VID = int(SettingMangerInstance.get("port", "vid"))
+    PORT_PID = int(SettingMangerInstance.get("port", "pid"))
+
+    if (PORT_VID and PORT_PID) is not None:
+        pass
+    else:
+        PORT_VID = -1
+        PORT_PID = -1
+
+    logger.info(f"Loaded from settings: VID={PORT_VID}, PID={PORT_PID}")
+except Exception as e:
+    logger.error(f"Failed to load VID/PID from settings:{e}")
+    PORT_VID = -1
+    PORT_PID = -1
 
 
 class F4CPowerPage(QWidget, Ui_Frame):
@@ -23,50 +39,30 @@ class F4CPowerPage(QWidget, Ui_Frame):
         super().__init__(parent)
         self.setupUi(self)
 
-        # 创建扫描器（不需要手动管理定时器）
-        self._scanner = DeviceScanner(self, scan_interval=1000)  # 1秒扫描一次
-
         self.__init_controlName()
 
-        # 连接信号
-        self._scanner.deviceConnected.connect(self._on_device_connected)
-        self._scanner.deviceDisconnected.connect(self._on_device_disconnected)
-        self._scanner.connectionError.connect(self._on_connection_error)
+        self.scanner = DeviceScanner(
+            vid=PORT_VID,
+            pid=PORT_PID,
+        )
 
-        # 启动扫描
-        self._scanner.start_scanning()
+        self.scanner.device_connected.connect(self.on_device_connected)
+        self.scanner.device_disconnected.connect(self.on_device_disconnected)
 
+        self.scanner.start()
 
     def __init_controlName(self):
         self.hostNumber = self.lineEdit_2
         self.softStartTime = self.lineEdit
         self.textOutput = self.textEdit
 
-    def _on_device_connected(self, session: SerialSession):
-        """设备已连接"""
-        logger.info(f"{self.__class__.__name__}: 设备已连接")
-        # self.textOutput.append("设备已连接")
-
-        # 设置事件接收器
+    def on_device_connected(self, session: SerialSession):
+        logger.info("UI: 设备已连接")
         session.set_event_receiver(self)
-        session.on_tx = lambda b: self.textOutput.append(b)
 
-    def _on_device_disconnected(self):
-        """设备已断开"""
-        logger.warning(f"{self.__class__.__name__}: 设备已断开")
-        self.textOutput.append("设备已断开，正在重新扫描...")
-
-        # 更新UI状态
-        # self.status_label.setText("未连接 - 扫描中...")
-
-    def _on_connection_error(self, error_msg: str):
-        """连接错误"""
-        logger.error(f"{self.__class__.__name__}: 连接错误: {error_msg}")
-        # self.textOutput.append(f"⚠️ 连接错误: {error_msg}")
+    def on_device_disconnected(self):
+        logger.info("UI: 设备已断开")
 
     def closeEvent(self, event):
-        """页面关闭时清理"""
-        # 停止扫描器（会自动断开设备）
-        self._scanner.stop_scanning()
-        self._scanner.disconnect_device()
-        event.accept()
+        self.scanner.stop()
+        super().closeEvent(event)
