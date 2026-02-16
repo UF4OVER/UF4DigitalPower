@@ -9,48 +9,127 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from PyQt5.QtCore import QObject
-from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 
-from .serial_session import SerialEventType, SerialEvent, RxEvent, TxEvent, SendEvent, SerialSession
-from .const import DeviceData
+from typing import Optional
+
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from PyQt5.QtSerialPort import QSerialPortInfo
+
+from .serial_session import SerialSession, SerialConfig
+from ..Config import SettingMangerInstance, logger
+
+
 
 
 class DeviceScanner(QObject):
-    def __init__(self, parent=None):
+    """
+    设备扫描器：
+    - 周期扫描串口
+    - 检测指定 VID/PID 的设备插入与拔出
+    - 自动管理 SerialSession 生命周期
+    """
+
+    device_connected = pyqtSignal(SerialSession)
+    device_disconnected = pyqtSignal()
+
+    def __init__(
+        self,
+        vid: int,
+        pid: int,
+        parent: Optional[QObject] = None,
+        interval_ms: int = 1000,
+    ):
         super().__init__(parent)
-        self.serial = None
-    def scanDevices(self):
-        """
-        扫描当前系统串口，返回匹配 VID/PID 的设备信息列表
-        """
-        devices = []
+
+        self._vid = vid
+        self._pid = pid
+
+        self._current_port_name: Optional[str] = None
+        self._session: Optional[SerialSession] = None
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(interval_ms)
+        self._timer.timeout.connect(self._scan)
+
+        logger.info(
+            f"DeviceScanner initialized (VID={vid}, PID={pid}, interval={interval_ms}ms)"
+        )
+
+    # ========= 对外接口 =========
+
+    def start(self):
+        logger.info("DeviceScanner started")
+        self._timer.start()
+
+    def stop(self):
+        logger.info("DeviceScanner stopped")
+        self._timer.stop()
+        self._disconnect_device()
+
+    def session(self) -> Optional[SerialSession]:
+        return self._session
+
+    # ========= 核心扫描逻辑 =========
+
+    def _scan(self):
+        port = self._find_matching_port()
+
+        if port and self._current_port_name is None:
+            self._connect_device(port)
+
+        elif port is None and self._current_port_name is not None:
+            self._disconnect_device()
+
+    def _find_matching_port(self) -> Optional[QSerialPortInfo]:
+        if self._vid == -1 or self._pid == -1:
+            logger.warning("DeviceScanner: VID/PID 未配置，跳过扫描")
+            return None
 
         for port in QSerialPortInfo.availablePorts():
-            if not port.hasVendorIdentifier() or not port.hasProductIdentifier():
-                continue
+            if (
+                port.vendorIdentifier() == self._vid
+                and port.productIdentifier() == self._pid
+            ):
+                return port
 
-            if (port.vendorIdentifier() == DeviceData.VID and
-                port.productIdentifier() == DeviceData.PID):
+        return None
 
-                device_info = {
-                    "port": port.portName(),
-                    "description": port.description(),
-                    "manufacturer": port.manufacturer(),
-                    "serial_number": port.serialNumber(),
-                    "vid": port.vendorIdentifier(),
-                    "pid": port.productIdentifier(),
-                }
-                devices.append(device_info)
+    # ========= 设备连接 / 断开 =========
 
-        return devices
+    def _connect_device(self, port: QSerialPortInfo):
+        port_name = port.portName()
+        logger.info(
+            f"DeviceScanner: 设备插入 {port_name} "
+            f"(VID={port.vendorIdentifier()}, PID={port.productIdentifier()})"
+        )
 
+        self._current_port_name = port_name
+        cfg = SerialConfig(port=port_name)
 
+        try:
+            self._session = SerialSession(cfg)
+            self._session.open()
 
-    def connectFirstDevice(self, baudrate=115200):
-        """
-        扫描设备，找到第一个匹配的 VID/PID 并打开串口
-        """
-        devices = self.scanDevices()
-        if not devices:
-            return None, "未找到匹配的设备"
+            logger.info(f"DeviceScanner: 串口已打开 {port_name}")
+            self.device_connected.emit(self._session)
+
+        except Exception as e:
+            logger.exception(f"DeviceScanner: 串口打开失败 {port_name}")
+            self._current_port_name = None
+            self._session = None
+
+    def _disconnect_device(self):
+        logger.warning(
+            f"DeviceScanner: 设备拔出 {self._current_port_name}"
+        )
+
+        if self._session:
+            try:
+                self._session.close()
+            except Exception as e:
+                logger.exception(f"DeviceScanner: 关闭串口时异常 {e}")
+
+        self._session = None
+        self._current_port_name = None
+
+        self.device_disconnected.emit()

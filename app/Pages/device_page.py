@@ -256,7 +256,8 @@ class DevicePage(QWidget):
     def _append_log(self, text: str):
         ts = time.strftime('%H:%M:%S')
         msg = f'[{ts}] {text}'
-        logger.info(msg)
+
+        logger.info(text)
 
         # choose color based on message content/type
         lc = text.strip()
@@ -431,12 +432,6 @@ class DevicePage(QWidget):
             if cur and cur in ports:
                 self.portCombo.setCurrentText(cur)
             return
-
-        # # 枚举不到时：提供常见 COM 列表，便于手动选择虚拟串口
-        # fallback = [f'COM{i}' for i in range(1, 257)]
-        # self.portCombo.addItems(fallback)
-        # if cur and cur in fallback:
-        #     self.portCombo.setCurrentText(cur)
 
     def toggle_connection(self):
         if self._session and self._session.is_open:

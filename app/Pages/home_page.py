@@ -7,8 +7,6 @@ Keep the UI/layout consistent with the original `start.py` demo code.
 from PyQt5.QtCore import Qt, QSize, QUrl
 from PyQt5.QtGui import QFont, QColor, QImage
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from app.Config import SettingMangerInstance as SMI, AppIconPath
-from app.Core import StyleSheet
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -24,6 +22,9 @@ from qfluentwidgets import (
     setFont,
     FluentIcon,
 )
+
+from app.Config import AppIconPath, DirPathsInstance
+from app.Core import StyleSheet
 
 
 class StatisticsWidget(QWidget):
@@ -148,7 +149,7 @@ class GalleryCard(HeaderCardWidget):
         self.expandButton.setFixedSize(32, 32)
         self.expandButton.setIconSize(QSize(12, 12))
 
-        img_path = SMI.AssetsDir / 'F4CP_2x1_1200x600.png'
+        img_path = DirPathsInstance.AssetsDir / 'F4CP_2x1_1200x600.png'
         self.flipView.addImages([QImage(str(img_path))])
         self.flipView.setBorderRadius(8)
         self.flipView.setSpacing(10)

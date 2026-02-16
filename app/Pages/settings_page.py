@@ -3,8 +3,10 @@
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QWidget, QLabel
+
 from app.Config import cfg, HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR, isWin11
-from app.Core import StyleSheet
+from app.Core import StyleSheet, Bus
+
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import InfoBar
 # use setting card components
@@ -48,6 +50,14 @@ class SettingsPage(ScrollArea):
             self.personalGroup
         )
 
+        self.enableAcrylicBackgroundCard = SwitchSettingCard(
+            icon=FIF.TRANSPARENT,
+            title="启用亚克力效果",
+            content="亚克力效果的视觉体验更好，但是可能导致窗口卡顿",
+            configItem=cfg.enableAcrylicBackground,
+            parent=self.personalGroup
+        )
+
         # update software
         self.updateSoftwareGroup = SettingCardGroup(
             "软件更新", self.scrollWidget)
@@ -84,6 +94,8 @@ class SettingsPage(ScrollArea):
             self.aboutGroup
         )
 
+
+
         self.__initWidget()
 
     def __initWidget(self):
@@ -108,6 +120,7 @@ class SettingsPage(ScrollArea):
 
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
+        self.personalGroup.addSettingCard(self.enableAcrylicBackgroundCard)
 
         self.updateSoftwareGroup.addSettingCard(self.updateOnStartUpCard)
 
@@ -131,26 +144,16 @@ class SettingsPage(ScrollArea):
             parent=self
         )
 
-    # def __onDownloadFolderCardClicked(self):
-    #     """ download folder card clicked slot """
-    #     folder = QFileDialog.getExistingDirectory(
-    #         self, "选择文件夹", "./")
-    #     if not folder or cfg.get(cfg.downloadFolder) == folder:
-    #         return
-    #
-    #     cfg.set(cfg.downloadFolder, folder)
-    #     self.downloadFolderCard.setContent(folder)
-
     def __connectSignalToSlot(self):
         """ connect signal to slot """
         cfg.appRestartSig.connect(self.__showRestartTooltip)
-
-
         cfg.themeChanged.connect(setTheme)
-        # cfg.themeColorChanged.connect(setThemeColor)
 
         self.themeColorCard.colorChanged.connect(lambda c: setThemeColor(c))
 
         # about
         self.feedbackCard.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl(FEEDBACK_URL)))
+
+        self.enableAcrylicBackgroundCard.checkedChanged.connect(Bus.enableAcrylicBackground.emit)
+

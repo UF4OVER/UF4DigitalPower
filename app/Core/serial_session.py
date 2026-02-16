@@ -10,6 +10,7 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QIODevice, QEvent, QCoreApplication, QObject, QMutex, QMutexLocker
 from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
 
+from ..Config import logger
 
 class SerialEventType(IntEnum):
     RX = QEvent.registerEventType()
@@ -112,7 +113,7 @@ def listSerialPortInfos() -> list[QSerialPortInfo]:
 @dataclass
 class SerialConfig:
     # 默认配置
-    port: str
+    port: str | None
     baudrate: QSerialPort.BaudRate = QSerialPort.BaudRate.Baud115200  # NOQA 115200 波特率
     bytesize: QSerialPort.DataBits = QSerialPort.DataBits.Data8  # 8位数据位
     parity: QSerialPort.Parity = QSerialPort.Parity.NoParity  # 无校验位
@@ -206,6 +207,7 @@ class SerialSession(QObject):
 
         with QMutexLocker(self._write_lock):  # PyQt 的 QMutex 并不完全兼容 Python 的 with 语法，需要用 QMutexLocker 来自动解锁
             self._ser.write(data)
+            logger.info(f"{self.__class__.__name__} 写入数据: {data}")
 
         self._post_event(TxEvent(data))
         return len(data)
@@ -240,7 +242,7 @@ class SerialSession(QObject):
         self._post_event(StateEvent(SerialState.ERROR, info=msg))
 
     def event(self, e: QEvent):
-        # Handle SendEvent posted from UI: perform write in this object's thread
+        # 处理 从 UI 发布的发送事件：在该对象的线程中执行写入
         try:
             if e.type() == int(SerialEventType.SEND):
                 payload = getattr(e, 'payload', None)
@@ -252,8 +254,10 @@ class SerialSession(QObject):
                         self.write(data)
                     except Exception as exc:
                         # notify UI of error
+                        logger.error(f"{self.__class__.__name__}: {e}")
                         self._post_event(ErrorEvent(code=-1, message=str(exc), fatal=False))
                 return True
-        except Exception:
+        except Exception as exc:
+            logger.error(f"{self.__class__.__name__}: {e}")
             pass
         return super().event(e)

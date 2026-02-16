@@ -1,10 +1,10 @@
 SettingsPage, #scrollWidget {
-    background-color: #232323;
+    background-color: transparent;
 }
 
 QScrollArea {
     border: none;
-    background-color: #232323;
+    background-color:transparent;
 }
 
 
