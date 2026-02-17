@@ -85,8 +85,6 @@ void Error_Handler(void);
 #define PWM_H1_GPIO_Port GPIOA
 #define SPI3_CS_Pin GPIO_PIN_15
 #define SPI3_CS_GPIO_Port GPIOA
-#define FAN_CTRL_Pin GPIO_PIN_9
-#define FAN_CTRL_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

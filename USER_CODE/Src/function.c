@@ -66,10 +66,10 @@ CCMRAM void ADCSample(void)
  */
 void ADC_calculate(void)
 {
-    VIN = SADC.VinAvg * REF_3V3 / ADC_MAX_VALUE / (4.7F / 75.0F);   // 计算ADC1通道0输入电压采样结果
-    IIN = SADC.IinAvg * REF_3V3 / ADC_MAX_VALUE / 62.0F / 0.005F;   // 计算ADC1通道1输入电流采样结果
-    VOUT = SADC.VoutAvg * REF_3V3 / ADC_MAX_VALUE / (4.7F / 75.0F); // 计算ADC1通道2输出电压采样结果
-    IOUT = SADC.IoutAvg * REF_3V3 / ADC_MAX_VALUE / 62.0F / 0.005F; // 计算ADC1通道3输出电流采样结果
+    VIN = SADC.VinAvg * REF_3V3 / ADC_MAX_VALUE / (8.2F / 82.0F);   // 计算ADC1通道0输入电压采样结果
+    IIN = SADC.IinAvg * REF_165 / ADC_MAX_VALUE / 20.0F / 0.005F; // 计算ADC1通道1输入电流采样结果
+    VOUT = SADC.VoutAvg * REF_3V3 / ADC_MAX_VALUE / (8.2F / 82.0F); // 计算ADC1通道2输出电压采样结果
+    IOUT = SADC.IoutAvg * REF_165 / ADC_MAX_VALUE / 20.0F / 0.005F; // 计算ADC1通道3输出电流采样结果
     MainBoard_TEMP = GET_NTC_Temperature();                         // 获取NTC温度(主板温度)
     CPU_TEMP = GET_CPU_Temperature();                               // 获取单片机CPU温度
 }
