@@ -1,0 +1,735 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Frame</class>
+ <widget class="QFrame" name="Frame">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1189</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Frame</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout_5" rowstretch="2,2,5,0" columnstretch="5,5,3,3">
+   <item row="0" column="1">
+    <widget class="SimpleCardWidget" name="widget_2" native="true">
+     <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0,0">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <item row="0" column="0">
+       <widget class="BodyLabel" name="label_11">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>V-OUT:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="LargeTitleLabel" name="outputVoltage">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>00.00</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="LargeTitleLabel" name="label_13">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>V</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="BodyLabel" name="label_14">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>I-OUT:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="LargeTitleLabel" name="outputCurrent">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>00.00</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="LargeTitleLabel" name="label_16">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>A</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="BodyLabel" name="label_17">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>P-OUT:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="LargeTitleLabel" name="outputPower">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>00.00</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <widget class="LargeTitleLabel" name="label_19">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>W</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="SimpleCardWidget" name="widget" native="true">
+     <layout class="QGridLayout" name="gridLayout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <item row="0" column="0">
+       <widget class="BodyLabel" name="label_3">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>V-IN:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="LargeTitleLabel" name="inputVoltage">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>00.00</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="LargeTitleLabel" name="label_4">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>V</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="BodyLabel" name="label_5">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string> I-IN:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="LargeTitleLabel" name="inputCurrent">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>00.00</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="LargeTitleLabel" name="label_6">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>A</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="BodyLabel" name="label_8">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>P-IN:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="LargeTitleLabel" name="inputPower">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>00.00</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <widget class="LargeTitleLabel" name="label_9">
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="text">
+         <string>W</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="3" rowspan="2">
+    <widget class="SimpleCardWidget" name="widget_5" native="true">
+     <layout class="QGridLayout" name="gridLayout_4">
+      <property name="leftMargin">
+       <number>6</number>
+      </property>
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="rightMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item row="1" column="0">
+       <widget class="BodyLabel" name="label_40">
+        <property name="text">
+         <string>过流保护</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="BodyLabel" name="label_44">
+        <property name="text">
+         <string>欠压锁定</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="BodyLabel" name="label_42">
+        <property name="text">
+         <string>过压保护</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="BodyLabel" name="protectTrigger">
+        <property name="text">
+         <string>-1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="BodyLabel" name="label_38">
+        <property name="text">
+         <string>过温保护</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0">
+       <widget class="BodyLabel" name="label_52">
+        <property name="text">
+         <string>零点校准</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="BodyLabel" name="label_46">
+        <property name="text">
+         <string>保护触发</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="BodyLabel" name="label_48">
+        <property name="text">
+         <string>异常保护</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0">
+       <widget class="BodyLabel" name="label_54">
+        <property name="text">
+         <string>PWM使能</string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="0">
+       <widget class="BodyLabel" name="label_36">
+        <property name="text">
+         <string>故障代码</string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="1">
+       <widget class="BodyLabel" name="ERRcode">
+        <property name="text">
+         <string>0X0000</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="LineEdit" name="lineEdit_4">
+        <property name="text">
+         <string>-1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="LineEdit" name="lineEdit_5">
+        <property name="text">
+         <string>-1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="LineEdit" name="lineEdit_6">
+        <property name="text">
+         <string>-1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="LineEdit" name="lineEdit_7">
+        <property name="text">
+         <string>-1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="SwitchButton" name="widget_6" native="true"/>
+      </item>
+      <item row="6" column="1">
+       <widget class="SwitchButton" name="widget_7" native="true"/>
+      </item>
+      <item row="7" column="1">
+       <widget class="SwitchButton" name="widget_8" native="true"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="2" rowspan="2">
+    <widget class="SimpleCardWidget" name="widget_4" native="true">
+     <layout class="QGridLayout" name="gridLayout_3" rowstretch="1,1,1,1,1,1,1,1,1,0">
+      <property name="leftMargin">
+       <number>6</number>
+      </property>
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="rightMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item row="7" column="0">
+       <widget class="BodyLabel" name="label_25">
+        <property name="text">
+         <string>风扇转速</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="0">
+       <widget class="BodyLabel" name="label_32">
+        <property name="text">
+         <string>软启时间</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="BodyLabel" name="bodyLabel_4">
+        <property name="text">
+         <string>MOS温度</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="BodyLabel" name="mosTemp">
+        <property name="text">
+         <string>00.00℃</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="BodyLabel" name="converEfficiency">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="text">
+         <string>00.00％</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="BodyLabel" name="bodyLabel_2">
+        <property name="text">
+         <string>CPU温度</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="BodyLabel" name="bodyLabel_5">
+        <property name="text">
+         <string>工作模式</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="BodyLabel" name="bodyLabel_3">
+        <property name="text">
+         <string>主机编号</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0">
+       <widget class="BodyLabel" name="bodyLabel">
+        <property name="text">
+         <string>转换效率</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="BodyLabel" name="cpiTemp">
+        <property name="text">
+         <string>00.00℃</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="BodyLabel" name="fanSpeed">
+        <property name="text">
+         <string>0000PRM</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="BodyLabel" name="label_34">
+        <property name="text">
+         <string>功率模式</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="BodyLabel" name="label_50">
+        <property name="text">
+         <string>电流方向</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="ComboBox" name="comboBox">
+        <item>
+         <property name="text">
+          <string>BUCK</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BOOST</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>AUTO</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="ComboBox" name="comboBox_2">
+        <item>
+         <property name="text">
+          <string>CC</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>CV</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="ComboBox" name="comboBox_3">
+        <item>
+         <property name="text">
+          <string>单向1</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>单向2</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>双向</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="LineEdit" name="lineEdit_2">
+        <property name="text">
+         <string>NA</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="1">
+       <widget class="LineEdit" name="lineEdit">
+        <property name="text">
+         <string>0000NS</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="1" column="0" rowspan="2" colspan="2">
+    <widget class="QWidget" name="widget_3" native="true"/>
+   </item>
+   <item row="2" column="2" colspan="2">
+    <widget class="SimpleCardWidget" name="widget_9" native="true">
+     <layout class="QGridLayout" name="gridLayout_8">
+      <property name="leftMargin">
+       <number>6</number>
+      </property>
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="rightMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item row="0" column="0" rowspan="2">
+       <layout class="QGridLayout" name="gridLayout_6">
+        <item row="0" column="0">
+         <widget class="BodyLabel" name="label_49">
+          <property name="text">
+           <string>设定电压</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1" colspan="2">
+         <widget class="DoubleSpinBox" name="doubleSpinBox"/>
+        </item>
+        <item row="1" column="0">
+         <widget class="BodyLabel" name="label_51">
+          <property name="text">
+           <string>设定电流</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1" colspan="2">
+         <widget class="DoubleSpinBox" name="doubleSpinBox_2"/>
+        </item>
+        <item row="2" column="0" colspan="2">
+         <widget class="PrimaryPushButton" name="pushButton">
+          <property name="text">
+           <string>确定</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="PushButton" name="pushButton_2">
+          <property name="text">
+           <string>读取</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="0" column="1">
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <item>
+         <widget class="PrimaryPushButton" name="pushButton_3">
+          <property name="text">
+           <string>全局写入</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="PushButton" name="pushButton_4">
+          <property name="text">
+           <string>全局读取</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="1" column="1">
+       <layout class="QGridLayout" name="gridLayout_7">
+        <item row="0" column="0" colspan="2">
+         <widget class="PrimaryPushButton" name="pushButton_5">
+          <property name="text">
+           <string>连接测试</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="PushButton" name="pushButton_6">
+          <property name="text">
+           <string>导出配置</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="PushButton" name="pushButton_7">
+          <property name="text">
+           <string>导入配置</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="2" column="0">
+       <widget class="PrimaryPushButton" name="pushButton_8">
+        <property name="text">
+         <string>关闭输出</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="PrimaryPushButton" name="pushButton_9">
+        <property name="text">
+         <string>重启MCU</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0" colspan="2">
+       <widget class="TextEdit" name="textEdit"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="3" column="2">
+    <widget class="QWidget" name="widget_10" native="true"/>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>SimpleCardWidget</class>
+   <extends>QWidget</extends>
+   <header>qfluentwidgets</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>BodyLabel</class>
+   <extends>QLabel</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>LargeTitleLabel</class>
+   <extends>QLabel</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>ComboBox</class>
+   <extends>QComboBox</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>LineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>SwitchButton</class>
+   <extends>QWidget</extends>
+   <header>qfluentwidgets</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>DoubleSpinBox</class>
+   <extends>QDoubleSpinBox</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>PrimaryPushButton</class>
+   <extends>QPushButton</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>PushButton</class>
+   <extends>QPushButton</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>TextEdit</class>
+   <extends>QTextEdit</extends>
+   <header>qfluentwidgets</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

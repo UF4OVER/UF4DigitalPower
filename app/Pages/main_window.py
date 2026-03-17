@@ -29,8 +29,10 @@ class UMainWindow(AcrylicWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+
         self.hBoxLayout = QHBoxLayout(self)
         self.stackedWidget = StackedWidget(self)
+
         FluentStyleSheet.FLUENT_WINDOW.apply(self.stackedWidget)
 
         self.navigationInterface = None
@@ -41,6 +43,7 @@ class UMainWindow(AcrylicWindow):
         self.hBoxLayout.setContentsMargins(0, 48, 0, 0)
         self.hBoxLayout.addWidget(self.navigationInterface)
         self.hBoxLayout.addWidget(self.stackedWidget, 1)
+
 
     def addSubInterface(self, interface: QWidget, icon: Union[FluentIconBase, QIcon, str], text: str,
                         selectedIcon=None, position=NavigationItemPosition.TOP,

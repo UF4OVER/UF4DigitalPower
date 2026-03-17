@@ -9,21 +9,19 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-import sys
 import logging
+import sys
+from datetime import datetime
 from functools import cached_property, cache
 from os import makedirs
 from pathlib import Path
-
 from typing import Union
 
-from PyQt5.QtCore import QSettings,QTimer
+from PyQt5.QtCore import QSettings
 from PyQt5.QtGui import QFontDatabase, QFont
 from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator,
                             Theme, __version__)
 
-from pathlib import Path
-from datetime import datetime
 
 class DirPaths:
 

@@ -9,4 +9,4 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .F4CPpower_page import *
+from .F4CPpower_page import F4CPowerPage

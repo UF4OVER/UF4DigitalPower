@@ -60,9 +60,22 @@ class F4CPowerPage(QWidget, Ui_Frame):
         logger.info("UI: 设备已连接")
         session.set_event_receiver(self)
 
-    def on_device_disconnected(self):
+    def on_device_disconnected(self):  # NOQA
         logger.info("UI: 设备已断开")
 
     def closeEvent(self, event):
         self.scanner.stop()
         super().closeEvent(event)
+
+    def exportDataJson(self):
+        """ 导出数据为 JSON 格式 """
+        data = {
+            "hostNumber": self.hostNumber.text(),
+            "softStartTime": self.softStartTime.text(),
+        }
+        return data
+
+    def importDataJson(self, data):
+        """ 从 JSON 数据导入 """
+        self.hostNumber.setText(data.get("hostNumber", ""))
+        self.softStartTime.setText(data.get("softStartTime", ""))

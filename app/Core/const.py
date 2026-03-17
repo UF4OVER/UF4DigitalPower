@@ -10,7 +10,108 @@
 #  @Python  : 3.10
 # -------------------------------
 
-from enum import IntEnum
+from enum import IntEnum, Enum
+from typing import Optional, Tuple, Type
+
+from qfluentwidgets import FluentIcon
+
+
+class WINDOWS:
+    windows = {}
+
+class NotificationType(Enum):
+        Success = 0
+        Error = 1
+        Debugging = 2
+        Information = 3
+        Warning = 4
+
+
+class NotificationColorMapBase(Enum):
+    """Base enum for popup colors; subclass this to add/override mappings."""
+
+    @property
+    def notification_type(self) -> NotificationType:
+        return self.value[0]
+
+    @property
+    def theme_color(self) -> str:
+        return self.value[1]
+
+    @property
+    def background_color(self) -> str:
+        return self.value[2]
+
+
+class NotificationIconMapBase(Enum):
+    """Base enum for popup icons; subclass this to add/override mappings."""
+
+    @property
+    def notification_type(self) -> NotificationType:
+        return self.value[0]
+
+    @property
+    def icon(self) -> FluentIcon:
+        return self.value[1]
+
+
+class DefaultNotificationColors(NotificationColorMapBase):
+    Success = (NotificationType.Success, "#1f7a3e", "#d8f3df")
+    Error = (NotificationType.Error, "#b42318", "#fee4e2")
+    Debugging = (NotificationType.Debugging, "#175cd3", "#d1e9ff")
+    Information = (NotificationType.Information, "#6941c6", "#ebe9fe")
+    Warning = (NotificationType.Warning, "#b54708", "#fef0c7")
+
+
+class DefaultNotificationIcons(NotificationIconMapBase):
+    Success = (NotificationType.Success, FluentIcon.COMPLETED)
+    Error = (NotificationType.Error, FluentIcon.CLOSE)
+    Debugging = (NotificationType.Debugging, FluentIcon.UPDATE)
+    Information = (NotificationType.Information, FluentIcon.INFO)
+    Warning = (NotificationType.Warning, FluentIcon.FEEDBACK)
+
+
+def _resolve_color_from_enum(enum_cls: Type[NotificationColorMapBase], n_type: NotificationType) -> Optional[Tuple[str, str]]:
+    for item in enum_cls:
+        if item.notification_type == n_type:
+            return item.theme_color, item.background_color
+    return None
+
+
+def _resolve_icon_from_enum(enum_cls: Type[NotificationIconMapBase], n_type: NotificationType) -> Optional[FluentIcon]:
+    for item in enum_cls:
+        if item.notification_type == n_type:
+            return item.icon
+    return None
+
+
+def resolve_notification_colors(n_type: NotificationType, *color_enums: Type[NotificationColorMapBase]) -> Tuple[str, str]:
+    """Resolve colors from custom enums first, then fallback to defaults."""
+    enum_chain = color_enums or (DefaultNotificationColors,)
+    if DefaultNotificationColors not in enum_chain:
+        enum_chain = (*enum_chain, DefaultNotificationColors)
+
+    for enum_cls in enum_chain:
+        colors = _resolve_color_from_enum(enum_cls, n_type)
+        if colors:
+            return colors
+
+    return DefaultNotificationColors.Information.theme_color, DefaultNotificationColors.Information.background_color
+
+
+def resolve_notification_icon(n_type: NotificationType, *icon_enums: Type[NotificationIconMapBase]) -> FluentIcon:
+    """Resolve icon from custom enums first, then fallback to defaults."""
+    enum_chain = icon_enums or (DefaultNotificationIcons,)
+    if DefaultNotificationIcons not in enum_chain:
+        enum_chain = (*enum_chain, DefaultNotificationIcons)
+
+    for enum_cls in enum_chain:
+        icon = _resolve_icon_from_enum(enum_cls, n_type)
+        if icon is not None:
+            return icon
+
+    return DefaultNotificationIcons.Information.icon
+
 
 class DeviceData(IntEnum):
     VID = 2001  # 设备VID

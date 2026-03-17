@@ -1,24 +1,20 @@
 # coding:utf-8
 import sys
 
-from PyQt5.QtCore import Qt, QOperatingSystemVersion
+from PyQt5.QtCore import Qt, QOperatingSystemVersion, QTimer
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication, QStackedWidget, QHBoxLayout, QWidget
-
-from qfluentwidgets import (NavigationInterface,
-                            NavigationItemPosition,
-                            isDarkTheme,
-                            FluentWidget,
-                            Theme,
-                            setTheme,
-                            FluentWidgetTitleBar, MSFluentWindow, FluentIconBase)
+from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
-from qframelesswindow import StandardTitleBar, FramelessWindow, AcrylicWindow
+from qfluentwidgets import NavigationItemPosition
+from qfluentwidgets import isDarkTheme
+from qframelesswindow import StandardTitleBar, AcrylicWindow
 
+from app import UMainWindow, NotificationType
 from app.Config import AppIconPath, cfg
+from app.Core import logger, StyleSheet, Bus, WINDOWS
+from app.Core.pop_up import PopupManager
 from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage
-from app.Core import logger, StyleSheet,Bus
-from app.Pages.main_window import UMainWindow
+
 
 
 class Window(UMainWindow):
@@ -28,6 +24,12 @@ class Window(UMainWindow):
 
         self.setObjectName("FluentAcrylicWindow")
 
+        self._manager = PopupManager(self, max_visible=6)
+        self._acrylic_enabled = False
+
+        WINDOWS.windows["MainWindow"] = self._manager
+
+
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.F4CPowerInterface = F4CPowerPage()
@@ -36,13 +38,15 @@ class Window(UMainWindow):
         self.initNavigation()
         self.initWindow()
 
-        Bus.enableAcrylicBackground.connect(lambda a: self.setAcrylicEffectEnabled(a))
+        Bus.enableAcrylicBackground.connect(self.setAcrylicEffectEnabled)
+        Bus.enableAcrylicBackground.connect(self._on_acrylic_background_changed)
+        cfg.themeChanged.connect(self._on_theme_changed)
 
-        # StyleSheet.BASE_PAGE.apply(self)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
 
 
     def initNavigation(self):
-        # enable acrylic effect
 
         self.addSubInterface(self.homeInterface, FIF.HOME, '主页',FIF.HOME_FILL)
         self.addSubInterface(self.deviceInterface, FIF.DEVELOPER_TOOLS, '串口')
@@ -72,26 +76,40 @@ class Window(UMainWindow):
         super().close()
 
     def setAcrylicEffectEnabled(self, enable: bool):
-        """ set acrylic effect enabled """
+        """Set acrylic effect enabled with theme-aware contrast."""
+        self._acrylic_enabled = enable
+        dark = isDarkTheme()
 
-        # todo : 亚克力背景与明暗主题切换问题
-        self.setStyleSheet(f"background:{'transparent' if enable else '#F2F2F2'}")
         if enable:
-            self.windowEffect.setAcrylicEffect(self.winId(), "F2F2F299")
+            # Dark theme needs a deeper tint to keep white text readable.
+            acrylic_color = "202020CC" if dark else "F2F2F299"
+            self.setStyleSheet("background: transparent")
+            self.windowEffect.setAcrylicEffect(self.winId(), acrylic_color)
+
             if QOperatingSystemVersion.current() != QOperatingSystemVersion.Windows10:
                 self.windowEffect.addShadowEffect(self.winId())
-
-            StyleSheet.HOME_PAGE.apply(self.homeInterface)
-            StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-            StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-
         else:
+            fallback_bg = "#1F1F1F" if dark else "#F2F2F2"
+            self.setStyleSheet(f"background:{fallback_bg}")
             self.windowEffect.addShadowEffect(self.winId())
             self.windowEffect.removeBackgroundEffect(self.winId())
 
-            StyleSheet.HOME_PAGE.apply(self.homeInterface)
-            StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-            StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
+        StyleSheet.HOME_PAGE.apply(self.homeInterface)
+        StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
+        StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
+
+    def _on_theme_changed(self, *_):
+        """Re-apply acrylic colors after theme switches."""
+        self.setAcrylicEffectEnabled(self._acrylic_enabled)
+
+    def _on_acrylic_background_changed(self, enabled: bool):
+        state_text = "enabled" if enabled else "disabled"
+        self._manager.push(
+            NotificationType.Information,
+            "System",
+            f"Acrylic background {state_text}",
+            2100,
+        )
 
 
 if __name__ == '__main__':
@@ -100,7 +118,9 @@ if __name__ == '__main__':
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
     logger.info("Application started")
+
     app = QApplication(sys.argv)
     w = Window()
     w.show()
+
     app.exec_()
