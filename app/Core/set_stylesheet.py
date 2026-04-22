@@ -12,7 +12,7 @@
 # coding: utf-8
 from enum import Enum
 
-from app.Config import DirPathsInstance
+from Config import DirPathsInstance
 from qfluentwidgets import StyleSheetBase, Theme, qconfig
 
 

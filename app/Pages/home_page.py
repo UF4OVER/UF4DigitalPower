@@ -23,7 +23,7 @@ from qfluentwidgets import (
     FluentIcon,
 )
 
-from app.Config import AppIconPath, DirPathsInstance
+from Config import AppIconPath, DirPathsInstance
 from app.Core import StyleSheet
 
 

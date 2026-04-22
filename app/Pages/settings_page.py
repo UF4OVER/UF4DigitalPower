@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QWidget, QLabel
 
-from app.Config import cfg, HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR, isWin11
+from Config import cfg, HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR
 from app.Core import StyleSheet, Bus
 
 from qfluentwidgets import FluentIcon as FIF

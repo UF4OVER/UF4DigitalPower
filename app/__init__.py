@@ -9,7 +9,6 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .Config import *
 from .Pages import *
 from .Core import *
 from .TVLCOM import *

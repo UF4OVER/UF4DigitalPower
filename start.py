@@ -1,16 +1,16 @@
 # coding:utf-8
 import sys
 
-from PyQt5.QtCore import Qt, QOperatingSystemVersion, QTimer
+from PyQt5.QtCore import Qt, QOperatingSystemVersion
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
-from qframelesswindow import StandardTitleBar, AcrylicWindow
+from qframelesswindow import StandardTitleBar
 
 from app import UMainWindow, NotificationType
-from app.Config import AppIconPath, cfg
+from Config import AppIconPath, cfg
 from app.Core import logger, StyleSheet, Bus, WINDOWS
 from app.Core.pop_up import PopupManager
 from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage

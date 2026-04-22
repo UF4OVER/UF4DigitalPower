@@ -10,7 +10,7 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QIODevice, QEvent, QCoreApplication, QObject, QMutex, QMutexLocker
 from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
 
-from ..Config import logger
+from Config import logger
 
 class SerialEventType(IntEnum):
     RX = QEvent.registerEventType()

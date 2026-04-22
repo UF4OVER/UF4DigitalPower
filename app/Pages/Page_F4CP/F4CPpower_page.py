@@ -14,8 +14,8 @@ from PyQt5.QtWidgets import QWidget
 
 from .F4CPui import Ui_Frame
 
-from ...Config import logger, SettingMangerInstance
-from ...Core import DeviceScanner, SerialSession, SerialConfig
+from Config import logger, SettingMangerInstance
+from ...Core import DeviceScanner, SerialSession
 
 try:
     PORT_VID = int(SettingMangerInstance.get("port", "vid"))
