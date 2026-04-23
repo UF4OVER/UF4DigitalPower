@@ -123,7 +123,6 @@ class BluetoothState(IntEnum):  # 蓝牙连接状态
     CONNECTED = 2
     DISCONNECTING = 3
 
-
 """
 TLV 协议相关常量定义 发送示例: 
 
@@ -135,7 +134,7 @@ send(DataType.STATE_MACHINE_STATE, StateMachineFlag.xxxx)
 """
 
 
-class DataType(IntEnum):  # 数据类型
+class TVL_DataType(IntEnum):  # 数据类型
     """
     TLV 协议中定义的数据类型
     仅供参考，具体含义请参考设备文档
@@ -178,7 +177,7 @@ class DataType(IntEnum):  # 数据类型
     FAN_SET_VALUE = 39  # 设置风扇转速值，单位: RPM  READ or WRITE
 
 
-class FaultCode(IntEnum):  # 故障代码
+class TVL_FaultCode(IntEnum):  # 故障代码
     """
     DataType.FAULT_STATE 对应的故障代码定义
 
@@ -202,7 +201,7 @@ class FaultCode(IntEnum):  # 故障代码
     OVER_TEMPERATURE_PROTECTION = 0x0040  # 温度过高
 
 
-class StateMachineFlagBits(IntEnum):  # 状态机标志位
+class TVL_StateMachineFlagBits(IntEnum):  # 状态机标志位
     """
     DataType.SMFB_STATE 对应的状态机标志位定义
     INIT: 初始化状态
@@ -218,7 +217,7 @@ class StateMachineFlagBits(IntEnum):  # 状态机标志位
     ERR = 0b1111  # 故障
 
 
-class StateMachineFlag(IntEnum):  # 状态机状态
+class TVL_StateMachineFlag(IntEnum):  # 状态机状态
     """
     DataType.SMS_STATE 对应的状态机状态定义
     NA: 未定义
@@ -230,3 +229,15 @@ class StateMachineFlag(IntEnum):  # 状态机状态
     BUCK = 1  # BUCK模式
     BOOST = 2  # BOOST模式
     MIX = 3  # MIX混合模式
+
+
+class TVL_Command(IntEnum):  # 命令代码
+    """
+    TLV协议中定义的命令代码
+    仅供参考，具体含义请参考设备文档
+    """
+    pass
+
+    # READ = 0x01  # 读取数据
+    # WRITE = 0x02  # 写入数据
+    # NOTIFY = 0x03  # 设备主动通知数据

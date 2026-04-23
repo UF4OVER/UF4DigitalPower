@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2026 - 01-19 15:10
 #  @FileName: dispatcher.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -13,7 +13,7 @@
 from .const import *
 from .frame import build_frame
 
-"""TLV dispatcher for TVLCOM payloads.
+"""TLV dispatcher for TVLCOMV1_FULL payloads.
 
 Responsibilities:
 - Optionally auto-reply ACK if FLAG_ACK_REQ is set.

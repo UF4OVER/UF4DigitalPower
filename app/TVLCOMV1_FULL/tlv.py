@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2026 - 01-19 15:09
 #  @FileName: tlv.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -16,7 +16,7 @@ from .const import *
 
 """TLV helpers.
 
-TLV encoding used by TVLCOM payloads:
+TLV encoding used by TVLCOMV1_FULL payloads:
     type:u8 | length:u16 (little-endian) | value:bytes
 
 This module provides convenience encoders for common scalar types.

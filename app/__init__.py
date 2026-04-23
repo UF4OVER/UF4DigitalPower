@@ -11,4 +11,4 @@
 # -------------------------------
 from .Pages import *
 from .Core import *
-from .TVLCOM import *
+from .TVLCOMV1_FULL import *

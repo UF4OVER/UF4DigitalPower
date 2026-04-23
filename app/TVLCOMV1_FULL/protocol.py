@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2026 - 01-19 15:11
 #  @FileName: protocol.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -27,7 +27,7 @@ You provide send_func(bytes) which actually writes to the transport.
 
 
 class Protocol:
-    """TVLCOM protocol endpoint (works for PC, MCU, MicroPython)."""
+    """TVLCOMV1_FULL protocol endpoint (works for PC, MCU, MicroPython)."""
 
     def __init__(self, send_func):
         self.seq = 0
