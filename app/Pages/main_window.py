@@ -22,10 +22,10 @@ from qfluentwidgets import (NavigationBar,
                             FluentStyleSheet
                             )
 from qfluentwidgets.window.stacked_widget import StackedWidget
-from qframelesswindow import AcrylicWindow
+from qframelesswindow import FramelessWindow
 
 
-class UMainWindow(AcrylicWindow):
+class UMainWindow(FramelessWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
 

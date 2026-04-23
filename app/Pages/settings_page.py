@@ -2,13 +2,13 @@
 
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QWidget, QLabel
+from PyQt5.QtWidgets import QWidget
 
-from Config import cfg, HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR
+from Config import cfg, HELP_URL, FEEDBACK_URL, AUTHOR, VERSION, YEAR, isWin11
 from app.Core import StyleSheet, Bus
 
 from qfluentwidgets import FluentIcon as FIF
-from qfluentwidgets import InfoBar
+from qfluentwidgets import InfoBar, LargeTitleLabel
 # use setting card components
 from qfluentwidgets import (SettingCardGroup, SwitchSettingCard, OptionsSettingCard, HyperlinkCard,
                             PrimaryPushSettingCard, ScrollArea,
@@ -25,7 +25,7 @@ class SettingsPage(ScrollArea):
         self.expandLayout = ExpandLayout(self.scrollWidget)
 
         # setting label
-        self.settingLabel = QLabel("设置", self)
+        self.settingLabel = LargeTitleLabel("设置", self)
 
 
         # personalization
@@ -48,14 +48,6 @@ class SettingsPage(ScrollArea):
             '主题颜色',
             '更改应用的主题颜色',
             self.personalGroup
-        )
-
-        self.enableAcrylicBackgroundCard = SwitchSettingCard(
-            icon=FIF.TRANSPARENT,
-            title="启用亚克力效果",
-            content="亚克力效果的视觉体验更好，但是可能导致窗口卡顿",
-            configItem=cfg.enableAcrylicBackground,
-            parent=self.personalGroup
         )
 
         # update software
@@ -95,7 +87,6 @@ class SettingsPage(ScrollArea):
         )
 
 
-
         self.__initWidget()
 
     def __initWidget(self):
@@ -107,9 +98,16 @@ class SettingsPage(ScrollArea):
         # Use object names matching the qss selectors (qss filenames without .qss)
         self.setObjectName('SettingsPage')
         self.scrollWidget.setObjectName('scrollWidget')
-        self.settingLabel.setObjectName('settingLabel')
 
-        StyleSheet.SETTINGS_PAGE.apply(self)
+        self.setStyleSheet('''
+            QScrollArea {
+                background-color: transparent;
+                border: none;
+            }
+            #scrollWidget {
+                background-color: transparent;
+            }
+        ''')
 
         # initialize layout
         self.__initLayout()
@@ -120,7 +118,6 @@ class SettingsPage(ScrollArea):
 
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
-        self.personalGroup.addSettingCard(self.enableAcrylicBackgroundCard)
 
         self.updateSoftwareGroup.addSettingCard(self.updateOnStartUpCard)
 
@@ -154,6 +151,3 @@ class SettingsPage(ScrollArea):
         # about
         self.feedbackCard.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl(FEEDBACK_URL)))
-
-        self.enableAcrylicBackgroundCard.checkedChanged.connect(Bus.enableAcrylicBackground.emit)
-

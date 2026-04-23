@@ -74,7 +74,7 @@ class DevicePage(QWidget):
         self._rx_timer.start()
 
         self.setObjectName("DevicePage")  # 主题设置
-        StyleSheet.DEVICE_PAGE.apply(self)
+        # StyleSheet.DEVICE_PAGE.apply(self)
 
         self.vBoxLayout = QVBoxLayout(self)
         m = 24
@@ -315,7 +315,7 @@ class DevicePage(QWidget):
 
     def _on_theme_changed(self, theme):
         # 重新应用样式表
-        StyleSheet.DEVICE_PAGE.apply(self)
+        # StyleSheet.DEVICE_PAGE.apply(self)
         # 强制刷新TEXTEDIT颜色
         self._refresh_textedit_color()
 

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
-from qframelesswindow import StandardTitleBar
+from qfluentwidgets import MSFluentTitleBar
 
 from app import UMainWindow, NotificationType
 from Config import AppIconPath, cfg
@@ -25,7 +25,6 @@ class Window(UMainWindow):
         self.setObjectName("FluentAcrylicWindow")
 
         self._manager = PopupManager(self, max_visible=6)
-        self._acrylic_enabled = False
 
         WINDOWS.windows["MainWindow"] = self._manager
 
@@ -38,9 +37,8 @@ class Window(UMainWindow):
         self.initNavigation()
         self.initWindow()
 
-        Bus.enableAcrylicBackground.connect(self.setAcrylicEffectEnabled)
-        Bus.enableAcrylicBackground.connect(self._on_acrylic_background_changed)
         cfg.themeChanged.connect(self._on_theme_changed)
+        self._on_theme_changed()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -58,7 +56,7 @@ class Window(UMainWindow):
     def initWindow(self):
         self.resize(1200, 800)
 
-        self.setTitleBar(StandardTitleBar(self))
+        self.setTitleBar(MSFluentTitleBar(self))
 
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle('Fluor4CellPower')
@@ -75,41 +73,12 @@ class Window(UMainWindow):
         logger.warning("Application closed")
         super().close()
 
-    def setAcrylicEffectEnabled(self, enable: bool):
-        """Set acrylic effect enabled with theme-aware contrast."""
-        self._acrylic_enabled = enable
+    def _on_theme_changed(self, *_):
         dark = isDarkTheme()
-
-        if enable:
-            # Dark theme needs a deeper tint to keep white text readable.
-            acrylic_color = "202020CC" if dark else "F2F2F299"
-            self.setStyleSheet("background: transparent")
-            self.windowEffect.setAcrylicEffect(self.winId(), acrylic_color)
-
-            if QOperatingSystemVersion.current() != QOperatingSystemVersion.Windows10:
-                self.windowEffect.addShadowEffect(self.winId())
-        else:
-            fallback_bg = "#1F1F1F" if dark else "#F2F2F2"
-            self.setStyleSheet(f"background:{fallback_bg}")
-            self.windowEffect.addShadowEffect(self.winId())
-            self.windowEffect.removeBackgroundEffect(self.winId())
+        bg_color = "#1F1F1F" if dark else "#F3F3F3"
+        self.setStyleSheet(f"Window {{ background: {bg_color}; }}")
 
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
-        StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-        StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-
-    def _on_theme_changed(self, *_):
-        """Re-apply acrylic colors after theme switches."""
-        self.setAcrylicEffectEnabled(self._acrylic_enabled)
-
-    def _on_acrylic_background_changed(self, enabled: bool):
-        state_text = "enabled" if enabled else "disabled"
-        self._manager.push(
-            NotificationType.Information,
-            "System",
-            f"Acrylic background {state_text}",
-            2100,
-        )
 
 
 if __name__ == '__main__':

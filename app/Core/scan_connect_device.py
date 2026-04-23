@@ -83,6 +83,7 @@ class DeviceScanner(QObject):
     def _find_matching_port(self) -> Optional[QSerialPortInfo]:
         if self._vid == -1 or self._pid == -1:
             logger.warning("DeviceScanner: VID/PID 未配置，跳过扫描")
+            self.stop()  # 当未配置 VID 和 PID 的时候不进行扫描
             return None
 
         for port in QSerialPortInfo.availablePorts():
