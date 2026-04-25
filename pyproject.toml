@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.1.0"
+version = "0.1.3"
 description = "Fluor4CellPower battery and power management system"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,14 +34,17 @@ includes = [
     "PyQt5.QtWidgets",
     "qfluentwidgets",
     "qframelesswindow",
+    "Config",
 ]
 
 packages = [
     "app",
+    "Config"
 ]
 
 # 注意：Config/config.py 里使用 Path("config.ini")，且 frozen 时 BaseDir=exe 同级
 # 所以这里把 config.ini 直接放到 exe 同级，避免运行时找不到
+
 include_files = [
     "Resources",
 ]
@@ -80,4 +83,4 @@ excludes = [
 optimize = 2
 
 # Windows 运行时更稳（避免目标机器缺 VC++ runtime）
-include_msvcr = true
+include_msvcr = false

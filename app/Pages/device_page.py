@@ -1,3 +1,16 @@
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 04-12 13:15
+#  @FileName: device_page.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact : Powered By GPT-5.4
+#  @Python  :
+# -------------------------------
+
+
 """Device page (下位机界面)
 
 Serial console for device connection/control.
@@ -30,6 +43,8 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
 )
+
+from app import StyleSheet
 from app.Core import SerialConfig, SerialSession, SerialEventType, listSerialPorts
 from app.Core import logger
 
@@ -45,7 +60,7 @@ from qfluentwidgets import (
     BodyLabel,
     ComboBox,
     LineEdit,
-    PlainTextEdit,
+    TextEdit,
     PrimaryPushButton,
     PushButton,
     SpinBox,
@@ -55,6 +70,7 @@ from qfluentwidgets import (
 )
 from qfluentwidgets import isDarkTheme
 
+from Config import AppIconPath, cfg
 
 @dataclass
 class _TlvRow:
@@ -94,6 +110,7 @@ class DevicePage(QWidget):
         self.titleLabel = TitleLabel('TVL COM', self)
         self.vBoxLayout.addWidget(self.titleLabel)
 
+        cfg.themeChanged.connect(self._on_theme_changed)
         # ---- Connection bar ----
         connBar = QWidget(self)  # NOQA 变量名不规范，但符合语义
         connLayout = QHBoxLayout(connBar)  # NOQA 变量名不规范，但符合语义
@@ -133,7 +150,7 @@ class DevicePage(QWidget):
         self.vBoxLayout.addWidget(connBar)
 
         # ---- Log console ----
-        self.logEdit = PlainTextEdit(self)
+        self.logEdit = TextEdit(self)
         self.logEdit.setPlaceholderText('设备日志/返回数据…')
         self.logEdit.setReadOnly(True)
         self.vBoxLayout.addWidget(self.logEdit, 1)
@@ -344,9 +361,6 @@ class DevicePage(QWidget):
         self._append_log(f'RX({len(data)}): {data.hex(" ")}')
 
     def _on_theme_changed(self, theme):
-        # 重新应用样式表
-        # StyleSheet.DEVICE_PAGE.apply(self)
-        # 强制刷新TEXTEDIT颜色
         self._refresh_textedit_color()
 
     def _refresh_textedit_color(self):

@@ -22,7 +22,6 @@ class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举
     HOME_PAGE = "HomePage"
     SETTINGS_PAGE = "SettingsPage"
     STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
-
     BASE_PAGE = "FluentAcrylicWindow"
 
     def path(self, theme=Theme.AUTO):

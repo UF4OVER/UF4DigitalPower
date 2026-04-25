@@ -1,4 +1,14 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-14 14:13
+#  @FileName: stm32_programmer_session.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact : Powered By GPT-5.4
+#  @Python  :
+# -------------------------------
 
 from __future__ import annotations
 
@@ -14,15 +24,9 @@ from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess
 from Config import DirPathsInstance
 
 
-def default_stm32_programmer_cli_path() -> str:
+def defaultStm32ProgrammerCliPath() -> str:
     return os.path.join(
-        DirPathsInstance.BaseDir,
-        "app",
-        "STM32CubeProgrammer",
-        "bin",
-        "STM32_Programmer_CLI.exe",
-    )
-
+        DirPathsInstance.ST_LINKDir, "ST-LINK_CLI.exe")
 
 class Stm32ProgrammerEventType(IntEnum):
     REQUEST = QEvent.registerEventType()
@@ -47,7 +51,7 @@ class Stm32ConnectConfig:
     probe_sn: str | None = None
     freq: str = ""
     mode: str = "NORMAL"
-    reset: str = "SWrst"
+    reset: str = "SWrst"  # NOQA
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ class LogPayload:
 
 class LogEvent(Stm32ProgrammerEvent):
     def __init__(self, text: str, level: str = "info"):
+
         super().__init__(Stm32ProgrammerEventType.LOG)
         self.payload = LogPayload(text=text, level=level)
 
@@ -210,7 +215,7 @@ class Stm32ProgrammerSession(QObject):
 
     def __init__(self, exe_path: str | None = None, _event_receiver: Optional[QObject] = None, parent: QObject | None = None):
         super().__init__(parent)
-        self.exe_path = exe_path or default_stm32_programmer_cli_path()
+        self.exe_path = exe_path or defaultStm32ProgrammerCliPath()
         self._event_receiver = _event_receiver
         self._current_action: str | None = None
         self._current_command: list[str] = []
@@ -256,7 +261,7 @@ class Stm32ProgrammerSession(QObject):
 
         try:
             if action == "scan":
-                self._start_action("scan", ["-q", "-l", "stlink"])
+                self._start_action("scan", self._build_common_arguments() + ["-List"])
                 return
 
             if action == "connect":
@@ -269,15 +274,9 @@ class Stm32ProgrammerSession(QObject):
                     return
 
                 args = self._build_connect_arguments(payload.connect)
-                if payload.skip_erase:
-                    args.append("--skipErase")
-                args.extend(["-d", payload.file_path])
-                if payload.address:
-                    args.append(payload.address)
-                if payload.verify:
-                    args.append("-v")
+                args.extend(self._build_program_arguments(payload.file_path, payload.address, payload.skip_erase, payload.verify))
                 if payload.reset_after_download:
-                    args.append("-rst")
+                    args.append(self._reset_command(payload.connect.reset))
 
                 self._start_action("download", args)
                 return
@@ -292,12 +291,19 @@ class Stm32ProgrammerSession(QObject):
 
                 address = payload.address or self.FLASH_BASE_ADDRESS
                 args = self._build_connect_arguments(payload.connect)
-                args.extend(["-u", address, str(payload.size), payload.save_path])
+                args.extend(["-Dump", address, str(payload.size), payload.save_path])
                 self._start_action("upload", args)
                 return
 
             if action == "checksum":
-                self._start_action("checksum", self._build_connect_arguments(payload.connect) + ["-checksum"])
+                if payload.size is None or payload.size <= 0:
+                    self._post_event(MessageEvent("校验范围无效", "请先连接 MCU 以读取 Flash 大小。", "warning"))
+                    return
+
+                address = payload.address or self.FLASH_BASE_ADDRESS
+                args = self._build_connect_arguments(payload.connect)
+                args.extend(["-Cksum", address, str(payload.size)])
+                self._start_action("checksum", args)
                 return
 
             if action == "read_memory":
@@ -315,26 +321,60 @@ class Stm32ProgrammerSession(QObject):
         except Exception as exc:
             self._post_event(MessageEvent("执行失败", str(exc), "error"))
 
-    def _build_connect_arguments(self, connect: Stm32ConnectConfig | None) -> list[str]:
+    def _build_connect_arguments(self, connect: Stm32ConnectConfig | None) -> list[str]:  # NOQA
         connect = connect or Stm32ConnectConfig()
-        args = ["-q", "-c", "port=SWD"]
+        args = self._build_common_arguments() + ["-c"]
 
         if connect.probe_sn:
-            args.append(f"sn={connect.probe_sn}")
+            args.append(f"SN={connect.probe_sn}")
+
+        args.append("SWD")
 
         freq = (connect.freq or "").strip()
         if freq:
-            args.append(f"freq={freq}")
+            args.append(f"Freq={freq}")
 
-        mode = (connect.mode or "").strip()
-        if mode:
-            args.append(f"mode={mode}")
+        mode = (connect.mode or "").strip().upper()
+        if mode in {"UR", "HOTPLUG"}:
+            args.append(mode)
 
-        reset = (connect.reset or "").strip()
+        reset = self._connect_reset_token(connect.reset)
         if reset:
-            args.append(f"reset={reset}")
+            args.append(reset)
 
         return args
+
+    @staticmethod
+    def _build_common_arguments() -> list[str]:
+        return ["-Q", "-NoPrompt"]
+
+    def _build_program_arguments(self, file_path: str, address: str, skip_erase: bool, verify: bool) -> list[str]:
+        args = ["-P", file_path]
+
+        if address and self._should_append_address(file_path):
+            args.append(address)
+        if skip_erase:
+            args.append("ske")
+        if not verify:
+            args.append("skpv")
+        return args
+
+    @staticmethod
+    def _should_append_address(file_path: str) -> bool:
+        return os.path.splitext(file_path)[1].lower() == ".bin"
+
+    @staticmethod
+    def _connect_reset_token(reset: str | None) -> str | None:
+        mapping = {
+            "SWRST": "Srst",
+            "HWRST": "Hrst",
+            "CRST": "Crst",
+        }
+        return mapping.get((reset or "").strip().upper())
+
+    @staticmethod
+    def _reset_command(reset: str | None) -> str:
+        return "-HardRst" if (reset or "").strip().upper() == "HWRST" else "-Rst"
 
     def _start_action(self, action: str, args: list[str]) -> None:
         if self.is_busy:
@@ -342,8 +382,8 @@ class Stm32ProgrammerSession(QObject):
             return
 
         if not os.path.exists(self.exe_path):
-            self._post_event(MessageEvent("CLI 不存在", "未找到 STM32_Programmer_CLI.exe。", "error"))
-            self._post_event(LogEvent(f"STM32CubeProgrammer CLI not found: {self.exe_path}", "error"))
+            self._post_event(MessageEvent("CLI 不存在", "未找到 ST-LINK_CLI.exe。", "error"))
+            self._post_event(LogEvent(f"ST-LINK CLI not found: {self.exe_path}", "error"))
             return
 
         self._current_action = action
@@ -422,11 +462,9 @@ class Stm32ProgrammerSession(QObject):
     @staticmethod
     def _parse_scan_results(text: str) -> list[Stm32ProbeInfo]:
         pattern = re.compile(
-            r"ST-Link Probe\s+(?P<index>\d+)\s*:\s*"
-            r".*?ST-LINK SN\s*:\s*(?P<sn>[^\r\n]+)"
-            r".*?ST-LINK FW\s*:\s*(?P<fw>[^\r\n]*)"
-            r".*?Access Port Number\s*:\s*(?P<ap>[^\r\n]*)"
-            r".*?Board Name\s*:\s*(?P<board>[^\r\n]*)",
+            r"ST-LINK Probe\s+(?P<index>\d+)\s*:\s*"
+            r".*?SN\s*:\s*(?P<sn>[^\r\n]+)"
+            r".*?FW\s*:\s*(?P<fw>[^\r\n]*)",
             re.S,
         )
 
@@ -437,61 +475,53 @@ class Stm32ProgrammerSession(QObject):
                     index=match.group("index").strip(),
                     sn=match.group("sn").strip(),
                     fw=match.group("fw").strip(),
-                    ap=match.group("ap").strip(),
-                    board=match.group("board").strip() or "--",
+                    ap="--",
+                    board="--",
                 )
             )
         return probes
 
     @classmethod
     def _extract_device_info(cls, text: str) -> Stm32DeviceInfo | None:
-        keys = [
-            "ST-LINK SN",
-            "ST-LINK FW",
-            "Board",
-            "Voltage",
-            "SWD freq",
-            "Connect mode",
-            "Reset mode",
-            "Device ID",
-            "Revision ID",
-            "Device name",
-            "Flash size",
-            "Device type",
-            "Device CPU",
-            "BL Version",
-        ]
-        info: dict[str, str] = {}
-        for key in keys:
-            match = re.search(rf"^{re.escape(key)}\s*:\s*(.+)$", text, re.MULTILINE)
-            if match:
-                info[key] = match.group(1).strip()
+        def _extract(pattern: str) -> str | None:
+            match = re.search(pattern, text, re.MULTILINE)
+            return match.group(1).strip() if match else None
 
-        if not info:
+        probe_sn = _extract(r"^ST-LINK SN\s*:\s*(.+)$")
+        probe_fw = _extract(r"^ST-LINK Firmware version\s*:\s*(.+)$")
+        voltage = _extract(r"^Target voltage\s*=\s*(.+)$")
+        swd_freq = _extract(r"^SWD Frequency\s*=\s*(.+)$")
+        connect_mode = _extract(r"^Connection mode\s*:\s*(.+)$")
+        reset_mode = _extract(r"^Reset mode\s*:\s*(.+)$")
+        device_id = _extract(r"^Device ID\s*:\s*(.+)$")
+        flash_size = _extract(r"^Device flash Size\s*:\s*(.+)$")
+        device_name = _extract(r"^Device family\s*:\s*(.+)$")
+
+        if not any((probe_sn, probe_fw, voltage, swd_freq, connect_mode, reset_mode, device_id, flash_size, device_name)):
             return None
 
-        flash_size = info.get("Flash size", "--")
+        flash_size = flash_size or "--"
         return Stm32DeviceInfo(
-            probe_sn=info.get("ST-LINK SN", "--"),
-            probe_fw=info.get("ST-LINK FW", "--"),
-            board=info.get("Board", "--"),
-            voltage=info.get("Voltage", "--"),
-            swd_freq=info.get("SWD freq", "--"),
-            connect_mode=info.get("Connect mode", "--"),
-            reset_mode=info.get("Reset mode", "--"),
-            device_id=info.get("Device ID", "--"),
-            revision=info.get("Revision ID", "--"),
-            device_name=info.get("Device name", "--"),
+            probe_sn=probe_sn or "--",
+            probe_fw=probe_fw or "--",
+            board="--",
+            voltage=voltage or "--",
+            swd_freq=swd_freq or "--",
+            connect_mode=connect_mode or "--",
+            reset_mode=reset_mode or "--",
+            device_id=device_id or "--",
+            revision="--",
+            device_name=device_name or "--",
             flash_size=flash_size,
             flash_size_bytes=cls._parse_flash_size_bytes(flash_size),
-            device_type=info.get("Device type", "--"),
-            cpu=info.get("Device CPU", "--"),
-            bl_version=info.get("BL Version", "--"),
+            device_type="--",
+            cpu="--",
+            bl_version="--",
         )
 
     @staticmethod
     def _extract_checksum(text: str) -> str | None:
-        match = re.search(r"Checksum\s*:\s*(0x[0-9A-Fa-f]+)", text)
+        match = re.search(r"(?:Memory\s+)?Checksum\s*:\s*(0x[0-9A-Fa-f]+)", text, re.IGNORECASE)
         return match.group(1) if match else None
 
     @staticmethod

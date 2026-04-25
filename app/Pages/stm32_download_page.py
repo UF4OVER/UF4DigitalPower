@@ -1,4 +1,15 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 04-15 13:15
+#  @FileName: stm32_download_page.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact : Powered By GPT-5.4
+#  @Python  :
+# -------------------------------
+
 from __future__ import annotations
 
 import os
@@ -35,7 +46,7 @@ from app.Core import (
     Stm32RequestEvent,
     Stm32RequestPayload,
 )
-from Config import DirPathsInstance
+from Config import DirPathsInstance, logger
 
 
 class Stm32DownloadPage(ScrollArea):
@@ -160,7 +171,7 @@ class Stm32DownloadPage(ScrollArea):
 
         row2.addWidget(BodyLabel("连接模式", self.connectCard), 0, 2)
         self.modeCombo = ComboBox(self.connectCard)
-        self.modeCombo.addItems(["NORMAL", "HOTPLUG", "UR", "POWERDOWN", "HWRSTPULSE"])
+        self.modeCombo.addItems(["NORMAL", "HOTPLUG", "UR"])
         self.modeCombo.setCurrentText("NORMAL")
         row2.addWidget(self.modeCombo, 0, 3)
 
@@ -245,7 +256,7 @@ class Stm32DownloadPage(ScrollArea):
 
         fileRow = QHBoxLayout()
         self.filePathInput = LineEdit(self.downloadCard)
-        self.filePathInput.setPlaceholderText("选择待下载的固件文件（.bin/.hex/.elf/.s19）")
+        self.filePathInput.setPlaceholderText("选择待下载的固件文件（.bin/.hex/.s19/.srec）")
         fileRow.addWidget(self.filePathInput, 1)
 
         self.browseButton = PushButton(FIF.FOLDER, "浏览", self.downloadCard)
@@ -384,7 +395,7 @@ class Stm32DownloadPage(ScrollArea):
         self.logEdit = TextEdit(self.logCard)
         self.logEdit.setReadOnly(True)
         self.logEdit.setMinimumHeight(260)
-        self.logEdit.setStyleSheet("QTextEdit { font-family: Consolas; font-size: 10pt; }")
+        # self.logEdit.setStyleSheet("QTextEdit { font-family: Consolas; font-size: 10pt; }")
         layout.addWidget(self.logEdit)
 
         self.vBoxLayout.addWidget(self.logCard, 1)
@@ -406,6 +417,7 @@ class Stm32DownloadPage(ScrollArea):
         cursor.insertText(plain_text)
         scrollbar = self.logEdit.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+        logger.info(f"{self.__class__.__name__}: {text}]", extra={"color": color})
 
     def showMessage(self, title: str, content: str, level: str = "info"):
         kwargs = dict(
@@ -432,7 +444,7 @@ class Stm32DownloadPage(ScrollArea):
             self,
             "选择固件",
             "",
-            "Firmware Files (*.bin *.hex *.elf *.s19 *.srec)",
+            "Firmware Files (*.bin *.hex *.s19 *.srec)",
         )
         if filePath:
             self.filePathInput.setText(filePath)
@@ -526,7 +538,19 @@ class Stm32DownloadPage(ScrollArea):
         )
 
     def calculateChecksum(self):
-        self._post_request(Stm32RequestPayload(action="checksum", connect=self._build_connect_config()))
+        checksum_size = self._device_info.flash_size_bytes if self._device_info else None
+        if checksum_size is None:
+            self.showMessage("缺少容量信息", "请先连接 MCU，读取 Flash 大小后再计算校验和。", "warning")
+            return
+
+        self._post_request(
+            Stm32RequestPayload(
+                action="checksum",
+                connect=self._build_connect_config(),
+                address=self.FLASH_BASE_ADDRESS,
+                size=checksum_size,
+            )
+        )
 
     def readMemory(self):
         if self.memoryAddressInput is None or self.memoryCountInput is None:

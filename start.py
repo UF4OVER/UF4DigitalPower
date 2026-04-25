@@ -11,7 +11,7 @@
 # -------------------------------
 import sys
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon, QFontDatabase
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
@@ -63,13 +63,10 @@ class Window(UMainWindow):
 
     def __init__(self):
         super().__init__()
-
         self.setObjectName("FluentAcrylicWindow")
-
         self._manager = PopupManager(self, max_visible=6)
 
         WINDOWS.windows["MainWindow"] = self._manager
-
 
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
@@ -80,8 +77,14 @@ class Window(UMainWindow):
         self.initNavigation()
         self.initWindow()
 
+        # todo 主题刷新，有无更优雅的实现呢
         cfg.themeChanged.connect(self._on_theme_changed)
         self._on_theme_changed()
+        StyleSheet.HOME_PAGE.apply(self.homeInterface)
+        StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
+        StyleSheet.STM32_DOWNLOAD_PAGE.apply(self.stm32DownloadInterface)
+
+        QTimer.singleShot(0, self._refresh_startup_theme)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -122,8 +125,15 @@ class Window(UMainWindow):
         bg_color = "#1F1F1F" if dark else "#F3F3F3"
         self.setStyleSheet(f"Window {{ background: {bg_color}; }}")
 
-        StyleSheet.HOME_PAGE.apply(self.homeInterface)
-        StyleSheet.STM32_DOWNLOAD_PAGE.apply(self.stm32DownloadInterface)
+    def _refresh_startup_theme(self):
+        """创建所有子接口后，刷新一次主题
+
+        STM32下载页面内的一些Fluent小部件保持默认状态
+        第一次暗启动时用光色板，直到主题被切换一次。
+        在这里重新应用当前主题会强制这些小部件同步，没有
+        更改用户保存的主题设置
+        """
+        setTheme(cfg.themeMode.value)
 
 
 if __name__ == '__main__':
@@ -136,7 +146,9 @@ if __name__ == '__main__':
 
     app = QApplication(sys.argv)
     setTheme(cfg.themeMode.value)
+
     applyGlobalEnglishFont(app)
+
     w = Window()
     w.show()
 

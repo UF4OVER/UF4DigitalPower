@@ -85,6 +85,17 @@ class DirPaths:
             makedirs(_logDir, exist_ok=True)
         return _logDir
 
+    @cached_property
+    def ST_LINKDir(self) -> Path:
+        """
+
+        """
+        _ST_LINKDir = self.BaseDir / "Resources" / "Tools" / "ST_LINK_CLI"
+        if not _ST_LINKDir.exists():
+            makedirs(_ST_LINKDir, exist_ok=True)
+        return _ST_LINKDir
+
+
 _dirPaths = DirPaths()
 
 # 日志文件夹路径

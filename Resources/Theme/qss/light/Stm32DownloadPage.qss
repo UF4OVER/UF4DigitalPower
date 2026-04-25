@@ -15,7 +15,7 @@ QScrollArea#Stm32DownloadPage QTextEdit {
 }
 
 QScrollArea#Stm32DownloadPage QTextEdit::selection {
-    background: #cfe0ff;
+    background: transparent;
     color: #000000;
 }
 
