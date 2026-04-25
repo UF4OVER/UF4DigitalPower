@@ -21,6 +21,7 @@ class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举
     # Core pages present in app/Pages
     HOME_PAGE = "HomePage"
     SETTINGS_PAGE = "SettingsPage"
+    STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
 
     BASE_PAGE = "FluentAcrylicWindow"
 

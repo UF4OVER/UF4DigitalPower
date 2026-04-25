@@ -1,0 +1,42 @@
+{
+"Title":"STM32MP Backup Config",
+"Files":[
+	{
+		"Name":"Backup",
+		"Path":"",
+		"Offset":"0x00000000",
+		"Protection":{
+			"Lock":{
+				"BitOffset":"0x1F",
+				"BitWidth":"0x1",
+				"BitValue":"0x0",
+				"PossibleValues":{
+					"0x0":"No",
+					"0x1":"Yes"
+				}
+			},
+			"Wrapping":{
+				"BitOffset":"0x1D",
+				"BitWidth":"0x2",
+				"BitValue":"0x0",
+				"PossibleValues":{
+					"0x0":"No Encryption",
+					"0x1":"HUK derived for TDCID1",
+					"0x2":"HUK derived for TDCID2"
+				}
+			},
+			"HDPL":{
+				"BitOffset":"0x1B",
+				"BitWidth":"0x02",
+				"BitValue":"0x0",
+				"PossibleValues":{
+					"0x0":"Level 0",
+					"0x1":"Level 1",
+					"0x2":"Level 2",
+					"0x3":"Level 3"
+				}
+			}
+		}
+	}
+]
+}

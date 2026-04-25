@@ -1,4 +1,14 @@
-# coding:utf-8
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-15 13:15
+#  @FileName: start.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact : Powered By GPT-5.4
+#  @Python  :
+# -------------------------------
 import sys
 
 from PyQt5.QtCore import Qt
@@ -9,6 +19,7 @@ from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import MSFluentTitleBar
 from qfluentwidgets import qconfig
+from qfluentwidgets import setTheme
 
 from Resources.Font import font as font_resource
 
@@ -17,10 +28,10 @@ from Config import AppIconPath, cfg
 from app import UMainWindow
 from app.Core import logger, StyleSheet, WINDOWS
 from app.Core.pop_up import PopupManager
-from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage
+from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage, Stm32DownloadPage
 
 
-def apply_global_english_font(app: QApplication):
+def applyGlobalEnglishFont(app: QApplication):
     """Load the bundled font and prioritize it for English text app-wide."""
     _ = font_resource
     font_path = ":/blender-pro-bold.otf"
@@ -63,6 +74,7 @@ class Window(UMainWindow):
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.F4CPowerInterface = F4CPowerPage()
+        self.stm32DownloadInterface = Stm32DownloadPage(self)
         self.settingInterface = SettingsPage(self)
 
         self.initNavigation()
@@ -80,6 +92,7 @@ class Window(UMainWindow):
         self.addSubInterface(self.homeInterface, FIF.HOME, '主页',FIF.HOME_FILL)
         self.addSubInterface(self.deviceInterface, FIF.DEVELOPER_TOOLS, '串口')
         self.addSubInterface(self.F4CPowerInterface, FIF.POWER_BUTTON, '设备')
+        self.addSubInterface(self.stm32DownloadInterface, FIF.DOWNLOAD, '下载')
         self.addSubInterface(self.settingInterface,FIF.SETTING,'设置',FIF.SETTING, position=NavigationItemPosition.BOTTOM)
 
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
@@ -110,6 +123,7 @@ class Window(UMainWindow):
         self.setStyleSheet(f"Window {{ background: {bg_color}; }}")
 
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
+        StyleSheet.STM32_DOWNLOAD_PAGE.apply(self.stm32DownloadInterface)
 
 
 if __name__ == '__main__':
@@ -121,7 +135,8 @@ if __name__ == '__main__':
     logger.info("Application started")
 
     app = QApplication(sys.argv)
-    apply_global_english_font(app)
+    setTheme(cfg.themeMode.value)
+    applyGlobalEnglishFont(app)
     w = Window()
     w.show()
 

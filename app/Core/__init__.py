@@ -11,6 +11,7 @@
 # -------------------------------
 from .set_stylesheet import *
 from .serial_session import *
+from .stm32_programmer_session import *
 from .scan_connect_device import *
 from .solt_bus import Bus
 from .const import *
