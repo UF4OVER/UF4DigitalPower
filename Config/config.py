@@ -16,8 +16,7 @@ from functools import cached_property, cache
 from os import makedirs
 from pathlib import Path
 from typing import Union
-from deprecated import deprecated
-
+from warnings import warn
 from PyQt5.QtCore import QSettings
 from PyQt5.QtGui import QFontDatabase, QFont
 from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator,
@@ -86,12 +85,16 @@ class DirPaths:
             makedirs(_logDir, exist_ok=True)
         return _logDir
 
-    @deprecated(version="0.1.3", reason="0.1.3及之后更换DAPLINK 进行下载，故停止STLINK支持")
     @cached_property
     def ST_LINKDir(self) -> Path:
         """
         return: ST_LINK_CLI目录的Path对象，0.1.3 之后弃用
         """
+        warn(
+            "ST_LINKDir 已弃用 (v0.1.3): 0.1.3及之后更换DAPLINK进行下载，故停止STLINK支持",
+            DeprecationWarning,
+            stacklevel=2
+        )
         _ST_LINKDir = self.BaseDir / "Resources" / "Tools" / "ST_LINK_CLI"
         if not _ST_LINKDir.exists():
             makedirs(_ST_LINKDir, exist_ok=True)
