@@ -86,21 +86,6 @@ class DirPaths:
         return _logDir
 
     @cached_property
-    def ST_LINKDir(self) -> Path:
-        """
-        return: ST_LINK_CLI目录的Path对象，0.1.3 之后弃用
-        """
-        warn(
-            "ST_LINKDir 已弃用 (v0.1.3): 0.1.3及之后更换DAPLINK进行下载，故停止STLINK支持",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        _ST_LINKDir = self.BaseDir / "Resources" / "Tools" / "ST_LINK_CLI"
-        if not _ST_LINKDir.exists():
-            makedirs(_ST_LINKDir, exist_ok=True)
-        return _ST_LINKDir
-
-    @cached_property
     def McuPack(self) -> Path:
         """
         return: McuPack目录的Path对象，0.1.3 之后弃用

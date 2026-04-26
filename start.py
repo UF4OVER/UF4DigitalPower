@@ -6,7 +6,7 @@
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : Powered By GPT-5.4
+#  @Contact :
 #  @Python  :
 # -------------------------------
 import sys
@@ -28,7 +28,7 @@ from Config import AppIconPath, cfg
 from app import UMainWindow
 from app.Core import logger, StyleSheet, WINDOWS
 from app.Core.pop_up import PopupManager
-from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage, Stm32DownloadPage, DaplinkFlashPage
+from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage, DaplinkFlashPage
 
 
 def applyGlobalEnglishFont(app: QApplication):
@@ -71,7 +71,7 @@ class Window(UMainWindow):
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.F4CPowerInterface = F4CPowerPage()
-        self.stm32DownloadInterface = Stm32DownloadPage(self)
+        # self.stm32DownloadInterface = Stm32DownloadPage(self)
         self.daplinkFlashInterface = DaplinkFlashPage(self)
         self.settingInterface = SettingsPage(self)
 
@@ -83,7 +83,7 @@ class Window(UMainWindow):
         self._on_theme_changed()
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.STM32_DOWNLOAD_PAGE.apply(self.stm32DownloadInterface)
+        # StyleSheet.STM32_DOWNLOAD_PAGE.apply(self.stm32DownloadInterface)
         StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkFlashInterface)
 
         QTimer.singleShot(0, self._refresh_startup_theme)
@@ -97,7 +97,7 @@ class Window(UMainWindow):
         self.addSubInterface(self.homeInterface, FIF.HOME, '主页',FIF.HOME_FILL)
         self.addSubInterface(self.deviceInterface, FIF.DEVELOPER_TOOLS, '串口')
         self.addSubInterface(self.F4CPowerInterface, FIF.POWER_BUTTON, '设备')
-        self.addSubInterface(self.stm32DownloadInterface, FIF.DOWNLOAD, '下载')
+        # self.addSubInterface(self.stm32DownloadInterface, FIF.DOWNLOAD, '下载')
         self.addSubInterface(self.daplinkFlashInterface, FIF.IOT, 'DAPLink')
         self.addSubInterface(self.settingInterface,FIF.SETTING,'设置',FIF.SETTING, position=NavigationItemPosition.BOTTOM)
 
