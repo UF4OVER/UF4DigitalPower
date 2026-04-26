@@ -155,6 +155,7 @@ class DaplinkFlashPage(ScrollArea):
         grid.addWidget(BodyLabel("Target filter", self.connectCard), 1, 0)
         self.targetFilterInput = LineEdit(self.connectCard)
         self.targetFilterInput.setPlaceholderText("input STM32G474 / G474 / RETx and Other Keywords")
+        self.targetFilterInput.setText("G474RBT")  # 默认芯片支持
         self.targetFilterInput.textChanged.connect(self._apply_target_filter)
         grid.addWidget(self.targetFilterInput, 1, 1)
 
