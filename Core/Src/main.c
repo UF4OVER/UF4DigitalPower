@@ -135,7 +135,7 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
 
-  PowerControl_StartRuntime();
+  // PowerControl_StartRuntime();
 
   /* USER CODE END 2 */
 
@@ -147,11 +147,12 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     /* Keep non-time-critical work in foreground loop. */
-    ADC_calculate();
-    Auto_FAN();
-    Update_Flash();
+    HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+    // ADC_calculate();
+    // Auto_FAN();
+    // Update_Flash();
     HAL_IWDG_Refresh(&hiwdg);
-    HAL_Delay(10);
+    HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
