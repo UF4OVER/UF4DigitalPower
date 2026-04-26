@@ -10,6 +10,11 @@
  */
 #define CCMRAM __attribute__((section("ccmram")))
 
+/*
+ * 电压缩放十倍进入ADC，量程0-33V，对应0-3.3V的ADC电压，输入输出测同理
+ * 电流分流器电阻8mΩ，放大20，中心偏置电压1.65V，正向对应0-10A，ADC 1.65V-3.25V,反向同理
+ */
+
 #define ADC_MAX_VALUE 8190.0F				   // ADC最大值
 #define REF_3V3 3.2806F						   // VREF参考电压
 #define REF_165 1.65F						   // 1.65V参考电压
@@ -144,6 +149,9 @@ extern struct _ADI SADC;						// 采样变量
 extern volatile float VIN, VOUT, IIN, IOUT;		// 电压电流实际值
 extern volatile float MainBoard_TEMP, CPU_TEMP; // 主板和CPU温度实际值
 extern volatile float powerEfficiency;			// 电源转换效率
+extern volatile float MAX_OTP_VAL;              // 过温阈值
+extern volatile float MAX_VOUT_OVP_VAL;         // 过压阈值
+extern volatile float MAX_VOUT_OCP_VAL;         // 过流阈值
 extern volatile _CVCC_Mode CVCC_Mode;			// 电源模式
 extern struct _SET_Value SET_Value;				// 设置参数
 
@@ -184,9 +192,6 @@ extern struct _SET_Value SET_Value;				// 设置参数
 
 void ADCSample(void);
 float GET_NTC_Temperature(void);
-void Encoder(void);
-void Key_Process(void);
-void OLED_Display(void);
 void ADC_calculate(void);
 void StateM(void);
 void StateMInit(void);

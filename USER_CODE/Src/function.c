@@ -15,7 +15,16 @@ volatile float MAX_VOUT_OVP_VAL;                                   // 输出过�
 volatile float MAX_VOUT_OCP_VAL;                                   // 输出过流保护阈值
 #define MAX_SHORT_I 10.1F                                          // 短路电流判据
 #define MIN_SHORT_V 0.5F                                           // 短路电压判据
-struct _Ctr_value CtrValue = {0, 0, 0, 0, MIN_BUKC_DUTY, 0, 0, 0}; // 控制参数
+struct _Ctr_value CtrValue = {
+    0,
+    0, 
+    0,
+    0,
+    MIN_BUKC_DUTY,
+    0,
+    0,
+    0
+}; // 控制参数
 struct _FLAG DF = {0, 0, 0, 0, 0, 0, 0};                           // 控制标志位
 struct _ADI SADC = {0, 0, 0, 0, 0, 0, 0, 0};                       // 输入输出参数采样值和平均值
 struct _SET_Value SET_Value = {0, 0, 0, 0, 0};                     // 设置参数
@@ -324,8 +333,8 @@ void ShortOff(void)
     {
         // 关闭PWM
         DF.PWMENFlag = 0;
-        HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 开启HRTIM的PWM输出
-        HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 开启HRTIM的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路PWM输出
         // 故障标志位
         setRegBits(DF.ErrFlag, F_SW_SHORT);
         // 跳转至故障状态
@@ -349,8 +358,8 @@ void ShortOff(void)
                 RSNum = 11;
                 // 关闭PWM
                 DF.PWMENFlag = 0;
-                HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 开启HRTIM的PWM输出
-                HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 开启HRTIM的PWM输出
+                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路PWM输出
+                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路PWM输出
             }
             else
             {
@@ -612,7 +621,7 @@ float calculateTemperature(float voltage)
 float GET_NTC_Temperature(void)
 {
     HAL_ADC_Start(&hadc2); // 启动ADC2采样，采样NTC温度
-    // HAL_ADC_PollForConversion(&hadc2, 100); // 等待ADC采样结束
+    HAL_ADC_PollForConversion(&hadc2, 2); // 等待ADC采样结束
     uint32_t TEMP_adcValue = HAL_ADC_GetValue(&hadc2);                            // 读取ADC2采样结果
     float temperature = calculateTemperature(TEMP_adcValue * REF_3V3 / 65520.0F); // 计算温度
     return temperature;                                                           // 返回温度值
@@ -626,7 +635,7 @@ float GET_NTC_Temperature(void)
 float GET_CPU_Temperature(void)
 {
     HAL_ADC_Start(&hadc5); // 启动ADC5采样，采样单片机CPU温度
-    // HAL_ADC_PollForConversion(&hadc5, 100); // 等待ADC采样结束
+    HAL_ADC_PollForConversion(&hadc5, 2); // 等待ADC采样结束
     float Temp_Scale = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP) / (float)(TS_CAL2 - TS_CAL1); // 计算温度比例因子
     // 读取ADC5采样结果, 除以8是因为开启了硬件超采样到15bit，但下面计算用的是12bit，开启硬件超采样是为了得到一个比较平滑的采样结果
     float TEMP_adcValue = HAL_ADC_GetValue(&hadc5) / 8.0F;
@@ -645,7 +654,7 @@ void FAN_PWM_set(uint16_t dutyCycle)
     {
         dutyCycle = 100;
     }
-    __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3, dutyCycle * 10);
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, dutyCycle * 10);
 }
 
 /**
@@ -654,7 +663,7 @@ void FAN_PWM_set(uint16_t dutyCycle)
  */
 void Init_Flash(void)
 {
-    uint8_t Flash_flag[1];
+    uint8_t Flash_flag[1] = {0xFF};
 //    W25Q64_ReadData(0x000000, Flash_flag, 1); // 读取Flash中0x000000地址处的数据，这个地址存储标志位，0x00表示已经有数据
     if (Flash_flag[0] != 0x00)                // 如果读取的数据不为0，说明FLash中没有存储数据，需要初始化
     {
@@ -762,37 +771,12 @@ float bytes_to_float(uint8_t *bytes)
  */
 void Auto_FAN(void)
 {
-    float TEMP = GET_NTC_Temperature(); // 获取NTC温度值
-    if (TEMP < 35)
-    {
-        FAN_PWM_set(0); // 设置风扇转速为0
-    }
-    else if (TEMP >= 35)
-    {
-        FAN_PWM_set(35); // 设置风扇转速为35%
-    }
-    else if (TEMP >= 40)
-    {
-        FAN_PWM_set(45);
-    }
-    else if (TEMP >= 45)
-    {
-        FAN_PWM_set(60);
-    }
-    else if (TEMP >= 50)
-    {
-        FAN_PWM_set(70);
-    }
-    else if (TEMP >= 55)
-    {
-        FAN_PWM_set(80);
-    }
-    else if (TEMP >= 60)
-    {
-        FAN_PWM_set(90);
-    }
-    else if (TEMP >= 65)
-    {
-        FAN_PWM_set(100);
-    }
+    float T = GET_NTC_Temperature();
+
+    if (T < 35)        FAN_PWM_set(0);
+    else if (T < 40)   FAN_PWM_set(35);
+    else if (T < 45)   FAN_PWM_set(50);
+    else if (T < 50)   FAN_PWM_set(65);
+    else if (T < 60)   FAN_PWM_set(80);
+    else               FAN_PWM_set(100);
 }

@@ -24,14 +24,15 @@
 #include "iwdg.h"
 #include "spi.h"
 #include "tim.h"
+#include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "w25qxx.h"
 #include "function.h"
 #include "pid.h"
+#include "tvlcom_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,17 +53,39 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static volatile uint32_t g_tick_1ms = 0U;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+static void PowerControl_StartRuntime(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void PowerControl_StartRuntime(void)
+{
+  (void)HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+  (void)HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+  (void)HAL_ADCEx_Calibration_Start(&hadc5, ADC_SINGLE_ENDED);
+
+  (void)HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC1_RESULT, 4U);
+
+  (void)HAL_HRTIM_WaveformCountStart_IT(&hhrtim1, HRTIM_TIMERID_TIMER_A);
+  (void)HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D);
+
+  (void)HAL_TIM_Base_Start_IT(&htim2); /* 1ms heartbeat tasks */
+  (void)HAL_TIM_Base_Start_IT(&htim3); /* 5ms state/protection tasks */
+  (void)HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3); /* fan PWM output */
+
+  PID_Init();
+  ValInit();
+  Init_Flash();
+  Read_Flash();
+  TVLCOM_AppInit(&huart3);
+  DF.OUTPUT_Flag = 1U;
+}
 
 /* USER CODE END 0 */
 
@@ -107,18 +130,12 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_TIM8_Init();
+  MX_USART1_UART_Init();
+  MX_USART3_UART_Init();
+
   /* USER CODE BEGIN 2 */
-  // __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, 30000 - 18000); // 设置HRTIM定时器D的比较单元1的值（设置PWM占空比）
-  // __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_3, 15000);         // 设置HRTIM定时器D的比较单元3的值（设置触发ADC采样的比较值）
-  // __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, 1800);          // 设置HRTIM定时器F的比较单元1的值（设置PWM占空比）
 
-   HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2);                   // 开启HRTIM的PWM输出
-   HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2);                   // 开启HRTIM的PWM输出
-
-  __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, 18000);          // 设置HRTIM定时器F的比较单元1的值（设置PWM占空比）
-
-  HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_A);                     // 开启HRTIM波形计数器
-  HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D);                     // 开启HRTIM波形计数器
+  PowerControl_StartRuntime();
 
   /* USER CODE END 2 */
 
@@ -129,10 +146,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_GPIO_TogglePin(LED1_GPIO_Port, LED2_Pin);
-    HAL_Delay(500);
-    /* Refresh independent watchdog to prevent MCU from resetting (~1s timeout in current IWDG config). */
+    /* Keep non-time-critical work in foreground loop. */
+    ADC_calculate();
+    Auto_FAN();
+    Update_Flash();
     HAL_IWDG_Refresh(&hiwdg);
+    HAL_Delay(10);
   }
   /* USER CODE END 3 */
 }
@@ -186,6 +205,35 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_HRTIM_RepetitionEventCallback(HRTIM_HandleTypeDef *hhrtim, uint32_t TimerIdx)
+{
+  if ((hhrtim == &hhrtim1) && (TimerIdx == HRTIM_TIMERINDEX_TIMER_A))
+  {
+    ADCSample();
+    BBMode();
+    BuckBoostVILoopCtlPID();
+  }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2)
+  {
+    g_tick_1ms++;
+    if ((g_tick_1ms % 500U) == 0U)
+    {
+      HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+    }
+  }
+  else if (htim->Instance == TIM3)
+  {
+    StateM();
+    OVP();
+    OCP();
+    OTP();
+    ShortOff();
+  }
+}
 
 /* USER CODE END 4 */
 
