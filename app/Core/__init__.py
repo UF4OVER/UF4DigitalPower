@@ -10,7 +10,6 @@
 #  @Python  : 
 # -------------------------------
 from .set_stylesheet import *
-from .daplink_pyocd_session import *
 from .serial_session import *
 from .scan_connect_device import *
 from .solt_bus import Bus

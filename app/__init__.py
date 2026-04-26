@@ -9,6 +9,20 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .Pages import *
-from .Core import *
-from .TVLCOMV1_FULL import *
+from .Pages.main_window import UMainWindow
+from .Core.const import (
+	NotificationType,
+	NotificationColorMapBase,
+	NotificationIconMapBase,
+	resolve_notification_colors,
+	resolve_notification_icon,
+)
+
+__all__ = [
+	"UMainWindow",
+	"NotificationType",
+	"NotificationColorMapBase",
+	"NotificationIconMapBase",
+	"resolve_notification_colors",
+	"resolve_notification_icon",
+]

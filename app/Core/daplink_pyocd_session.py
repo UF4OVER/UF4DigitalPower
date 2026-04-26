@@ -17,18 +17,61 @@ import threading
 import zipfile
 from dataclasses import dataclass, field
 from enum import IntEnum
+from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 from xml.etree import ElementTree as ET
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject
-from pyocd.core.helpers import ConnectHelper
-from pyocd.core.memory_map import FlashRegion, RamRegion
-from pyocd.flash.file_programmer import FileProgrammer
-from pyocd.target.pack.cmsis_pack import CmsisPack
-from pyocd.target.pack.pack_target import normalise_target_type_name
 
 from Config import DirPathsInstance, logger
+
+
+def _install_pyocd_probe_filter() -> None:
+    import importlib_metadata
+
+    if getattr(importlib_metadata, "_f4cp_pyocd_probe_filter_installed", False):
+        return
+
+    original_entry_points = importlib_metadata.entry_points
+    allowed_probe_plugins = {"cmsisdap"}
+    allowed_rtos_plugins: set[str] = set()
+
+    def filtered_entry_points(*args, **kwargs):
+        """
+        屏蔽pyocd中的一些模块
+        """
+        group = kwargs.get("group")
+        entry_points = original_entry_points(*args, **kwargs)
+        if group == "pyocd.probe":
+            return [entry_point for entry_point in entry_points if entry_point.name.lower() in allowed_probe_plugins]
+        if group == "pyocd.rtos":
+            return [entry_point for entry_point in entry_points if entry_point.name.lower() in allowed_rtos_plugins]
+        return entry_points
+
+    importlib_metadata.entry_points = filtered_entry_points
+    importlib_metadata._f4cp_pyocd_probe_filter_installed = True
+
+
+@lru_cache(maxsize=1)
+def _pyocd_api() -> SimpleNamespace:
+    _install_pyocd_probe_filter()
+
+    from pyocd.core.helpers import ConnectHelper
+    from pyocd.core.memory_map import FlashRegion, RamRegion
+    from pyocd.flash.file_programmer import FileProgrammer
+    from pyocd.target.pack.cmsis_pack import CmsisPack
+    from pyocd.target.pack.pack_target import normalise_target_type_name
+
+    return SimpleNamespace(
+        ConnectHelper=ConnectHelper,
+        FlashRegion=FlashRegion,
+        RamRegion=RamRegion,
+        FileProgrammer=FileProgrammer,
+        CmsisPack=CmsisPack,
+        normalise_target_type_name=normalise_target_type_name,
+    )
 
 
 class DaplinkProgrammerEventType(IntEnum):
@@ -328,6 +371,8 @@ class DaplinkPyocdSession(QObject):
             self._post_event(LogEvent(f"已连接 {info.part_number}，Pack={info.pack_name} {info.pack_version}"))
 
     def _download_worker(self, payload: DaplinkRequestPayload) -> None:
+        pyocd_api = _pyocd_api()
+
         if not payload.file_path or not os.path.isfile(payload.file_path):
             raise FileNotFoundError("请先选择有效的固件文件。")
 
@@ -344,7 +389,7 @@ class DaplinkPyocdSession(QObject):
             self._post_event(LogEvent(f"二进制基地址: 0x{base_address:08X}"))
 
         with self._open_session(payload.connect) as session:
-            programmer = FileProgrammer(
+            programmer = pyocd_api.FileProgrammer(
                 session,
                 progress=lambda percent: self._report_progress("download", percent),
                 chip_erase=payload.erase_mode or "sector",
@@ -365,6 +410,7 @@ class DaplinkPyocdSession(QObject):
             self._post_event(LogEvent("固件下载完成。"))
 
     def _open_session(self, connect: DaplinkConnectConfig):
+        pyocd_api = _pyocd_api()
         target_info = self._target_by_name(connect.target_name)
         options = {
             "pack": [str(path) for path in self._require_pack_paths()],
@@ -372,10 +418,11 @@ class DaplinkPyocdSession(QObject):
             "frequency": self._parse_frequency(connect.frequency),
             "connect_mode": (connect.connect_mode or "halt").strip().lower(),
             "no_config": True,
+            "rtos.enable": False,
             "hide_programming_progress": True,
         }
 
-        session = ConnectHelper.session_with_chosen_probe(
+        session = pyocd_api.ConnectHelper.session_with_chosen_probe(
             blocking=False,
             return_first=True,
             unique_id=connect.probe_uid or None,
@@ -454,20 +501,21 @@ class DaplinkPyocdSession(QObject):
 
     @classmethod
     def discover_pack_targets(cls) -> tuple[list[Path], list[DaplinkTargetInfo]]:
+        pyocd_api = _pyocd_api()
         pack_dir = cls.pack_dir()
         pack_paths = sorted(pack_dir.glob("*.pack"))
         targets_by_name: dict[str, DaplinkTargetInfo] = {}
 
         for pack_path in pack_paths:
             metadata = cls._read_pack_metadata(pack_path)
-            cmsis_pack = CmsisPack(str(pack_path))
+            cmsis_pack = pyocd_api.CmsisPack(str(pack_path))
             for device in cmsis_pack.devices:
-                target_name = normalise_target_type_name(device.part_number)
+                target_name = pyocd_api.normalise_target_type_name(device.part_number)
                 if target_name in targets_by_name:
                     continue
 
-                flash_region = next((region for region in device.memory_map if isinstance(region, FlashRegion)), None)
-                ram_region = next((region for region in device.memory_map if isinstance(region, RamRegion)), None)
+                flash_region = next((region for region in device.memory_map if isinstance(region, pyocd_api.FlashRegion)), None)
+                ram_region = next((region for region in device.memory_map if isinstance(region, pyocd_api.RamRegion)), None)
                 family = " / ".join(device.families or []) or "--"
                 targets_by_name[target_name] = DaplinkTargetInfo(
                     target_name=target_name,
@@ -489,7 +537,7 @@ class DaplinkPyocdSession(QObject):
 
     @staticmethod
     def scan_daplink_probes() -> list[DaplinkProbeInfo]:
-        probes = ConnectHelper.get_all_connected_probes(blocking=False)
+        probes = _pyocd_api().ConnectHelper.get_all_connected_probes(blocking=False)
         items: list[DaplinkProbeInfo] = []
 
         for index, probe in enumerate(probes, start=1):
