@@ -35,6 +35,7 @@ from qfluentwidgets import (
     TextEdit,
 )
 
+from app.Core import showMessage
 from app.Core import (
     ActionFinishedPayload,
     Stm32ConnectConfig,
@@ -420,25 +421,7 @@ class Stm32DownloadPage(ScrollArea):
         logger.info(f"{self.__class__.__name__}: {text}]", extra={"color": color})
 
     def showMessage(self, title: str, content: str, level: str = "info"):
-        kwargs = dict(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=3000,
-            parent=self,
-        )
-
-        if level == "success":
-            InfoBar.success(**kwargs)
-        elif level == "warning":
-            InfoBar.warning(**kwargs)
-        elif level == "error":
-            InfoBar.error(**kwargs)
-        else:
-            InfoBar.info(**kwargs)
-
+        showMessage(self, title, content, level)
     def browseFile(self):
         filePath, _ = QFileDialog.getOpenFileName(
             self,

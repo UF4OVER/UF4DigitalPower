@@ -2,7 +2,7 @@
 # -------------------------------
 #  @Project : F4CP
 #  @Time    : 2026 - 01-14 14:13
-#  @FileName: stm32_programmer_session.py
+#  @FileName: stlink_cli_session.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4

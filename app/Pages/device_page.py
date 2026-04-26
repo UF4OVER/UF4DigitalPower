@@ -33,7 +33,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PyQt5.QtCore import QTimer, pyqtSignal, QCoreApplication
+from PyQt5.QtCore import QTimer, pyqtSignal, QCoreApplication,Qt
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt5.QtSerialPort import QSerialPort
 from PyQt5.QtWidgets import (
@@ -44,7 +44,6 @@ from PyQt5.QtWidgets import (
     QHeaderView,
 )
 
-from app import StyleSheet
 from app.Core import SerialConfig, SerialSession, SerialEventType, listSerialPorts
 from app.Core import logger
 
@@ -66,7 +65,7 @@ from qfluentwidgets import (
     SpinBox,
     SwitchButton,
     TitleLabel,
-    TableWidget
+    TableWidget, InfoBar, InfoBarPosition
 )
 from qfluentwidgets import isDarkTheme
 
@@ -965,3 +964,4 @@ class DevicePage(QWidget):
         else:
             t = tvl_const.TLV_BINARY
         return tlv_encode(t, raw)
+

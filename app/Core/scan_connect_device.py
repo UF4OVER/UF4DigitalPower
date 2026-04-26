@@ -134,3 +134,4 @@ class DeviceScanner(QObject):
         self._current_port_name = None
 
         self.device_disconnected.emit()
+

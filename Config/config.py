@@ -16,6 +16,7 @@ from functools import cached_property, cache
 from os import makedirs
 from pathlib import Path
 from typing import Union
+from deprecated import deprecated
 
 from PyQt5.QtCore import QSettings
 from PyQt5.QtGui import QFontDatabase, QFont
@@ -85,15 +86,28 @@ class DirPaths:
             makedirs(_logDir, exist_ok=True)
         return _logDir
 
+    @deprecated(version="0.1.3", reason="0.1.3及之后更换DAPLINK 进行下载，故停止STLINK支持")
     @cached_property
     def ST_LINKDir(self) -> Path:
         """
-
+        return: ST_LINK_CLI目录的Path对象，0.1.3 之后弃用
         """
         _ST_LINKDir = self.BaseDir / "Resources" / "Tools" / "ST_LINK_CLI"
         if not _ST_LINKDir.exists():
             makedirs(_ST_LINKDir, exist_ok=True)
         return _ST_LINKDir
+
+    @cached_property
+    def McuPack(self) -> Path:
+        """
+        return: McuPack目录的Path对象，0.1.3 之后弃用
+        """
+        _McuPack = self.BaseDir / "Resources" / "Tools" / "Pack"
+        if not _McuPack.exists():
+            makedirs(_McuPack, exist_ok=True)
+        return _McuPack
+
+
 
 
 _dirPaths = DirPaths()
@@ -157,47 +171,7 @@ class SettingsManager:
         logger.info(f"{self.__class__.__name__} Setting {key} to {value}")
         self.settings.setValue(key, value)
         self.settings.sync()
-    # @cache
-    # def loadFontToWidget(self, size: int) -> QFont | None:
-    #     """
-    #     从字体目录加载第一个可用的 OTF 字体
-    #
-    #     Args:
-    #         size: 字体大小
-    #
-    #     Returns:
-    #         QFont 对象，如果没有可用字体则返回 None
-    #     """
-    #     otf_files = list(_dirPaths.FontDir.glob("*.otf"))
-    #
-    #     if not otf_files:
-    #         logger.warning(f" {self.__class__.__name__} No .otf files found in {self.FontDir}")
-    #         return None
-    #
-    #     for font_file in otf_files:
-    #         font_path = str(font_file.resolve())
-    #         logger.info(f"{self.__class__.__name__} Attempting to load font from {font_path}")
-    #         try:
-    #             font_id = QFontDatabase.addApplicationFont(font_path)
-    #             if font_id == -1:  # 检查是否加载成功
-    #                 logger.warning(f"{self.__class__.__name__} QFontDatabase failed to load font: {font_path}")
-    #                 continue  # 尝试下一个字体
-    #             font_families = QFontDatabase.applicationFontFamilies(font_id)
-    #             # 检查是否获取到字体族名
-    #             if not font_families:
-    #                 logger.warning(f"{self.__class__.__name__} No font families found for: {font_path}")
-    #                 continue  # 尝试下一个字体
-    #
-    #             font_family = font_families[0]
-    #             logger.info(f"{self.__class__.__name__} Successfully loaded font: {font_family} (ID: {font_id})")
-    #             return QFont(font_family, size)
-    #
-    #         except Exception as e:
-    #             logger.error(f"{self.__class__.__name__} Exception while loading font {font_path}: {e}")
-    #             continue  # 尝试下一个字体
-    #
-    #     logger.error(f"{self.__class__.__name__} Failed to load any font from {self.FontDir}")
-    #     return None
+
 
 def isWin11():
     return sys.platform == 'win32' and sys.getwindowsversion().build >= 22000

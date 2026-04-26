@@ -19,6 +19,7 @@ from qfluentwidgets import StyleSheetBase, Theme, qconfig
 class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举成员
 
     # Core pages present in app/Pages
+    DAPLINK_FLASH_PAGE = "DaplinkFlashPage"
     HOME_PAGE = "HomePage"
     SETTINGS_PAGE = "SettingsPage"
     STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
