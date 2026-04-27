@@ -36,7 +36,7 @@ from qfluentwidgets import (
 
 from Config import DirPathsInstance, logger
 from ..Core.utility import showMessage
-from ..Core.Session import daplink_pyocd_session as daplink_pyocd
+from ..Core.Session import session_daplink as daplink_pyocd
 
 
 class DaplinkFlashPage(ScrollArea):

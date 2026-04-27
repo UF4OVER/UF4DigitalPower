@@ -10,7 +10,7 @@
 #  @Python  : 
 # -------------------------------
 from app.Core.set_stylesheet import *
-from app.Core.Session.serial_session import *
+from app.Core.Session import *
 from .scan_connect_device import *
 from .solt_bus import Bus
 from .const import *
