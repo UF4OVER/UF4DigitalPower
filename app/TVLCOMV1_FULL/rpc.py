@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2026 - 01-19 15:10
 #  @FileName: rpc.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -16,7 +16,7 @@ import time
 from .const import *
 from .tlv import tlv_encode
 
-"""RPC support for TVLCOM.
+"""RPC support for TVLCOMV1_FULL.
 
 MicroPython notes:
 - Some ports don't provide built-in TimeoutError; we fall back to Exception.

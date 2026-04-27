@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2025 - 11-18 09:55
 #  @FileName: __init__.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -9,7 +9,7 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-"""TVLCOM public package API.
+"""TVLCOMV1_FULL public package API.
 
 MicroPython compatibility:
 - Core modules avoid typing/dataclasses and work on MicroPython/ESP32.

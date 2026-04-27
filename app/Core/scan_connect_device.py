@@ -15,8 +15,8 @@ from typing import Optional
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtSerialPort import QSerialPortInfo
 
-from .serial_session import SerialSession, SerialConfig
-from ..Config import SettingMangerInstance, logger
+from app.Core.Session.serial_session import SerialSession, SerialConfig
+from Config import logger
 
 
 
@@ -83,6 +83,7 @@ class DeviceScanner(QObject):
     def _find_matching_port(self) -> Optional[QSerialPortInfo]:
         if self._vid == -1 or self._pid == -1:
             logger.warning("DeviceScanner: VID/PID 未配置，跳过扫描")
+            self.stop()  # 当未配置 VID 和 PID 的时候不进行扫描
             return None
 
         for port in QSerialPortInfo.availablePorts():
@@ -133,3 +134,4 @@ class DeviceScanner(QObject):
         self._current_port_name = None
 
         self.device_disconnected.emit()
+

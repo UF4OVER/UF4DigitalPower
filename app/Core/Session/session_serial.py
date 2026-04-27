@@ -10,7 +10,7 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QIODevice, QEvent, QCoreApplication, QObject, QMutex, QMutexLocker
 from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
 
-from ..Config import logger
+from Config import logger
 
 class SerialEventType(IntEnum):
     RX = QEvent.registerEventType()
@@ -207,7 +207,7 @@ class SerialSession(QObject):
 
         with QMutexLocker(self._write_lock):  # PyQt 的 QMutex 并不完全兼容 Python 的 with 语法，需要用 QMutexLocker 来自动解锁
             self._ser.write(data)
-            logger.info(f"{self.__class__.__name__} 写入数据: {data}")
+            logger.info(f"{self.__class__.__name__} 写入数据: {data.hex()}")
 
         self._post_event(TxEvent(data))
         return len(data)

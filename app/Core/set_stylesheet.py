@@ -12,17 +12,17 @@
 # coding: utf-8
 from enum import Enum
 
-from app.Config import DirPathsInstance
+from Config import DirPathsInstance
 from qfluentwidgets import StyleSheetBase, Theme, qconfig
 
 
 class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举成员
 
     # Core pages present in app/Pages
+    DAPLINK_FLASH_PAGE = "DaplinkFlashPage"
     HOME_PAGE = "HomePage"
     SETTINGS_PAGE = "SettingsPage"
-    DEVICE_PAGE = "DevicePage"
-
+    STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
     BASE_PAGE = "FluentAcrylicWindow"
 
     def path(self, theme=Theme.AUTO):

@@ -13,9 +13,9 @@
 from PyQt5.QtWidgets import QWidget
 
 from .F4CPui import Ui_Frame
-
-from ...Config import logger, SettingMangerInstance
-from ...Core import DeviceScanner, SerialSession, SerialConfig
+from Config import logger, SettingMangerInstance
+from ...Core import showMessage
+from ...Core import DeviceScanner, SerialSession
 
 try:
     PORT_VID = int(SettingMangerInstance.get("port", "vid"))
@@ -44,6 +44,7 @@ class F4CPowerPage(QWidget, Ui_Frame):
         self.scanner = DeviceScanner(
             vid=PORT_VID,
             pid=PORT_PID,
+            parent=self,
         )
 
         self.scanner.device_connected.connect(self.on_device_connected)
@@ -58,11 +59,26 @@ class F4CPowerPage(QWidget, Ui_Frame):
 
     def on_device_connected(self, session: SerialSession):
         logger.info("UI: 设备已连接")
+        showMessage(self, "设备连接", "设备已连接成功！", level="success")
         session.set_event_receiver(self)
 
-    def on_device_disconnected(self):
+    def on_device_disconnected(self):  # NOQA
         logger.info("UI: 设备已断开")
+        showMessage(self, "设备连接", "设备连接已断开！", level="error")
 
     def closeEvent(self, event):
         self.scanner.stop()
         super().closeEvent(event)
+
+    def exportDataJson(self):
+        """ 导出数据为 JSON 格式 """
+        data = {
+            "hostNumber"    : self.hostNumber.text(),
+            "softStartTime" : self.softStartTime.text(),
+        }
+        return data
+
+    def importDataJson(self, data):
+        """ 从 JSON 数据导入 """
+        self.hostNumber.setText(data.get("hostNumber", ""))
+        self.softStartTime.setText(data.get("softStartTime", ""))

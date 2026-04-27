@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2026 - 01-19 15:10
 #  @FileName: frame.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -15,7 +15,7 @@ import struct
 from .const import *
 from .crc import crc16_ccitt
 
-"""Frame builder for TVLCOM.
+"""Frame builder for TVLCOMV1_FULL.
 
 build_frame(seq, flags, payload) returns complete frame bytes:
     SOF | ver | flags | seq | payload_len(u16 LE) | payload | crc16 | EOF

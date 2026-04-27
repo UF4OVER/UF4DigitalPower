@@ -11,6 +11,8 @@
 # -------------------------------
 
 from .device_page import *
+from .daplink_flash_page import *
 from .home_page import *
 from .settings_page import *
 from .Page_F4CP import *
+from .main_window import UMainWindow

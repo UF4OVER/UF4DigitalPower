@@ -38,9 +38,8 @@ def compress_with_upx(directory):
 
 
 if __name__ == "__main__":
-    if os.path.exists("build\\exe"):
-        print("build\\exe exists")
-        target_directory = "build\\exe"
+    if os.path.exists("E:\\PROJECT_Python\\F4CP\\build\\exe"):
+        target_directory = "E:\\PROJECT_Python\\F4CP\\build\\exe"
         compress_with_upx(target_directory)
     else:
         print("build\\exe does not exist")

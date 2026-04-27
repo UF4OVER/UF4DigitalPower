@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
-#  @Project : TVLCOM
+#  @Project : TVLCOMV1_FULL
 #  @Time    : 2026 - 01-19 15:10
 #  @FileName: parser.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
@@ -15,7 +15,7 @@ import struct
 from .const import *
 from .crc import crc16_ccitt
 
-"""Frame parser for TVLCOM.
+"""Frame parser for TVLCOMV1_FULL.
 
 Frame format (little-endian):
     SOF(0x7E) | ver:u8 | flags:u8 | seq:u8 | payload_len:u16 | payload | crc16:u16 | EOF(0x7F)

@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Home page (主页)
-
-Keep the UI/layout consistent with the original `start.py` demo code.
-"""
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-14 14:13
+#  @FileName: home_page.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  :
+# -------------------------------
 
 from PyQt5.QtCore import Qt, QSize, QUrl
 from PyQt5.QtGui import QFont, QColor, QImage
@@ -23,7 +29,7 @@ from qfluentwidgets import (
     FluentIcon,
 )
 
-from app.Config import AppIconPath, DirPathsInstance
+from Config import AppIconPath, DirPathsInstance
 from app.Core import StyleSheet
 
 

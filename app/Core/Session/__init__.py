@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026 - 02-14 17:33
+#  @Time    : 2026/4/27
 #  @FileName: __init__.py.py
-#  @Software: PyCharm 2024.1.6 (Professional Edition)
-#  @System  : Windows 11 23H2
+#  @Software: PyCharm
+#  @System  : Windows 11 25H2
 #  @Author  : UF4
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .F4CPpower_page import F4CPowerPage

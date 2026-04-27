@@ -1,52 +1,72 @@
-# coding:utf-8
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-15 13:15
+#  @FileName: start.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  :
+# -------------------------------
 import sys
 
-from PyQt5.QtCore import Qt, QOperatingSystemVersion
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication, QStackedWidget, QHBoxLayout, QWidget
-
-from qfluentwidgets import (NavigationInterface,
-                            NavigationItemPosition,
-                            isDarkTheme,
-                            FluentWidget,
-                            Theme,
-                            setTheme,
-                            FluentWidgetTitleBar, MSFluentWindow, FluentIconBase)
+from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
-from qframelesswindow import StandardTitleBar, FramelessWindow, AcrylicWindow
+from qfluentwidgets import NavigationItemPosition
+from qfluentwidgets import isDarkTheme
+from qfluentwidgets import MSFluentTitleBar
+from qfluentwidgets import setTheme
 
-from app.Config import AppIconPath, cfg
-from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage
-from app.Core import logger, StyleSheet,Bus
-from app.Pages.main_window import UMainWindow
+from Config import AppIconPath, cfg
+
+from app import UMainWindow
+from app.Core import logger, StyleSheet, WINDOWS
+from app.Core.pop_up import PopupManager
+from app.Core.font_manager import load_saved_font
+from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage, DaplinkFlashPage
+
 
 
 class Window(UMainWindow):
 
     def __init__(self):
         super().__init__()
-
         self.setObjectName("FluentAcrylicWindow")
+        self._manager = PopupManager(self, max_visible=6)
+
+        WINDOWS.windows["MainWindow"] = self._manager
 
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.F4CPowerInterface = F4CPowerPage()
+        self.daplinkFlashInterface = DaplinkFlashPage(self)
         self.settingInterface = SettingsPage(self)
 
         self.initNavigation()
         self.initWindow()
 
-        Bus.enableAcrylicBackground.connect(lambda a: self.setAcrylicEffectEnabled(a))
+        # todo 主题刷新，有无更优雅的实现呢？？？
+        cfg.themeChanged.connect(self._on_theme_changed)
+        self._on_theme_changed()
+        StyleSheet.HOME_PAGE.apply(self.homeInterface)
+        StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
+        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkFlashInterface)
 
-        # StyleSheet.BASE_PAGE.apply(self)
+        QTimer.singleShot(0, self._refresh_startup_theme)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
 
 
     def initNavigation(self):
-        # enable acrylic effect
 
         self.addSubInterface(self.homeInterface, FIF.HOME, '主页',FIF.HOME_FILL)
         self.addSubInterface(self.deviceInterface, FIF.DEVELOPER_TOOLS, '串口')
         self.addSubInterface(self.F4CPowerInterface, FIF.POWER_BUTTON, '设备')
+        self.addSubInterface(self.daplinkFlashInterface, FIF.IOT, 'DAPLink')
         self.addSubInterface(self.settingInterface,FIF.SETTING,'设置',FIF.SETTING, position=NavigationItemPosition.BOTTOM)
 
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
@@ -54,7 +74,7 @@ class Window(UMainWindow):
     def initWindow(self):
         self.resize(1200, 800)
 
-        self.setTitleBar(StandardTitleBar(self))
+        self.setTitleBar(MSFluentTitleBar(self))
 
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle('Fluor4CellPower')
@@ -71,27 +91,20 @@ class Window(UMainWindow):
         logger.warning("Application closed")
         super().close()
 
-    def setAcrylicEffectEnabled(self, enable: bool):
-        """ set acrylic effect enabled """
+    def _on_theme_changed(self, *_):
+        dark = isDarkTheme()
+        bg_color = "#1F1F1F" if dark else "#F3F3F3"
+        self.setStyleSheet(f"Window {{ background: {bg_color}; }}")
 
-        # todo : 亚克力背景与明暗主题切换问题
-        self.setStyleSheet(f"background:{'transparent' if enable else '#F2F2F2'}")
-        if enable:
-            self.windowEffect.setAcrylicEffect(self.winId(), "F2F2F299")
-            if QOperatingSystemVersion.current() != QOperatingSystemVersion.Windows10:
-                self.windowEffect.addShadowEffect(self.winId())
+    def _refresh_startup_theme(self):
+        """创建所有子接口后，刷新一次主题
 
-            StyleSheet.HOME_PAGE.apply(self.homeInterface)
-            StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-            StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-
-        else:
-            self.windowEffect.addShadowEffect(self.winId())
-            self.windowEffect.removeBackgroundEffect(self.winId())
-
-            StyleSheet.HOME_PAGE.apply(self.homeInterface)
-            StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-            StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
+        STM32下载页面内的一些Fluent小部件保持默认状态
+        第一次暗启动时用光色板，直到主题被切换一次。
+        在这里重新应用当前主题会强制这些小部件同步，没有
+        更改用户保存的主题设置
+        """
+        setTheme(cfg.themeMode.value)
 
 
 if __name__ == '__main__':
@@ -99,8 +112,15 @@ if __name__ == '__main__':
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+
     logger.info("Application started")
+
     app = QApplication(sys.argv)
+    setTheme(cfg.themeMode.value)
+
+    load_saved_font(app)
+
     w = Window()
     w.show()
+
     app.exec_()
