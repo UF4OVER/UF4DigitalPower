@@ -33,7 +33,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PyQt5.QtCore import QTimer, pyqtSignal, QCoreApplication,Qt
+from PyQt5.QtCore import QTimer, pyqtSignal, QCoreApplication
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt5.QtSerialPort import QSerialPort
 from PyQt5.QtWidgets import (
@@ -65,11 +65,11 @@ from qfluentwidgets import (
     SpinBox,
     SwitchButton,
     TitleLabel,
-    TableWidget, InfoBar, InfoBarPosition
+    TableWidget
 )
 from qfluentwidgets import isDarkTheme
 
-from Config import AppIconPath, cfg
+from Config import cfg
 
 @dataclass
 class _TlvRow:
@@ -778,7 +778,7 @@ class DevicePage(QWidget):
         if not self._session or not self._session.is_open:
             return
         try:
-            from app.Core.serial_session import SendEvent
+            from app.Core.Session.serial_session import SendEvent
             QCoreApplication.postEvent(self._session, SendEvent(data))
         except Exception:  # NOQA 异常子句过于宽泛
             try:
@@ -876,7 +876,7 @@ class DevicePage(QWidget):
 
             for _ in range(repeat):
                 try:
-                    from app.Core.serial_session import SendEvent
+                    from app.Core.Session.serial_session import SendEvent
                     QCoreApplication.postEvent(self._session, SendEvent(data))
                 except Exception:
                     try:

@@ -12,50 +12,21 @@
 import sys
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QFontDatabase
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import MSFluentTitleBar
-from qfluentwidgets import qconfig
 from qfluentwidgets import setTheme
-
-from Resources.Font import font as font_resource
 
 from Config import AppIconPath, cfg
 
 from app import UMainWindow
 from app.Core import logger, StyleSheet, WINDOWS
 from app.Core.pop_up import PopupManager
+from app.Core.font_manager import load_saved_font
 from app.Pages import DevicePage, SettingsPage, HomePage, F4CPowerPage, DaplinkFlashPage
-
-
-def applyGlobalEnglishFont(app: QApplication):
-    """Load the bundled font and prioritize it for English text app-wide."""
-    _ = font_resource
-    font_path = ":/blender-pro-bold.otf"
-    font_id = QFontDatabase.addApplicationFont(font_path)
-    if font_id == -1:
-        logger.warning(f"Failed to load application font from {font_path}")
-        return
-
-    font_families = QFontDatabase.applicationFontFamilies(font_id)
-    if not font_families:
-        logger.warning(f"No font families found for {font_path}")
-        return
-
-    font_family = font_families[0]
-    fallback_families = list(qconfig.get(qconfig.fontFamilies) or [])
-    merged_families = [font_family] + [family for family in fallback_families if family != font_family]
-
-    qconfig.set(qconfig.fontFamilies, merged_families, save=False)
-
-    app_font = app.font()
-    app_font.setFamilies(merged_families)
-    app.setFont(app_font)
-
-    logger.info(f"Application font family applied: {merged_families}")
 
 
 
@@ -150,7 +121,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     setTheme(cfg.themeMode.value)
 
-    applyGlobalEnglishFont(app)
+    load_saved_font(app)
 
     w = Window()
     w.show()

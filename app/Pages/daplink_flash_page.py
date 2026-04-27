@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PyQt5.QtCore import QCoreApplication, QTimer
 from PyQt5.QtGui import QTextCursor
-from PyQt5.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QProgressBar, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -36,7 +36,7 @@ from qfluentwidgets import (
 
 from Config import DirPathsInstance, logger
 from ..Core.utility import showMessage
-from ..Core import daplink_pyocd_session as daplink_pyocd
+from ..Core.Session import daplink_pyocd_session as daplink_pyocd
 
 
 class DaplinkFlashPage(ScrollArea):

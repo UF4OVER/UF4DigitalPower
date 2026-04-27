@@ -15,7 +15,7 @@ from typing import Optional
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtSerialPort import QSerialPortInfo
 
-from .serial_session import SerialSession, SerialConfig
+from app.Core.Session.serial_session import SerialSession, SerialConfig
 from Config import logger
 
 
