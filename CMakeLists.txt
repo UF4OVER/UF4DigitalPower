@@ -59,7 +59,7 @@ include_directories(
         Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
-        USER_CODE/Inc
+        APP/Inc
         TVLCOM_V2_FULL/Inc
 )
 
@@ -70,11 +70,10 @@ file(GLOB_RECURSE SOURCES
         "Core/*.*"
         "Middlewares/*.*"
         "Drivers/*.*"
-        "USER_CODE/*.*")
+        "APP/*.*")
 
 list(APPEND SOURCES
-        TVLCOM_V2_FULL/Src/tvlcom.c
-        USER_CODE/Src/tvlcom_app.c)
+        TVLCOM_V2_FULL/Src/tvlcom.c)
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)
 

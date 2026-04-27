@@ -30,9 +30,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "function.h"
-#include "pid.h"
-#include "tvlcom_app.h"
+#include "app_power.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,25 +64,7 @@ static void PowerControl_StartRuntime(void);
 /* USER CODE BEGIN 0 */
 static void PowerControl_StartRuntime(void)
 {
-  (void)HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-  (void)HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
-  (void)HAL_ADCEx_Calibration_Start(&hadc5, ADC_SINGLE_ENDED);
-
-  (void)HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC1_RESULT, 4U);
-
-  (void)HAL_HRTIM_WaveformCountStart_IT(&hhrtim1, HRTIM_TIMERID_TIMER_A);
-  (void)HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D);
-
-  (void)HAL_TIM_Base_Start_IT(&htim2); /* 1ms heartbeat tasks */
-  (void)HAL_TIM_Base_Start_IT(&htim3); /* 5ms state/protection tasks */
-  (void)HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3); /* fan PWM output */
-
-  PID_Init();
-  ValInit();
-  Init_Flash();
-  Read_Flash();
-  TVLCOM_AppInit(&huart3);
-  DF.OUTPUT_Flag = 1U;
+  PowerApp_Init();
 }
 
 /* USER CODE END 0 */
@@ -135,7 +115,7 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
 
-  // PowerControl_StartRuntime();
+  PowerControl_StartRuntime();
 
   /* USER CODE END 2 */
 
@@ -147,11 +127,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     /* Keep non-time-critical work in foreground loop. */
-    HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-    // ADC_calculate();
-    // Auto_FAN();
-    // Update_Flash();
-    HAL_IWDG_Refresh(&hiwdg);
+    PowerApp_BackgroundTask();
     HAL_Delay(100);
   }
   /* USER CODE END 3 */
@@ -210,9 +186,7 @@ void HAL_HRTIM_RepetitionEventCallback(HRTIM_HandleTypeDef *hhrtim, uint32_t Tim
 {
   if ((hhrtim == &hhrtim1) && (TimerIdx == HRTIM_TIMERINDEX_TIMER_A))
   {
-    ADCSample();
-    BBMode();
-    BuckBoostVILoopCtlPID();
+    PowerApp_FastLoop();
   }
 }
 
@@ -225,14 +199,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
       HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
     }
+    PowerApp_1msTask();
   }
   else if (htim->Instance == TIM3)
   {
-    StateM();
-    OVP();
-    OCP();
-    OTP();
-    ShortOff();
+    PowerApp_5msTask();
   }
 }
 

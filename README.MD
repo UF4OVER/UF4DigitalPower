@@ -3,7 +3,7 @@
 系统参数：
 
 PWM频率：200kHz
-输出范围：0–33V，0–10A
+输出范围：0.5–33V，0–10A
 控制结构：电压环 + 电流环（双闭环 PID）
 
 采样与量化：
@@ -60,7 +60,7 @@ BSP/驱动层（ADC、PWM）
 故障时关闭PWM
 
 使用spi对flash进行数据存储，保存PID参数和系统状态，以便在重启后恢复。
-使用TVLCOM_V2_FULL进行串口通信，提供实时数据监控和参数调整接口。
+使用TVLCOM_V2_FULL进行串口通信，提供实时数据监控和参数调整接口。上位机使用python，python端定义了与TVLCOM协议对应的常量和数据结构，确保通信的一致性和可靠性。
 ## TVLCOM 常量（与 Python 一一对应）
 
 ### 1) 命令字
@@ -106,7 +106,7 @@ class TVL_DataType(IntEnum):
     OCP_VALUE = 33              # mA, 只读
     OCP_SET_VALUE = 34          # mA, 读写
 
-    FAN_SPEED = 38              # RPM,只读(当前固件未接测速，返回0)
+    FAN_SPEED = 38              # RPM,只读
     FAN_SET_VALUE = 39          # RPM,读写
 ```
 
@@ -136,81 +136,3 @@ class TVL_StateMachineFlag(IntEnum):
     BOOST = 2
     MIX = 3
 ```
-
-## TVLCOM 帧拼接用法
-
-### 1) 帧格式
-
-```text
-SOF0 SOF1 LEN_L LEN_H CMD SEQ PAYLOAD... CRC_L CRC_H
-```
-
-- `SOF0=0xAA`, `SOF1=0x55`
-- `LEN = CMD+SEQ+PAYLOAD` 的总长度（小端）
-- `CRC16` 使用项目 `tvlcom_crc16`（Modbus 多项式 `0xA001`，初值 `0xFFFF`）
-
-### 2) TLV 格式
-
-```text
-TYPE LEN_L LEN_H VALUE...
-```
-
-- 本项目中 `TYPE = TVL_DataType`
-- `VALUE` 推荐用 `uint32` 小端（工程当前主要按此解析）
-
-### 3) Python 示例：拼 READ / WRITE
-
-```python
-import struct
-from enum import IntEnum
-
-class TVL_Command(IntEnum):
-    ACK = 0x00
-    READ = 0x01
-    WRITE = 0x02
-    NACK = 0xFF
-
-class TVL_DataType(IntEnum):
-    OUTPUT_VOLTAGE = 12
-    OUTPUT_CURRENT = 13
-    SET_VOLTAGE_LIMIT = 17
-    SET_CURRENT_LIMIT = 18
-    POWER_STATE = 21
-
-def crc16_modbus(data: bytes) -> int:
-    crc = 0xFFFF
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            crc = (crc >> 1) ^ 0xA001 if (crc & 1) else (crc >> 1)
-    return crc & 0xFFFF
-
-def pack_tlv_u32(data_type: int, value: int) -> bytes:
-    return struct.pack("<BHI", data_type, 4, value)
-
-def build_frame(cmd: int, seq: int, payload: bytes) -> bytes:
-    body_len = 2 + len(payload)  # CMD + SEQ + payload
-    head = struct.pack("<BBHBB", 0xAA, 0x55, body_len, cmd, seq)
-    crc = crc16_modbus(head + payload)
-    return head + payload + struct.pack("<H", crc)
-
-# READ: 读输出电压/电流
-read_payload = pack_tlv_u32(TVL_DataType.OUTPUT_VOLTAGE, 0) + \
-               pack_tlv_u32(TVL_DataType.OUTPUT_CURRENT, 0)
-frame_read = build_frame(TVL_Command.READ, seq=1, payload=read_payload)
-
-# WRITE: 设定 12V, 3A, 打开输出
-write_payload = pack_tlv_u32(TVL_DataType.SET_VOLTAGE_LIMIT, 12000) + \
-                pack_tlv_u32(TVL_DataType.SET_CURRENT_LIMIT, 3000) + \
-                pack_tlv_u32(TVL_DataType.POWER_STATE, 1)
-frame_write = build_frame(TVL_Command.WRITE, seq=2, payload=write_payload)
-```
-
-### 4) 响应解析约定
-
-- 收到 `CMD=0x00(ACK)`：表示成功；若有 payload，按 TLV 解析读取值
-- 收到 `CMD=0xFF(NACK)`：表示参数错误、类型不支持或格式错误
-- 数值单位统一：
-  - 电压：`mV`
-  - 电流：`mA`
-  - 温度：`mC`（摄氏度 x1000）
