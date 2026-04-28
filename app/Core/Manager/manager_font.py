@@ -17,6 +17,8 @@ SYSTEM_FONT_KEY = "__system__"
 FONT_EXTENSIONS = {".ttf", ".otf", ".ttc", ".otc"}
 FALLBACK_FONT_FAMILIES = ["Segoe UI", "Microsoft YaHei", "PingFang SC"]
 DEFAULT_FONT_FILE_NAME = "blender-pro-bold.otf"
+_FONT_OPTION_CACHE: list[FontOption] | None = None
+_FONT_FAMILY_CACHE: dict[Path, list[str]] = {}
 
 
 @dataclass(frozen=True)
@@ -34,16 +36,23 @@ def _iter_font_files():
 
 
 def _load_font_file(path: Path) -> list[str]:
+    cached = _FONT_FAMILY_CACHE.get(path)
+    if cached is not None:
+        return list(cached)
+
     font_id = QFontDatabase.addApplicationFont(str(path))
     if font_id == -1:
         logger.warning(f"Failed to load application font from {path}")
+        _FONT_FAMILY_CACHE[path] = []
         return []
 
     families = QFontDatabase.applicationFontFamilies(font_id)
     if not families:
         logger.warning(f"No font families found in {path}")
+        _FONT_FAMILY_CACHE[path] = []
         return []
 
+    _FONT_FAMILY_CACHE[path] = list(families)
     return list(families)
 
 
@@ -55,6 +64,10 @@ def _merge_font_families(primary_family: str | None) -> list[str]:
 
 
 def discover_font_options() -> list[FontOption]:
+    global _FONT_OPTION_CACHE
+    if _FONT_OPTION_CACHE is not None:
+        return list(_FONT_OPTION_CACHE)
+
     options = [FontOption(SYSTEM_FONT_KEY, "System Default", "")]
 
     for path in _iter_font_files():
@@ -65,7 +78,8 @@ def discover_font_options() -> list[FontOption]:
             label = f"Built-in Default - {family}"
         options.append(FontOption(path.name, label, family, path.name))
 
-    return options
+    _FONT_OPTION_CACHE = list(options)
+    return list(options)
 
 
 def _default_font_key() -> str:

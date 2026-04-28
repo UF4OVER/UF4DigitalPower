@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Iterable
 
-from PyQt5.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, pyqtSignal, pyqtSlot
 
 from app.Core.Session import (
     ErrorEvent,
@@ -345,6 +345,10 @@ class F4CPPowerClient(QObject):
     error = pyqtSignal(str)
     connectionChanged = pyqtSignal(bool)
     statusUpdated = pyqtSignal(object)
+    debugSnapshotReady = pyqtSignal(object)
+    outputLimitsWritten = pyqtSignal()
+    protectionValuesWritten = pyqtSignal()
+    powerStateWritten = pyqtSignal(bool)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -363,6 +367,7 @@ class F4CPPowerClient(QObject):
     def is_busy(self) -> bool:
         return self._pending is not None
 
+    @pyqtSlot(object)
     def attach_session(self, session: SerialSession) -> None:
         self._session = session
         self._buffer.clear()
@@ -371,6 +376,7 @@ class F4CPPowerClient(QObject):
         self.connectionChanged.emit(session.is_open)
         self.log.emit(f"Attached to serial session on {session.cfg.port}")
 
+    @pyqtSlot()
     def detach_session(self) -> None:
         if self._session is not None:
             try:
@@ -383,11 +389,66 @@ class F4CPPowerClient(QObject):
         self.stop_polling()
         self.connectionChanged.emit(False)
 
+    @pyqtSlot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
         self._poll_timer.start(max(200, int(interval_ms)))
 
+    @pyqtSlot()
     def stop_polling(self) -> None:
         self._poll_timer.stop()
+
+    @pyqtSlot()
+    def request_read_status(self) -> None:
+        if not self.is_connected or self.is_busy:
+            return
+        try:
+            self.read_status(timeout_ms=1000)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+    @pyqtSlot()
+    def request_debug_snapshot(self) -> None:
+        if not self.is_connected or self.is_busy:
+            return
+        try:
+            snapshot = self.read_debug_snapshot(timeout_ms=1000)
+            self.debugSnapshotReady.emit(snapshot)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+    @pyqtSlot(int, int)
+    def request_set_output_limits(self, voltage_mv: int, current_ma: int) -> None:
+        if not self.is_connected or self.is_busy:
+            return
+        try:
+            self.set_voltage_limit_mv(voltage_mv, timeout_ms=1000)
+            self.set_current_limit_ma(current_ma, timeout_ms=1000)
+            self.outputLimitsWritten.emit()
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+    @pyqtSlot(int, int, int, int)
+    def request_set_protection_values(self, ovp_mv: int, ocp_ma: int, otp_mc: int, fan_value: int) -> None:
+        if not self.is_connected or self.is_busy:
+            return
+        try:
+            self.set_ovp_mv(ovp_mv, timeout_ms=1000)
+            self.set_ocp_ma(ocp_ma, timeout_ms=1000)
+            self.set_otp_mc(otp_mc, timeout_ms=1000)
+            self.set_fan_value(fan_value, timeout_ms=1000)
+            self.protectionValuesWritten.emit()
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+    @pyqtSlot(bool)
+    def request_set_power_state(self, enabled: bool) -> None:
+        if not self.is_connected or self.is_busy:
+            return
+        try:
+            self.set_power_state(enabled, timeout_ms=1000)
+            self.powerStateWritten.emit(enabled)
+        except Exception as exc:
+            self.error.emit(str(exc))
 
     def event(self, event):
         event_type = event.type()

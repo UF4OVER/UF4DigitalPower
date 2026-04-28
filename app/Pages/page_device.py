@@ -141,6 +141,7 @@ class DevicePage(QWidget):
     def _init_log_console(self):
         self.logEdit = TextEdit(self)
         self.logEdit.setReadOnly(True)
+        self.logEdit.document().setMaximumBlockCount(400)
         self.vBoxLayout.addWidget(self.logEdit, 1)
 
     def _init_mode_bar(self):
@@ -272,7 +273,8 @@ class DevicePage(QWidget):
     def _append_log(self, text: str):
         ts = time.strftime("%H:%M:%S")
         msg = f"[{ts}] {text}"
-        logger.info(text)
+        if not (text.startswith("RX(") or text.startswith("TX(") or text.startswith("V2 RX") or text.startswith("V2 ACK") or text.startswith("V2 NACK")):
+            logger.info(text)
 
         lc = text.strip()
         dark = isDarkTheme()

@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 import pyqtgraph as pg
-from PyQt5.QtCore import QEvent, Qt, QTimer
+from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -234,14 +234,32 @@ class TrendPlotCard(CardWidget):
 
 
 class PowerPage(ScrollArea):
+    attachSessionRequested = pyqtSignal(object)
+    detachSessionRequested = pyqtSignal()
+    readStatusRequested = pyqtSignal()
+    debugSnapshotRequested = pyqtSignal()
+    outputLimitsRequested = pyqtSignal(int, int)
+    protectionValuesRequested = pyqtSignal(int, int, int, int)
+    powerStateRequested = pyqtSignal(bool)
+    startPollingRequested = pyqtSignal(int)
+    stopPollingRequested = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("PowerPage")
 
         vid, pid = _read_port_identity()
-        self._client = F4CPPowerClient(self)
+        self._client = F4CPPowerClient()
+        self._clientThread = QThread(self)
+        self._client.moveToThread(self._clientThread)
+        self._clientThread.start()
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
         self._last_status: PowerStatus | None = None
+        self._last_verbose_log_ts = 0.0
+        self._history_dirty = False
+        self._plot_refresh_timer = QTimer(self)
+        self._plot_refresh_timer.setInterval(200)
+        self._plot_refresh_timer.timeout.connect(self._flush_plot_update)
         self._history = {
             "t": collections.deque(maxlen=240),
             "vin": collections.deque(maxlen=240),
@@ -429,6 +447,7 @@ class PowerPage(ScrollArea):
         self.logEdit = TextEdit(self.logCard)
         self.logEdit.setMinimumHeight(180)
         self.logEdit.setReadOnly(True)
+        self.logEdit.document().setMaximumBlockCount(400)
 
         layout.addLayout(top)
         layout.addWidget(self.logEdit)
@@ -442,6 +461,20 @@ class PowerPage(ScrollArea):
         self._client.error.connect(self._on_client_error)
         self._client.connectionChanged.connect(self._on_connection_changed)
         self._client.statusUpdated.connect(self._update_status_view)
+        self._client.debugSnapshotReady.connect(self._handle_debug_snapshot_ready)
+        self._client.outputLimitsWritten.connect(self._on_output_limits_written)
+        self._client.protectionValuesWritten.connect(self._on_protection_values_written)
+        self._client.powerStateWritten.connect(self._on_power_state_written)
+
+        self.attachSessionRequested.connect(self._client.attach_session)
+        self.detachSessionRequested.connect(self._client.detach_session)
+        self.readStatusRequested.connect(self._client.request_read_status)
+        self.debugSnapshotRequested.connect(self._client.request_debug_snapshot)
+        self.outputLimitsRequested.connect(self._client.request_set_output_limits)
+        self.protectionValuesRequested.connect(self._client.request_set_protection_values)
+        self.powerStateRequested.connect(self._client.request_set_power_state)
+        self.startPollingRequested.connect(self._client.start_polling)
+        self.stopPollingRequested.connect(self._client.stop_polling)
 
         self.refreshButton.clicked.connect(self._read_status_once)
         self.debugButton.clicked.connect(self._run_debug_snapshot)
@@ -453,89 +486,72 @@ class PowerPage(ScrollArea):
         cfg.themeChanged.connect(self._on_theme_changed)
 
     def on_device_connected(self, session) -> None:
-        self._client.attach_session(session)
+        self.attachSessionRequested.emit(session)
         self.deviceLabel.setText(session.cfg.port or self.tr("Unknown"))
         self.stateBadge.setText(self.tr("ONLINE"))
         self.stateBadge.setProperty("onlineState", "online")
         self._append_log(f"Connected on {session.cfg.port}")
         if self.autoPollSwitch.isChecked():
-            self._client.start_polling(500)
+            self.startPollingRequested.emit(500)
         showMessage(self, self.tr("Device Connected"), self.tr("Power device session attached."), level="success")
         self._read_status_once()
 
     def on_device_disconnected(self) -> None:
-        self._client.detach_session()
+        self.detachSessionRequested.emit()
         self._apply_disconnected_state()
         self._append_log("Device disconnected")
         showMessage(self, self.tr("Device Disconnected"), self.tr("Power device session closed."), level="error")
 
     def closeEvent(self, event) -> None:
-        self._client.stop_polling()
+        self.stopPollingRequested.emit()
+        self.detachSessionRequested.emit()
         self._scanner.stop()
+        self._clientThread.quit()
+        self._clientThread.wait(1500)
         super().closeEvent(event)
 
     def _read_status_once(self) -> None:
         if not self._client.is_connected:
             self._append_log("ERR: Serial session is not connected")
             return
-        try:
-            self._client.read_status(timeout_ms=1000)
-        except Exception as exc:
-            self._on_client_error(str(exc))
+        self.readStatusRequested.emit()
 
     def _run_debug_snapshot(self) -> None:
         if not self._client.is_connected:
             self._append_log("ERR: Serial session is not connected")
             return
-        try:
-            snapshot = self._client.read_debug_snapshot(timeout_ms=1000)
-            self._append_log(self._client.pretty_print_debug_snapshot(snapshot))
-            self._append_log(self._diagnose_debug_snapshot(snapshot))
-        except Exception as exc:
-            self._on_client_error(str(exc))
+        self.debugSnapshotRequested.emit()
 
     def _apply_output_limits(self) -> None:
         if not self._client.is_connected:
             self._append_log("ERR: Serial session is not connected")
             return
-        try:
-            self._client.set_voltage_limit_mv(int(round(float(self.writeParams["set_voltage"].text() or "0") * 1000)))
-            self._client.set_current_limit_ma(int(round(float(self.writeParams["set_current"].text() or "0") * 1000)))
-            showMessage(self, self.tr("Output Updated"), self.tr("Voltage/current limits have been written."), level="success")
-            self._read_status_once()
-        except Exception as exc:
-            self._on_client_error(str(exc))
+        voltage_mv = int(round(float(self.writeParams["set_voltage"].text() or "0") * 1000))
+        current_ma = int(round(float(self.writeParams["set_current"].text() or "0") * 1000))
+        self.outputLimitsRequested.emit(voltage_mv, current_ma)
 
     def _apply_protection_values(self) -> None:
         if not self._client.is_connected:
             self._append_log("ERR: Serial session is not connected")
             return
-        try:
-            self._client.set_ovp_mv(int(round(float(self.writeParams["ovp"].text() or "0") * 1000)))
-            self._client.set_ocp_ma(int(round(float(self.writeParams["ocp"].text() or "0") * 1000)))
-            self._client.set_otp_mc(int(round(float(self.writeParams["otp"].text() or "0") * 1000)))
-            self._client.set_fan_value(int(float(self.writeParams["fan_set"].text() or "0")))
-            showMessage(self, self.tr("Protection Updated"), self.tr("OVP/OCP/OTP/Fan parameters have been written."), level="success")
-            self._read_status_once()
-        except Exception as exc:
-            self._on_client_error(str(exc))
+        ovp_mv = int(round(float(self.writeParams["ovp"].text() or "0") * 1000))
+        ocp_ma = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
+        otp_mc = int(round(float(self.writeParams["otp"].text() or "0") * 1000))
+        fan_value = int(float(self.writeParams["fan_set"].text() or "0"))
+        self.protectionValuesRequested.emit(ovp_mv, ocp_ma, otp_mc, fan_value)
 
     def _on_auto_poll_changed(self, checked: bool) -> None:
         if checked:
-            self._client.start_polling(500)
+            self.startPollingRequested.emit(500)
             self._append_log("Auto polling enabled")
         else:
-            self._client.stop_polling()
+            self.stopPollingRequested.emit()
             self._append_log("Auto polling disabled")
 
     def _on_output_switch_changed(self, checked: bool) -> None:
         if not self._client.is_connected:
             return
-        try:
-            self._client.set_power_state(checked)
-            self._append_log(f"Output set to {'ON' if checked else 'OFF'}")
-        except Exception as exc:
-            self._on_client_error(str(exc))
+        self.powerStateRequested.emit(checked)
 
     def _on_connection_changed(self, connected: bool) -> None:
         self.stateBadge.setText(self.tr("ONLINE") if connected else self.tr("OFFLINE"))
@@ -574,7 +590,8 @@ class PowerPage(ScrollArea):
         self.outputSwitch.blockSignals(False)
 
         self._append_history(status)
-        if self.logLevelCombo.currentData() == "verbose":
+        if self.logLevelCombo.currentData() == "verbose" and time.monotonic() - self._last_verbose_log_ts >= 2.0:
+            self._last_verbose_log_ts = time.monotonic()
             self._append_log(self._client.pretty_print_status(status))
 
     def _append_history(self, status: PowerStatus) -> None:
@@ -584,12 +601,21 @@ class PowerPage(ScrollArea):
         self._history["vout"].append(status.vout_v)
         self._history["iin"].append(status.iin_a)
         self._history["iout"].append(status.iout_a)
+        self._history_dirty = True
+        if not self._plot_refresh_timer.isActive():
+            self._plot_refresh_timer.start()
+
+    def _flush_plot_update(self) -> None:
+        if not self._history_dirty:
+            self._plot_refresh_timer.stop()
+            return
+        self._history_dirty = False
         self.plotCard.update_series(
-            list(self._history["t"]),
-            list(self._history["vin"]),
-            list(self._history["vout"]),
-            list(self._history["iin"]),
-            list(self._history["iout"]),
+            tuple(self._history["t"]),
+            tuple(self._history["vin"]),
+            tuple(self._history["vout"]),
+            tuple(self._history["iin"]),
+            tuple(self._history["iout"]),
         )
 
     def _diagnose_debug_snapshot(self, snapshot: DebugSnapshot) -> str:
@@ -609,13 +635,29 @@ class PowerPage(ScrollArea):
         self.outputSwitch.blockSignals(False)
 
     def _append_log(self, text: str) -> None:
-        logger.info(text)
+        if not (text.startswith("REQ ") or text.startswith("RX ") or text.startswith("TX ")):
+            logger.info(text)
         ts = time.strftime("%H:%M:%S")
         self.logEdit.append(f"[{ts}] {text}")
 
     def _on_client_error(self, message: str) -> None:
         self._append_log(f"ERR: {message}")
         showMessage(self, self.tr("Communication Error"), message, level="error")
+
+    def _handle_debug_snapshot_ready(self, snapshot: DebugSnapshot) -> None:
+        self._append_log(self._client.pretty_print_debug_snapshot(snapshot))
+        self._append_log(self._diagnose_debug_snapshot(snapshot))
+
+    def _on_output_limits_written(self) -> None:
+        showMessage(self, self.tr("Output Updated"), self.tr("Voltage/current limits have been written."), level="success")
+        self._read_status_once()
+
+    def _on_protection_values_written(self) -> None:
+        showMessage(self, self.tr("Protection Updated"), self.tr("OVP/OCP/OTP/Fan parameters have been written."), level="success")
+        self._read_status_once()
+
+    def _on_power_state_written(self, enabled: bool) -> None:
+        self._append_log(f"Output set to {'ON' if enabled else 'OFF'}")
 
     def _retranslate_ui(self) -> None:
         self.titleLabel.setText(self.tr("Power Dashboard"))
