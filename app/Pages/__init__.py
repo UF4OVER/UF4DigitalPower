@@ -10,9 +10,10 @@
 #  @Python  :
 # -------------------------------
 
-from .device_page import *
-from .daplink_flash_page import *
-from .home_page import *
-from .settings_page import *
-from .Page_F4CP import *
+from .page_device import *
+from .page_daplink import *
+from .page_home import *
+from .page_power import *
+from .page_settings import *
+
 from .main_window import UMainWindow

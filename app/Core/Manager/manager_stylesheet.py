@@ -2,7 +2,7 @@
 # -------------------------------
 #  @Project : F4CP
 #  @Time    : 2026 - 02-09 11:50
-#  @FileName: set_stylesheet.py
+#  @FileName: manager_stylesheet.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
@@ -21,6 +21,7 @@ class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举
     # Core pages present in app/Pages
     DAPLINK_FLASH_PAGE = "DaplinkFlashPage"
     HOME_PAGE = "HomePage"
+    POWER_PAGE = "PowerPage"
     SETTINGS_PAGE = "SettingsPage"
     STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
     BASE_PAGE = "FluentAcrylicWindow"

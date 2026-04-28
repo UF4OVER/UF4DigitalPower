@@ -11,11 +11,26 @@
 # -------------------------------
 
 import os
-import subprocess
 import shutil
+import subprocess
+
+
+TRIM_PATHS = [
+    os.path.join("lib", "pyocd", "debug", "svd", "svd_data.zip"),
+]
+
+
+def trim_known_unused_files(directory):
+    for relative_path in TRIM_PATHS:
+        target_path = os.path.join(directory, relative_path)
+        if os.path.isfile(target_path):
+            os.remove(target_path)
+            print(f"Deleted {target_path}")
 
 
 def compress_with_upx(directory):
+    trim_known_unused_files(directory)
+
     for root, dirs, files in os.walk(directory):
         if 'lib' in dirs and 'PyQt5' in dirs and 'Qt5' in dirs and 'translations' in dirs:
             translations_path = os.path.join(root, 'translations')

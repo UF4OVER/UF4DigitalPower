@@ -2,7 +2,7 @@ name: Build F4CP (Windows)
 
 on:
   push:
-    branches: [ F4CP_release ]
+    branches: [F4CP_release]
   pull_request:
   workflow_dispatch:
 
@@ -25,28 +25,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install uv
 
-      - name: Install dependencies (uv)
+      - name: Install dependencies
         run: |
           uv sync --all-extras
 
-      - name: Build with cx_Freeze
+      - name: Build packaged exe
         run: |
-          uv run cxfreeze build
+          powershell -ExecutionPolicy Bypass -File .\Script\package_exe.ps1
 
-      # === 下载并准备 UPX ===
       - name: Download UPX
         run: |
           curl -L -o upx.zip https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-win64.zip
           tar -xf upx.zip
           echo "${{ github.workspace }}\\upx-4.2.4-win64" >> $env:GITHUB_PATH
 
-      # === 运行你的 UPX 压缩脚本 ===
       - name: Compress binaries with UPX
         run: |
           python Script/upx_zip.py
 
-      # === 打包成 zip 分发 ===
-      - name: Package build into zip
+      - name: Package build output as zip
         run: |
           powershell Compress-Archive -Path build\exe\* -DestinationPath F4CP-Windows-x64.zip
 

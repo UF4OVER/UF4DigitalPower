@@ -9,9 +9,10 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from app.Core.set_stylesheet import *
-from app.Core.Session.serial_session import *
+
 from .scan_connect_device import *
-from .solt_bus import Bus
 from .const import *
 from .utility import showMessage
+
+from .Session import *
+from .Manager import *

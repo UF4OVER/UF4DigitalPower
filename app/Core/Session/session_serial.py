@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Callable, Optional
