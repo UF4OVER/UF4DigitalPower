@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import pyqtgraph as pg
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
-from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -156,26 +156,43 @@ class TrendPlotCard(CardWidget):
         self.setObjectName("trendPlotCard")
         self.titleLabel = SubtitleLabel(self)
         self.tipLabel = CaptionLabel(self)
+        self.plotPanel = QFrame(self)
+        self.plotPanel.setObjectName("trendPlotPanel")
 
         self.plotWidget = pg.PlotWidget(self)
+        self.plotWidget.setObjectName("trendPlotWidget")
+        self.plotWidget.setFrameShape(QFrame.NoFrame)
+        self.plotWidget.setStyleSheet("background: transparent; border: none;")
         self.plotWidget.setMouseEnabled(x=True, y=True)
         self.plotWidget.showGrid(x=True, y=True, alpha=0.16)
-        self.plotWidget.addLegend(offset=(12, 12))
+        self.plotWidget.setAntialiasing(True)
         self.plotWidget.setMenuEnabled(False)
         self.plotWidget.getViewBox().setDefaultPadding(0.05)
         self.plotWidget.setMinimumHeight(360)
+        self.plotWidget.getPlotItem().hideButtons()
+        self.legend = self.plotWidget.addLegend(offset=(12, 12))
 
         self.voltageInCurve = self.plotWidget.plot(name="VIN", pen=pg.mkPen(width=2))
         self.voltageOutCurve = self.plotWidget.plot(name="VOUT", pen=pg.mkPen(width=2))
         self.currentInCurve = self.plotWidget.plot(name="IIN", pen=pg.mkPen(width=2, style=Qt.DashLine))
         self.currentOutCurve = self.plotWidget.plot(name="IOUT", pen=pg.mkPen(width=2, style=Qt.DotLine))
 
+        self.voltageInCurve.setClipToView(True)
+        self.voltageOutCurve.setClipToView(True)
+        self.currentInCurve.setClipToView(True)
+        self.currentOutCurve.setClipToView(True)
+
+        plot_panel_layout = QVBoxLayout(self.plotPanel)
+        plot_panel_layout.setContentsMargins(14, 14, 14, 14)
+        plot_panel_layout.setSpacing(0)
+        plot_panel_layout.addWidget(self.plotWidget)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
         layout.addWidget(self.titleLabel)
         layout.addWidget(self.tipLabel)
-        layout.addWidget(self.plotWidget)
+        layout.addWidget(self.plotPanel)
 
         self.retranslate_ui()
         self.refresh_theme()
@@ -186,25 +203,35 @@ class TrendPlotCard(CardWidget):
 
     def refresh_theme(self) -> None:
         dark = isDarkTheme()
-        border = "rgba(255,255,255,0.08)" if dark else "rgba(0,0,0,0.08)"
-        background = "rgba(255,255,255,0.05)" if dark else "rgba(255,255,255,0.88)"
-        axis = "#DCE3EA" if dark else "#273142"
-        border_pen_color = QColor(255, 255, 255, 20) if dark else QColor(0, 0, 0, 20)
+        card_border = "rgba(255,255,255,0.08)" if dark else "rgba(0,0,0,0.08)"
+        panel_background = "rgba(15, 23, 42, 0.72)" if dark else "rgba(248, 250, 252, 0.98)"
+        panel_border = "rgba(255,255,255,0.10)" if dark else "rgba(15,23,42,0.08)"
+        axis = "#DCE3EA" if dark else "#334155"
+        title_color = "#F5F7FA" if dark else "#111827"
+        tip_color = "#9AA4B2" if dark else "#6B7280"
+        legend_background = QColor(9, 14, 24, 188) if dark else QColor(255, 255, 255, 232)
+        legend_border = QColor(255, 255, 255, 28) if dark else QColor(15, 23, 42, 22)
+        border_pen_color = QColor(255, 255, 255, 24) if dark else QColor(15, 23, 42, 24)
 
         self.setStyleSheet(
             f"""
             #trendPlotCard {{
-                background: {background};
-                border: 1px solid {border};
+                border: 1px solid {card_border};
                 border-radius: 18px;
+            }}
+            #trendPlotPanel {{
+                background: {panel_background};
+                border: 1px solid {panel_border};
+                border-radius: 14px;
             }}
             """
         )
-        self.titleLabel.setStyleSheet(f"color: {'#F5F7FA' if dark else '#111827'};")
-        self.tipLabel.setStyleSheet(f"color: {'#9AA4B2' if dark else '#6B7280'};")
+        self.titleLabel.setStyleSheet(f"color: {title_color};")
+        self.tipLabel.setStyleSheet(f"color: {tip_color};")
 
         self.plotWidget.setBackground((0, 0, 0, 0))
         plot_item = self.plotWidget.getPlotItem()
+        plot_item.setTitle("")
         plot_item.getAxis("left").setTextPen(axis)
         plot_item.getAxis("bottom").setTextPen(axis)
         plot_item.getAxis("left").setPen(pg.mkPen(axis))
@@ -212,12 +239,25 @@ class TrendPlotCard(CardWidget):
         plot_item.getAxis("left").setLabel(self.tr("Scaled Value"), color=axis)
         plot_item.getAxis("bottom").setLabel(self.tr("Samples"), color=axis)
         plot_item.getViewBox().setBorder(pg.mkPen(border_pen_color))
-        plot_item.showGrid(x=True, y=True, alpha=0.16)
+        plot_item.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
+
+        for axis_name in ("left", "bottom"):
+            axis_item = plot_item.getAxis(axis_name)
+            axis_item.setTickPen(pg.mkPen(axis))
+            axis_item.setStyle(tickTextOffset=10)
 
         self.voltageInCurve.setPen(pg.mkPen(QColor("#2F80ED"), width=2))
         self.voltageOutCurve.setPen(pg.mkPen(QColor("#27AE60"), width=2))
         self.currentInCurve.setPen(pg.mkPen(QColor("#F2994A"), width=2, style=Qt.DashLine))
         self.currentOutCurve.setPen(pg.mkPen(QColor("#EB5757"), width=2, style=Qt.DotLine))
+
+        if self.legend is not None:
+            self.legend.setBrush(legend_background)
+            self.legend.setPen(legend_border)
+            self.legend.setLabelTextColor(axis)
+            self.legend.setLabelTextSize("9pt")
+        plot_item.getAxis("left").setGrid(64)
+        plot_item.getAxis("bottom").setGrid(64)
 
     def update_series(
         self,
@@ -328,6 +368,7 @@ class PowerPage(ScrollArea):
         layout.addWidget(self.autoPollSwitch)
         layout.addWidget(self.refreshButton)
         layout.addWidget(self.debugButton)
+
 
         self.rootLayout.addWidget(self.summaryCard)
 

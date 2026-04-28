@@ -19,13 +19,13 @@ from qfluentwidgets import (NavigationBar,
                             NavigationItemPosition,
                             NavigationBarPushButton,
                             qrouter,
-                            FluentStyleSheet
+                            FluentStyleSheet, FluentWidget
+
                             )
 from qfluentwidgets.window.stacked_widget import StackedWidget
-from qframelesswindow import FramelessWindow
 
 
-class UMainWindow(FramelessWindow):
+class UMainWindow(FluentWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 

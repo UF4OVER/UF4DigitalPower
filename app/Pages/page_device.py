@@ -600,7 +600,7 @@ class DevicePage(QWidget):
         if not self._session or not self._session.is_open:
             return
         try:
-            from app.Core.Session.serial_session import SendEvent
+            from app.Core.Session.session_serial import SendEvent
 
             QCoreApplication.postEvent(self._session, SendEvent(data))
         except Exception:

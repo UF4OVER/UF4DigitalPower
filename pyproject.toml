@@ -11,10 +11,11 @@ authors = [
 ]
 
 dependencies = [
-    "pyqt-fluent-widgets[full] >=1.11.0",
+    "pyqt-fluent-widgets >=1.11.0",
     "cx-freeze>=8.5.3",
     "pyqtgraph >=0.14.0",
     "pyocd>=0.44.0",
+    "numpy>=2.2.6",
 ]
 
 [tool.uv]
@@ -34,10 +35,8 @@ includes = [
     "PyQt5.QtCore",
     "PyQt5.QtGui",
     "PyQt5.QtWidgets",
-    "lark",
     "pyocd",
     "qfluentwidgets",
-    "qframelesswindow",
     "Config",
 ]
 
@@ -46,15 +45,8 @@ packages = [
     "Config",
 ]
 
-# 注意：Config/config.py 里使用 Path("config.ini")，且 frozen 时 BaseDir=exe 同级
-
 include_files = [
     "Resources",
-    [".venv/Lib/site-packages/lark/grammars", "lib/lark/grammars"],
-    [".venv/Lib/site-packages/pyocd/debug/sequences/default_sequences.yaml", "lib/pyocd/debug/sequences/default_sequences.yaml"],
-    [".venv/Lib/site-packages/pyocd/debug/sequences/sequences.lark", "lib/pyocd/debug/sequences/sequences.lark"],
-    [".venv/Lib/site-packages/pyocd/debug/svd/svd_data.zip", "lib/pyocd/debug/svd/svd_data.zip"],
-    [".venv/Lib/site-packages/pyocd/target/builtin/cypress/flash_algos/license/Apache_License.txt", "lib/pyocd/target/builtin/cypress/flash_algos/license/Apache_License.txt"],
 ]
 
 # Qt/GUI 相关建议不要进 zip（减少插件/资源加载问题；也便于排查缺文件）
@@ -66,14 +58,13 @@ zip_exclude_packages = [
    "pyocd",
    "cmsis_pack_manager",
    "qfluentwidgets",
-   "qframelesswindow",
 ]
 
 excludes = [
-    "numpy",
-    "numpy.core",
-    "numpy.linalg",
-    "numpy.lib",
+#    "numpy",
+#    "numpy.core",
+#    "numpy.linalg",
+#    "numpy.lib",
     "scipy",
     "scipy.linalg",
     "scipy.sparse",
@@ -82,13 +73,12 @@ excludes = [
     "scipy.libs",
     "PIL",
     "scipy",
-    "matplotlib",
+#    "matplotlib",
     "backports",
     "lib2to3",
     "setuptools",
     "tkinter",
     "unittest",
-    "pydoc",
     "pylink",
     "pyocd.probe.jlink_probe",
 ]
@@ -96,4 +86,4 @@ excludes = [
 optimize = 2
 
 # Windows 运行时更稳（避免目标机器缺 VC++ runtime）
-include_msvcr = false
+include_msvcr = true
