@@ -11,3 +11,4 @@
 # -------------------------------
 from .session_serial import *
 from .session_daplink import *
+from .session_powert import *

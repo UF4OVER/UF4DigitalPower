@@ -95,7 +95,15 @@ class DirPaths:
             makedirs(_McuPack, exist_ok=True)
         return _McuPack
 
-
+    @cached_property
+    def LanguageDir(self) -> Path:
+        """
+        return:
+        """
+        _LanguageDir = self.BaseDir / "Resources" / "Language"
+        if not _LanguageDir.exists():
+            makedirs(_LanguageDir, exist_ok=True)
+        return _LanguageDir
 
 
 _dirPaths = DirPaths()
