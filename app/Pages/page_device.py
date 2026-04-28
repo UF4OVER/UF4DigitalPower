@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import binascii
 import json
-import struct
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -27,10 +26,18 @@ from qfluentwidgets import (
 )
 
 from Config import cfg
-from app.Core import SerialConfig, SerialEventType, SerialSession, listSerialPorts, logger
-from app.TVLCOMV1_FULL import const as tvl_const
-from app.TVLCOMV1_FULL.protocol import Protocol
-from app.TVLCOMV1_FULL.tlv import tlv_encode
+from app.Core import (
+    SESSION_PAGE_BAUD_RATES,
+    SESSION_PAGE_RAW_FORMATS,
+    SESSION_PAGE_SEND_MODES,
+    SESSION_PAGE_V2_DEFAULT_CMD,
+    SESSION_PAGE_V2_TYPE_ALIAS_TO_ID,
+    SerialConfig,
+    SerialEventType,
+    SerialSession,
+    listSerialPorts,
+    logger,
+)
 from app.TVLCOMV2_FULL import Dispatcher as V2Dispatcher, FrameBuilder as V2FrameBuilder, FrameParser as V2FrameParser
 from app.TVLCOMV2_FULL import Payload as V2Payload, TYPE_REGISTRY
 from app.TVLCOMV2_FULL.dataType import DataFloat, DataInt, DataString, TypeBase
@@ -51,7 +58,6 @@ class DevicePage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._session: Optional[SerialSession] = None
-        self._proto: Optional[Protocol] = None
         self._v2_parser: Optional[V2FrameParser] = None
         self._v2_dispatcher: Optional[V2Dispatcher] = None
         self._v2_seq = 0
@@ -114,7 +120,7 @@ class DevicePage(QWidget):
         connLayout.addWidget(self.baudLabel)
         self.baudCombo = ComboBox(connBar)
         self.baudCombo.setMinimumWidth(140)
-        self.baudCombo.addItems(["9600", "19200", "38400", "57600", "115200"])
+        self.baudCombo.addItems(list(SESSION_PAGE_BAUD_RATES))
         self.baudCombo.setCurrentText("115200")
         connLayout.addWidget(self.baudCombo)
 
@@ -146,16 +152,12 @@ class DevicePage(QWidget):
         self.modeLabel = BodyLabel(modeBar)
         modeLayout.addWidget(self.modeLabel)
         self.modeCombo = ComboBox(modeBar)
-        self.modeCombo.addItems(["Raw(HEX/ASCII)", "TVLCOM_V1", "TVLCOM_V2"])
+        self.modeCombo.addItems(list(SESSION_PAGE_SEND_MODES))
         modeLayout.addWidget(self.modeCombo)
 
         self.rawFmtCombo = ComboBox(modeBar)
-        self.rawFmtCombo.addItems(["HEX", "ASCII"])
+        self.rawFmtCombo.addItems(list(SESSION_PAGE_RAW_FORMATS))
         modeLayout.addWidget(self.rawFmtCombo)
-
-        self.ackSwitch = SwitchButton(modeBar)
-        self.ackSwitch.setChecked(True)
-        modeLayout.addWidget(self.ackSwitch)
 
         modeLayout.addStretch(1)
         self.vBoxLayout.addWidget(modeBar)
@@ -197,7 +199,7 @@ class DevicePage(QWidget):
         sendLayout.addWidget(self.cmdLabel)
         self.cmdSpin = SpinBox(sendBar)
         self.cmdSpin.setRange(0, 255)
-        self.cmdSpin.setValue(0x01)
+        self.cmdSpin.setValue(SESSION_PAGE_V2_DEFAULT_CMD)
         self.cmdSpin.setDisplayIntegerBase(16)
         sendLayout.addWidget(self.cmdSpin)
 
@@ -230,15 +232,11 @@ class DevicePage(QWidget):
         self.stateLabel.setText(self.tr("Disconnected") if not self._session or not self._session.is_open else self.tr("Connected"))
         self.logEdit.setPlaceholderText(self.tr("Device log / returned data..."))
         self.modeLabel.setText(self.tr("Send mode"))
-        self.ackSwitch.setOnText(self.tr("ACK"))
-        self.ackSwitch.setOffText(self.tr("ACK"))
         self.addTlvBtn.setText(self.tr("Add TLV"))
         self.delTlvBtn.setText(self.tr("Delete TLV"))
         self.exportTlvBtn.setText(self.tr("Export JSON"))
         self.importTlvBtn.setText(self.tr("Import JSON"))
-        self.txEdit.setPlaceholderText(
-            self.tr("Raw: enter HEX (for example 01 0A FF); V1/V2 can be left empty after composing TLV")
-        )
+        self.txEdit.setPlaceholderText(self.tr("Raw: enter HEX (for example 01 0A FF); V2 can be left empty after composing TLV"))
         self.repeatLabel.setText(self.tr("Repeat"))
         self.sendButton.setText(self.tr("Send"))
         self.clearButton.setText(self.tr("Clear"))
@@ -255,20 +253,18 @@ class DevicePage(QWidget):
             return True
         return super().event(e)
 
+    def _is_v2_mode(self) -> bool:
+        return self.modeCombo.currentIndex() == 1
+
     def _apply_mode(self):
-        idx = self.modeCombo.currentIndex()
-        is_tvl = idx in [1, 2]
-        is_v2 = idx == 2
-        self.tlvTable.setVisible(is_tvl)
-        self.addTlvBtn.setVisible(is_tvl)
-        self.delTlvBtn.setVisible(is_tvl)
-        self.exportTlvBtn.setVisible(is_tvl)
-        self.importTlvBtn.setVisible(is_tvl)
-        self.rawFmtCombo.setVisible(not is_tvl)
-        self.ackSwitch.setVisible(idx == 1)
-        self.tlvTable.setHorizontalHeaderLabels(
-            [self.tr("Type ID"), self.tr("Type") if is_v2 else self.tr("Kind"), self.tr("Value"), self.tr("Enable")]
-        )
+        is_v2 = self._is_v2_mode()
+        self.tlvTable.setVisible(is_v2)
+        self.addTlvBtn.setVisible(is_v2)
+        self.delTlvBtn.setVisible(is_v2)
+        self.exportTlvBtn.setVisible(is_v2)
+        self.importTlvBtn.setVisible(is_v2)
+        self.rawFmtCombo.setVisible(not is_v2)
+        self.tlvTable.setHorizontalHeaderLabels([self.tr("Type ID"), self.tr("Type"), self.tr("Value"), self.tr("Enable")])
         self.cmdLabel.setVisible(is_v2)
         self.cmdSpin.setVisible(is_v2)
         self._refresh_tlv_row_editors_for_mode()
@@ -284,7 +280,7 @@ class DevicePage(QWidget):
             color = QColor("red")
         elif lc.startswith("RX(") or lc.startswith("V2 RX"):
             color = QColor("#6ea8fe") if dark else QColor("darkBlue")
-        elif lc.startswith("TLV") or "TLV seq=" in lc or lc.startswith("TX tvl") or lc.startswith("TX v2"):
+        elif lc.startswith("V2 ACK") or lc.startswith("V2 NACK") or lc.startswith("TX v2"):
             color = QColor("#8bd78f") if dark else QColor("darkGreen")
         elif lc.startswith("Opened") or "Connected" in lc or "Disconnected" in lc:
             color = QColor("#d6b4ff") if dark else QColor("darkMagenta")
@@ -334,7 +330,7 @@ class DevicePage(QWidget):
 
         typeSpin = SpinBox(self.tlvTable)
         typeSpin.setRange(0, 255)
-        typeSpin.setValue(row + 1)
+        typeSpin.setValue(SESSION_PAGE_V2_TYPE_ALIAS_TO_ID["string"])
         self.tlvTable.setCellWidget(row, 0, typeSpin)
 
         kindCombo = ComboBox(self.tlvTable)
@@ -355,28 +351,21 @@ class DevicePage(QWidget):
             self.tlvTable.removeRow(row)
 
     def _iter_tlv_rows(self) -> list[_TlvRow]:
-        out: list[_TlvRow] = []
-        is_v2 = self.modeCombo.currentIndex() == 2
-        for r in range(self.tlvTable.rowCount()):
-            enable = self.tlvTable.cellWidget(r, 3)
+        rows: list[_TlvRow] = []
+        for row_index in range(self.tlvTable.rowCount()):
+            enable = self.tlvTable.cellWidget(row_index, 3)
             if isinstance(enable, SwitchButton) and not enable.isChecked():
                 continue
 
-            typeSpin = self.tlvTable.cellWidget(r, 0)
-            type_id = typeSpin.value() if isinstance(typeSpin, SpinBox) else 0
+            kind_combo = self.tlvTable.cellWidget(row_index, 1)
+            kind = kind_combo.currentText() if isinstance(kind_combo, ComboBox) else "string"
+            type_id = self._v2_type_id_from_kind(kind)
+            if type_id is None:
+                raise ValueError(f"V2 unsupported type: {kind}")
 
-            kindCombo = self.tlvTable.cellWidget(r, 1)
-            kind = kindCombo.currentText() if isinstance(kindCombo, ComboBox) else "hex(bytes)"
-            if is_v2:
-                derived_type_id = self._v2_type_id_from_kind(kind)
-                if derived_type_id is None:
-                    raise ValueError(f"V2 unsupported type: {kind}")
-                type_id = derived_type_id
-
-            v_item = self.tlvTable.item(r, 2)
-            value = v_item.text() if v_item is not None else ""
-            out.append(_TlvRow(kind=kind, value=value, type_id=type_id))
-        return out
+            value_item = self.tlvTable.item(row_index, 2)
+            rows.append(_TlvRow(kind=kind, value=value_item.text() if value_item else "", type_id=type_id))
+        return rows
 
     def _export_tlv_json_to_tx(self):
         self.txEdit.setText(json.dumps([row.__dict__ for row in self._iter_tlv_rows()], ensure_ascii=False))
@@ -385,6 +374,7 @@ class DevicePage(QWidget):
         raw = self.txEdit.text().strip()
         if not raw:
             return
+
         data = json.loads(raw)
         if not isinstance(data, list):
             raise ValueError("JSON must be a list")
@@ -392,61 +382,36 @@ class DevicePage(QWidget):
         self.tlvTable.setRowCount(0)
         for item in data:
             type_id = int(item.get("type_id", 0))
-            kind = str(item.get("kind", "hex(bytes)"))
+            kind = str(item.get("kind", "string"))
             value = str(item.get("value", ""))
 
             self._add_default_tlv_row()
             row = self.tlvTable.rowCount() - 1
+            type_spin = self.tlvTable.cellWidget(row, 0)
+            kind_combo = self.tlvTable.cellWidget(row, 1)
 
-            typeSpin = self.tlvTable.cellWidget(row, 0)
-            kindCombo = self.tlvTable.cellWidget(row, 1)
-            if isinstance(kindCombo, ComboBox):
-                if self.modeCombo.currentIndex() == 2:
-                    kindCombo.setCurrentText(self._normalize_v2_kind(kind, type_id))
-                else:
-                    selected = self._normalize_v1_kind(kind, type_id)
-                    if selected in [kindCombo.itemText(i) for i in range(kindCombo.count())]:
-                        kindCombo.setCurrentText(selected)
-
-            if isinstance(typeSpin, SpinBox):
-                typeSpin.setValue(
-                    self._v2_type_id_from_kind(kindCombo.currentText()) if self.modeCombo.currentIndex() == 2 else type_id
-                )
+            if isinstance(kind_combo, ComboBox):
+                kind_combo.setCurrentText(self._normalize_v2_kind(kind, type_id))
+            if isinstance(type_spin, SpinBox):
+                type_spin.setValue(self._v2_type_id_from_kind(kind_combo.currentText()) or type_id)
 
             self.tlvTable.setItem(row, 2, QTableWidgetItem(value))
             enable = self.tlvTable.cellWidget(row, 3)
             if isinstance(enable, SwitchButton):
                 enable.setChecked(True)
 
-    def _build_payload_from_table(self) -> bytes:
-        return b"".join(self._encode_tlv_row(row) for row in self._iter_tlv_rows())
-
-    def _v1_kind_options(self) -> list[str]:
-        return ["string", "int32", "uint32", "float", "hex(bytes)", "int8", "uint8", "int16", "uint16"]
-
     def _v2_type_ids(self) -> list[int]:
         return sorted(TYPE_REGISTRY)
 
     def _v2_selector_options(self) -> list[str]:
-        return [self._v2_selector_text(type_id) for type_id in self._v2_type_ids()]
+        return [self._v2_type_name(type_id) for type_id in self._v2_type_ids()]
 
     def _default_v2_selector(self) -> str:
         options = self._v2_selector_options()
         return "string" if "string" in options else (options[0] if options else "")
 
-    def _v2_selector_text(self, type_id: int) -> str:
-        return self._v2_type_name(type_id)
-
-    def _normalize_v1_kind(self, kind: str, type_id: int = 0) -> str:
-        aliases = {"u8": "uint8", "u16": "uint16", "u32": "uint32"}
-        normalized = aliases.get((kind or "").strip().lower(), kind or "")
-        if normalized in self._v1_kind_options():
-            return normalized
-        return {0x01: "uint8", 0x02: "uint16", 0x03: "uint32", 0x10: "float", 0x20: "string"}.get(type_id, "string")
-
     def _v2_type_id_from_kind(self, kind: str) -> Optional[int]:
-        aliases = {"u8": 0x01, "uint8": 0x01, "u16": 0x02, "uint16": 0x02, "u32": 0x03, "uint32": 0x03, "float": 0x10, "string": 0x20}
-        type_id = aliases.get((kind or "").strip().lower())
+        type_id = SESSION_PAGE_V2_TYPE_ALIAS_TO_ID.get((kind or "").strip().lower())
         return type_id if type_id in TYPE_REGISTRY else None
 
     def _normalize_v2_kind(self, kind: str, type_id: int = 0) -> str:
@@ -455,27 +420,25 @@ class DevicePage(QWidget):
             resolved_type_id = type_id
         if resolved_type_id is None:
             raise ValueError(f"V2 unsupported type: {kind or type_id}")
-        return self._v2_selector_text(resolved_type_id)
+        return self._v2_type_name(resolved_type_id)
 
     def _configure_kind_combo(self, kind_combo: ComboBox, type_spin: SpinBox, preferred_kind: str = "", preferred_type_id: int = 0):
-        is_v2 = self.modeCombo.currentIndex() == 2
         kind_combo.blockSignals(True)
         kind_combo.clear()
-        if is_v2:
-            options = self._v2_selector_options()
-            kind_combo.addItems(options)
-            selected = self._default_v2_selector()
-            if options:
-                try:
-                    selected = self._normalize_v2_kind(preferred_kind, preferred_type_id)
-                except ValueError:
-                    pass
-            if selected:
-                kind_combo.setCurrentText(selected)
-                self._sync_v2_type_id_with_kind(type_spin, selected)
-        else:
-            kind_combo.addItems(self._v1_kind_options())
-            kind_combo.setCurrentText(self._normalize_v1_kind(preferred_kind, preferred_type_id))
+        options = self._v2_selector_options()
+        kind_combo.addItems(options)
+
+        selected = self._default_v2_selector()
+        if options:
+            try:
+                selected = self._normalize_v2_kind(preferred_kind, preferred_type_id)
+            except ValueError:
+                pass
+
+        if selected:
+            kind_combo.setCurrentText(selected)
+            self._sync_v2_type_id_with_kind(type_spin, selected)
+
         kind_combo.blockSignals(False)
 
     def _refresh_tlv_row_editors_for_mode(self):
@@ -491,18 +454,16 @@ class DevicePage(QWidget):
     def _build_v2_payload_from_table(self) -> bytes:
         payload = V2Payload()
         for row in self._iter_tlv_rows():
-            type_id = int(row.type_id) & 0xFF
-            type_obj = TYPE_REGISTRY.get(type_id)
+            type_obj = TYPE_REGISTRY.get(int(row.type_id) & 0xFF)
             if type_obj is None:
-                raise ValueError(f"V2 unsupported type ID: 0x{type_id:02X}")
+                raise ValueError(f"V2 unsupported type ID: 0x{row.type_id:02X}")
             payload.addData(type_obj, self._coerce_v2_value(row, type_obj))
         return payload.toBytes()
 
     def _sync_v2_type_id_with_kind(self, type_spin: SpinBox, kind: str):
-        if self.modeCombo.currentIndex() == 2:
-            suggested = self._v2_type_id_from_kind(kind)
-            if suggested is not None:
-                type_spin.setValue(suggested)
+        suggested = self._v2_type_id_from_kind(kind)
+        if suggested is not None:
+            type_spin.setValue(suggested)
 
     def _coerce_v2_value(self, row: _TlvRow, type_obj: TypeBase):
         raw_value = row.value.strip()
@@ -511,12 +472,6 @@ class DevicePage(QWidget):
         if isinstance(type_obj, DataFloat):
             return float(raw_value or "0")
         if isinstance(type_obj, DataInt):
-            return int(raw_value or "0", 0)
-        if row.kind == "string":
-            return row.value
-        if row.kind == "float":
-            return float(raw_value or "0")
-        if row.kind in ("int8", "uint8", "int16", "uint16", "int32", "uint32", "u8", "u16", "u32"):
             return int(raw_value or "0", 0)
         raise ValueError(f"V2 unsupported value type: {row.kind}")
 
@@ -554,7 +509,8 @@ class DevicePage(QWidget):
             return ""
         parts = []
         for type_id, value in payload_data.items():
-            parts.append(f'T{type_id:02X}({self._v2_type_name(type_id)}):{value.hex(" ") if isinstance(value, bytes) else value}')
+            rendered = value.hex(" ") if isinstance(value, bytes) else value
+            parts.append(f"T{type_id:02X}({self._v2_type_name(type_id)}):{rendered}")
         return ", ".join(parts)
 
     def _handle_v2_rx_frames(self, data: bytes):
@@ -607,8 +563,7 @@ class DevicePage(QWidget):
             115200: QSerialPort.BaudRate.Baud115200,
         }
         baud = baud_map.get(int(self.baudCombo.currentText().strip()), QSerialPort.BaudRate.Baud9600)
-        session_cfg = SerialConfig(port=port, baudrate=baud)
-        self._session = SerialSession(session_cfg, _event_receiver=self)
+        self._session = SerialSession(SerialConfig(port=port, baudrate=baud), _event_receiver=self)
 
         try:
             self._session.set_event_receiver(self)
@@ -619,8 +574,6 @@ class DevicePage(QWidget):
         self._session.on_debug = lambda text: self._append_log(f"DBG: {text}")
         self._session.on_state = lambda ok: self.stateSignal.emit(ok)
 
-        self._proto = Protocol(lambda data: self._safe_write(data))
-        self._register_tvl_handlers(self._proto)
         self._init_v2_protocol()
 
         try:
@@ -629,7 +582,6 @@ class DevicePage(QWidget):
         except Exception as exc:
             self._on_error(str(exc))
             self._session = None
-            self._proto = None
             self._reset_v2_protocol()
 
     def _disconnect(self):
@@ -638,7 +590,6 @@ class DevicePage(QWidget):
                 self._session.close()
         finally:
             self._session = None
-            self._proto = None
             self._reset_v2_protocol()
             self._append_log("Disconnected")
             self._retranslate_ui()
@@ -666,45 +617,11 @@ class DevicePage(QWidget):
 
     def _on_rx_raw(self, data: bytes):
         self._rx_buf.extend(data)
-        if self.parseSwitch.isChecked():
-            if self._proto is not None:
-                try:
-                    self._proto.feed(data)
-                except Exception:
-                    pass
-            if self._v2_parser is not None:
-                try:
-                    self._handle_v2_rx_frames(data)
-                except Exception as exc:
-                    self.errSignal.emit(f"TVLCOMV2_FULL feed failed: {exc}")
-
-    def _register_tvl_handlers(self, proto: Protocol):
-        def _show(t: int, value: bytes, seq: int):
-            self.rxEventSignal.emit(f"TLV seq={seq} type={t}({self._tlv_name(t)}) len={len(value)} val={self._format_tlv_value(t, value)}")
-
-        for t in [getattr(tvl_const, "TLV_STRING", None), getattr(tvl_const, "TLV_INT32", None), getattr(tvl_const, "TLV_UINT32", None), getattr(tvl_const, "TLV_FLOAT", None)]:
-            if isinstance(t, int):
-                proto.dispatcher.register(t, lambda value, seq, tt=t: _show(tt, value, seq))
-
-    def _tlv_name(self, t: int) -> str:
-        for key, value in vars(tvl_const).items():
-            if key.startswith("TLV_") and value == t:
-                return key
-        return "UNKNOWN"
-
-    def _format_tlv_value(self, t: int, value: bytes) -> str:
-        try:
-            if t == tvl_const.TLV_STRING:
-                return value.decode(errors="replace")
-            if t == tvl_const.TLV_INT32 and len(value) == 4:
-                return str(struct.unpack("<i", value)[0])
-            if t == tvl_const.TLV_UINT32 and len(value) == 4:
-                return str(struct.unpack("<I", value)[0])
-            if t == tvl_const.TLV_FLOAT and len(value) == 4:
-                return str(struct.unpack("<f", value)[0])
-        except Exception:
-            pass
-        return "0x" + value.hex()
+        if self.parseSwitch.isChecked() and self._v2_parser is not None:
+            try:
+                self._handle_v2_rx_frames(data)
+            except Exception as exc:
+                self.errSignal.emit(f"TVLCOMV2_FULL feed failed: {exc}")
 
     def on_send(self):
         if not self._session or not self._session.is_open:
@@ -712,10 +629,7 @@ class DevicePage(QWidget):
             return
 
         repeat = int(self.repeatSpin.value())
-        idx = self.modeCombo.currentIndex()
-        is_v2 = idx == 2
-
-        if idx == 0:
+        if not self._is_v2_mode():
             raw = self.txEdit.text().strip()
             if not raw:
                 return
@@ -729,69 +643,19 @@ class DevicePage(QWidget):
             self._append_log(f'TX raw: ({len(data)}): {data.hex(" ")}')
             return
 
-        if is_v2:
-            try:
-                payload = self._build_v2_payload_from_table()
-            except Exception as exc:
-                self._append_log(f"ERR: V2 build failed: {exc}")
-                return
-            cmd = self.cmdSpin.value()
-            seqs: list[int] = []
-            for _ in range(repeat):
-                self._v2_seq = (self._v2_seq + 1) % 256
-                self._safe_write(V2FrameBuilder.buildFrame(cmd, self._v2_seq, payload))
-                seqs.append(self._v2_seq)
-            seq_text = str(seqs[0]) if len(seqs) == 1 else ",".join(str(seq) for seq in seqs)
-            self._append_log(f'TX v2: CMD={cmd:02X} seq={seq_text} payload=({len(payload)}) {payload.hex(" ")}')
-            return
-
-        if self._proto is None:
-            self._append_log("ERR: TVLCOMV1_FULL is not initialized")
-            return
-
         try:
-            payload = self._build_payload_from_table()
+            payload = self._build_v2_payload_from_table()
         except Exception as exc:
-            self._append_log(f"ERR: TLV build failed: {exc}")
+            self._append_log(f"ERR: V2 build failed: {exc}")
             return
 
+        cmd = self.cmdSpin.value()
+        seqs: list[int] = []
         for _ in range(repeat):
-            self._proto.send_payload(payload, ack=self.ackSwitch.isChecked())
-        self._append_log(f'TX tvl: payload=({len(payload)}) {payload.hex(" ")}')
+            self._v2_seq = (self._v2_seq + 1) % 256
+            frame = V2FrameBuilder.buildFrame(cmd, self._v2_seq, payload)
+            self._safe_write(frame)
+            seqs.append(self._v2_seq)
 
-    def _encode_tlv_value_only(self, row: _TlvRow) -> bytes:
-        if row.kind == "string":
-            return row.value.encode("utf-8")
-        if row.kind == "int8":
-            return struct.pack("<b", int(row.value.strip(), 0))
-        if row.kind == "uint8":
-            return struct.pack("<B", int(row.value.strip(), 0))
-        if row.kind == "int16":
-            return struct.pack("<h", int(row.value.strip(), 0))
-        if row.kind == "uint16":
-            return struct.pack("<H", int(row.value.strip(), 0))
-        if row.kind == "int32":
-            return struct.pack("<i", int(row.value.strip(), 0))
-        if row.kind == "uint32":
-            return struct.pack("<I", int(row.value.strip(), 0))
-        if row.kind == "float":
-            return struct.pack("<f", float(row.value.strip()))
-        raw = row.value.strip()
-        if not raw:
-            return b""
-        hexstr = "".join(ch for ch in raw.replace("0x", "").replace(",", " ").split() if ch)
-        return binascii.unhexlify(hexstr)
-
-    def _encode_tlv_row(self, row: _TlvRow) -> bytes:
-        raw = self._encode_tlv_value_only(row)
-        if row.kind == "string":
-            t = tvl_const.TLV_STRING
-        elif row.kind in ("int8", "int16", "int32"):
-            t = tvl_const.TLV_INT32
-        elif row.kind in ("uint8", "uint16", "uint32"):
-            t = tvl_const.TLV_UINT32
-        elif row.kind == "float":
-            t = tvl_const.TLV_FLOAT
-        else:
-            t = tvl_const.TLV_BINARY
-        return tlv_encode(t, raw)
+        seq_text = str(seqs[0]) if len(seqs) == 1 else ",".join(str(seq) for seq in seqs)
+        self._append_log(f'TX v2: CMD={cmd:02X} seq={seq_text} payload=({len(payload)}) {payload.hex(" ")}')

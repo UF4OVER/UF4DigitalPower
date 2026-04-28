@@ -12,6 +12,7 @@ from qfluentwidgets import setTheme
 
 from Config import AppIconPath, cfg
 from app import UMainWindow
+
 from app.Core import StyleSheet, language_manager, logger
 from app.Core import load_saved_font
 from app.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
