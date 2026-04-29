@@ -173,6 +173,6 @@ class HomePage(QWidget):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self.appCard.retranslate_ui()
             self.galleryCard.retranslate_ui()

@@ -220,7 +220,7 @@ class DevicePage(QWidget):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
     def _retranslate_ui(self):

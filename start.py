@@ -16,7 +16,6 @@ from PyQt5.QtCore import QEvent, Qt, QTimer
 from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
-from qfluentwidgets import MSFluentTitleBar
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
@@ -24,8 +23,7 @@ from qfluentwidgets import setTheme
 from Config import AppIconPath, cfg
 from app import UMainWindow
 
-from app.Core import StyleSheet, language_manager, logger
-from app.Core import load_saved_font
+from app.Core import StyleSheet, language_manager, logger, load_saved_font
 from app.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 
@@ -37,17 +35,17 @@ class Window(UMainWindow):
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
-        self.daplinkFlashInterface = DaplinkFlashPage(self)
+        self.daplinkInterface = DaplinkFlashPage(self)
         self.settingInterface = SettingsPage(self)
 
-        self.initNavigation()
-        self.initWindow()
+        self.__initNavigation()
+        self.__initWindow()
 
         cfg.themeChanged.connect(self._on_theme_changed)
         self._on_theme_changed()
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkFlashInterface)
+        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
         self._retranslate_ui()
 
         QTimer.singleShot(0, self._refresh_startup_theme)
@@ -55,11 +53,28 @@ class Window(UMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-    def initNavigation(self):
-        self.homeNavItem = self.addSubInterface(self.homeInterface, FIF.HOME, self.tr("Home"), FIF.HOME_FILL)
-        self.deviceNavItem = self.addSubInterface(self.deviceInterface, FIF.DEVELOPER_TOOLS, self.tr("Serial"))
-        self.powerNavItem = self.addSubInterface(self.powerInterface, FIF.POWER_BUTTON, self.tr("Device"))
-        self.daplinkNavItem = self.addSubInterface(self.daplinkFlashInterface, FIF.IOT, "DAPLink")
+    def __initNavigation(self):
+        self.homeNavItem = self.addSubInterface(
+            self.homeInterface,
+            FIF.HOME,
+            self.tr("Home"),
+            FIF.HOME_FILL
+        )
+        self.deviceNavItem = self.addSubInterface(
+            self.deviceInterface,
+            FIF.DEVELOPER_TOOLS,
+            self.tr("Serial")
+        )
+        self.powerNavItem =self.addSubInterface(
+            self.powerInterface,
+            FIF.POWER_BUTTON,
+            self.tr("Device")
+        )
+        self.daplinkNavItem = self.addSubInterface(
+            self.daplinkInterface,
+            FIF.IOT,
+            "DAPLink"
+        )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
             FIF.SETTING,
@@ -69,9 +84,9 @@ class Window(UMainWindow):
         )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
-    def initWindow(self):
+    def __initWindow(self):
         self.resize(1200, 800)
-        self.setTitleBar(MSFluentTitleBar(self))
+        # self.setTitleBar(FluentWidgetTitleBar(self))
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("Fluor4CellPower")
 
@@ -112,7 +127,7 @@ class Window(UMainWindow):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
 

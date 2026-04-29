@@ -766,7 +766,7 @@ class PowerPage(ScrollArea):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
     def _on_theme_changed(self, *_):
