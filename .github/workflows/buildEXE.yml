@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
@@ -36,18 +38,41 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          $version = python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          $version = python -c 'import pathlib, re; text = pathlib.Path("pyproject.toml").read_text(encoding="utf-8"); match = re.search(r"(?ms)^\[project\].*?^version\s*=\s*\"([^\"]+)\"", text); print(match.group(1) if match else "")'
+          if (-not $version) {
+            throw 'Failed to resolve project.version from pyproject.toml'
+          }
+
           $tag = "v$version"
           $asset = "F4CP-$version-windows-x64.zip"
-          $commitSubject = git log -1 --pretty=%s
-          $commitBody = git log -1 --pretty=%b
+          $event = Get-Content -Raw -Path $env:GITHUB_EVENT_PATH | ConvertFrom-Json
+          $commitLines = @()
+
+          if ($event.commits) {
+            foreach ($commit in $event.commits) {
+              if ($commit.id -and $commit.message) {
+                $shortSha = $commit.id.Substring(0, [Math]::Min(7, $commit.id.Length))
+                $commitLines += "- $shortSha $($commit.message)"
+              }
+            }
+          }
+
+          if (-not $commitLines -or $commitLines.Count -eq 0) {
+            $commitSubject = git log -1 --pretty=%s
+            $commitBody = git log -1 --pretty=%b
+            $commitLines += "- $commitSubject"
+            if ($commitBody) {
+              $commitLines += ""
+              $commitLines += $commitBody
+            }
+          }
+
+          $commitText = $commitLines -join "`r`n"
           $releaseBody = @"
           Automated Windows build for version $version.
 
-          Commit:
-          $commitSubject
-
-          $commitBody
+          Commits:
+          $commitText
           "@
 
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -86,6 +111,7 @@ jobs:
           path: release/${{ steps.meta.outputs.asset_name }}
 
       - name: Publish GitHub release
+        if: github.event_name != 'pull_request'
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.meta.outputs.tag }}
