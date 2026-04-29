@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -29,6 +32,30 @@ jobs:
         run: |
           uv sync --all-extras
 
+      - name: Resolve release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $version = python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          $tag = "v$version"
+          $asset = "F4CP-$version-windows-x64.zip"
+          $commitSubject = git log -1 --pretty=%s
+          $commitBody = git log -1 --pretty=%b
+          $releaseBody = @"
+          Automated Windows build for version $version.
+
+          Commit:
+          $commitSubject
+
+          $commitBody
+          "@
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "asset_name=$asset" >> $env:GITHUB_OUTPUT
+
+          $releaseBody | Out-File -FilePath release_notes.md -Encoding utf8
+
       - name: Build packaged exe
         run: |
           powershell -ExecutionPolicy Bypass -File .\Script\package_exe.ps1
@@ -43,12 +70,30 @@ jobs:
         run: |
           python Script/upx_zip.py
 
-      - name: Package build output as zip
+      - name: Package build output for release
+        shell: pwsh
         run: |
-          powershell Compress-Archive -Path build\exe\* -DestinationPath F4CP-Windows-x64.zip
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          if (Test-Path "release\${{ steps.meta.outputs.asset_name }}") {
+            Remove-Item -LiteralPath "release\${{ steps.meta.outputs.asset_name }}" -Force
+          }
+          Compress-Archive -Path build\exe\* -DestinationPath "release\${{ steps.meta.outputs.asset_name }}"
 
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: F4CP-Windows-x64
-          path: F4CP-Windows-x64.zip
+          name: F4CP-${{ steps.meta.outputs.version }}-Windows-x64
+          path: release/${{ steps.meta.outputs.asset_name }}
+
+      - name: Publish GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.tag }}
+          commit: ${{ github.sha }}
+          name: F4CP ${{ steps.meta.outputs.version }}
+          bodyFile: release_notes.md
+          artifacts: release/${{ steps.meta.outputs.asset_name }}
+          artifactContentType: application/zip
+          allowUpdates: true
+          replacesArtifacts: true
+          generateReleaseNotes: false
