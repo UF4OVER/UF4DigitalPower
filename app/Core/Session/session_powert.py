@@ -356,6 +356,7 @@ class F4CPPowerClient(QObject):
         self._buffer = bytearray()
         self._seq = 0
         self._pending: _PendingRequest | None = None
+        self._shutting_down = False
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_once)
 
@@ -369,6 +370,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(object)
     def attach_session(self, session: SerialSession) -> None:
+        self._shutting_down = False
         self._session = session
         self._buffer.clear()
         self._pending = None
@@ -378,6 +380,8 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot()
     def detach_session(self) -> None:
+        self.stop_polling()
+        self._fail_pending(PowerClientError("Serial session detached"))
         if self._session is not None:
             try:
                 self._session.set_event_receiver(None)
@@ -386,8 +390,13 @@ class F4CPPowerClient(QObject):
         self._session = None
         self._buffer.clear()
         self._pending = None
-        self.stop_polling()
         self.connectionChanged.emit(False)
+
+    @pyqtSlot()
+    def shutdown(self) -> None:
+        self._shutting_down = True
+        self.stop_polling()
+        self.detach_session()
 
     @pyqtSlot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
@@ -617,7 +626,7 @@ class F4CPPowerClient(QObject):
         return CC_CV_NAMES.get(value, f"UNKNOWN({value})")
 
     def _poll_once(self) -> None:
-        if not self.is_connected or self.is_busy:
+        if self._shutting_down or not self.is_connected or self.is_busy:
             return
         try:
             self.read_status(timeout_ms=800)

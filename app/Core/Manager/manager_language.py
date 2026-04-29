@@ -91,7 +91,7 @@ class LanguageManager(QObject):
 
     @staticmethod
     def _dispatch_language_change(app) -> None:
-        event = QEvent(QEvent.LanguageChange)
+        event = QEvent(QEvent.Type.LanguageChange)
         for widget in app.topLevelWidgets():
             QCoreApplication.sendEvent(widget, event)
 

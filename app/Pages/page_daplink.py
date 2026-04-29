@@ -94,7 +94,7 @@ class DaplinkFlashPage(ScrollArea):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
     def closeEvent(self, event):

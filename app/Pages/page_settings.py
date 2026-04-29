@@ -87,7 +87,7 @@ class SettingsPage(ScrollArea):
 
     def __initWidget(self):
         self.resize(1000, 800)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setViewportMargins(0, 80, 0, 20)
         self.setWidget(self.scrollWidget)
         self.setWidgetResizable(True)
@@ -142,7 +142,7 @@ class SettingsPage(ScrollArea):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
     def showEvent(self, event):

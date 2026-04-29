@@ -13,10 +13,9 @@
 import sys
 
 from PyQt5.QtCore import QEvent, Qt, QTimer
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
-from qfluentwidgets import MSFluentTitleBar
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
@@ -24,8 +23,7 @@ from qfluentwidgets import setTheme
 from Config import AppIconPath, cfg
 from app import UMainWindow
 
-from app.Core import StyleSheet, language_manager, logger
-from app.Core import load_saved_font
+from app.Core import StyleSheet, language_manager, logger, load_saved_font
 from app.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 
@@ -37,17 +35,17 @@ class Window(UMainWindow):
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
-        self.daplinkFlashInterface = DaplinkFlashPage(self)
+        self.daplinkInterface = DaplinkFlashPage(self)
         self.settingInterface = SettingsPage(self)
 
-        self.initNavigation()
-        self.initWindow()
+        self.__initNavigation()
+        self.__initWindow()
 
         cfg.themeChanged.connect(self._on_theme_changed)
         self._on_theme_changed()
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkFlashInterface)
+        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
         self._retranslate_ui()
 
         QTimer.singleShot(0, self._refresh_startup_theme)
@@ -55,11 +53,28 @@ class Window(UMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-    def initNavigation(self):
-        self.homeNavItem = self.addSubInterface(self.homeInterface, FIF.HOME, self.tr("Home"), FIF.HOME_FILL)
-        self.deviceNavItem = self.addSubInterface(self.deviceInterface, FIF.DEVELOPER_TOOLS, self.tr("Serial"))
-        self.powerNavItem = self.addSubInterface(self.powerInterface, FIF.POWER_BUTTON, self.tr("Device"))
-        self.daplinkNavItem = self.addSubInterface(self.daplinkFlashInterface, FIF.IOT, "DAPLink")
+    def __initNavigation(self):
+        self.homeNavItem = self.addSubInterface(
+            self.homeInterface,
+            FIF.HOME,
+            self.tr("Home"),
+            FIF.HOME_FILL
+        )
+        self.deviceNavItem = self.addSubInterface(
+            self.deviceInterface,
+            FIF.DEVELOPER_TOOLS,
+            self.tr("Serial")
+        )
+        self.powerNavItem =self.addSubInterface(
+            self.powerInterface,
+            FIF.POWER_BUTTON,
+            self.tr("Device")
+        )
+        self.daplinkNavItem = self.addSubInterface(
+            self.daplinkInterface,
+            FIF.IOT,
+            "DAPLink"
+        )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
             FIF.SETTING,
@@ -69,9 +84,9 @@ class Window(UMainWindow):
         )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
-    def initWindow(self):
+    def __initWindow(self):
         self.resize(1200, 800)
-        self.setTitleBar(MSFluentTitleBar(self))
+        # self.setTitleBar(FluentWidgetTitleBar(self))
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("Fluor4CellPower")
 
@@ -85,6 +100,14 @@ class Window(UMainWindow):
     def close(self):
         logger.warning("Application closed")
         super().close()
+
+    def closeEvent(self, event: QCloseEvent):
+        try:
+            if hasattr(self, "powerInterface") and self.powerInterface is not None:
+                self.powerInterface.shutdown()
+        except Exception as exc:
+            logger.error(f"PowerPage shutdown failed during window close: {exc}")
+        super().closeEvent(event)
 
     def _on_theme_changed(self, *_):
         dark = isDarkTheme()
@@ -104,23 +127,28 @@ class Window(UMainWindow):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
 
 if __name__ == "__main__":
+    import sys
     logger.info("main is running")
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     logger.info("Application started")
+    try:
+        app = QApplication(sys.argv)
 
-    app = QApplication(sys.argv)
-    setTheme(cfg.themeMode.value)
-    language_manager.apply_language(app)
-    load_saved_font(app)
+        setTheme(cfg.themeMode.value)
+        language_manager.apply_language(app)
+        load_saved_font(app)
 
-    w = Window()
-    w.show()
-    app.exec_()
+        w = Window()
+        w.show()
+
+        app.exec_()
+    except Exception as e:
+        logger.error(e)

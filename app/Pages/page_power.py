@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 import pyqtgraph as pg
-from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QMetaObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -287,11 +287,13 @@ class PowerPage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("PowerPage")
+        self._shutdown_done = False
 
         vid, pid = _read_port_identity()
         self._client = F4CPPowerClient()
         self._clientThread = QThread(self)
         self._client.moveToThread(self._clientThread)
+        self._clientThread.finished.connect(self._client.deleteLater)
         self._clientThread.start()
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
         self._last_status: PowerStatus | None = None
@@ -544,12 +546,31 @@ class PowerPage(ScrollArea):
         showMessage(self, self.tr("Device Disconnected"), self.tr("Power device session closed."), level="error")
 
     def closeEvent(self, event) -> None:
-        self.stopPollingRequested.emit()
-        self.detachSessionRequested.emit()
-        self._scanner.stop()
-        self._clientThread.quit()
-        self._clientThread.wait(1500)
+        self.shutdown()
         super().closeEvent(event)
+
+    def shutdown(self) -> None:
+        if self._shutdown_done:
+            return
+
+        self._shutdown_done = True
+        self._plot_refresh_timer.stop()
+
+        try:
+            self._scanner.stop()
+        except Exception as exc:
+            logger.error(f"PowerPage scanner shutdown failed: {exc}")
+
+        try:
+            if self._clientThread.isRunning():
+                QMetaObject.invokeMethod(self._client, "shutdown", Qt.BlockingQueuedConnection)
+        except Exception as exc:
+            logger.error(f"PowerPage client shutdown failed: {exc}")
+
+        if self._clientThread.isRunning():
+            self._clientThread.quit()
+            if not self._clientThread.wait(3000):
+                logger.error("PowerPage client thread did not exit within 3000 ms")
 
     def _read_status_once(self) -> None:
         if not self._client.is_connected:
@@ -745,7 +766,7 @@ class PowerPage(ScrollArea):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
     def _on_theme_changed(self, *_):
