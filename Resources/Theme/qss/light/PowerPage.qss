@@ -9,59 +9,6 @@ QWidget#powerScrollWidget {
     border-radius: 0;
 }
 
-QWidget#powerScrollWidget TitleLabel,
-QWidget#powerScrollWidget SubtitleLabel,
-QWidget#powerScrollWidget StrongBodyLabel {
-    color: #111827;
-}
-
-QWidget#powerScrollWidget BodyLabel,
-QWidget#powerScrollWidget CaptionLabel {
-    color: #6B7280;
-}
-
-QWidget#powerScrollWidget CardWidget,
-QWidget#powerScrollWidget SimpleCardWidget,
-QWidget#powerSummaryCard,
-QWidget#powerReadCard,
-QWidget#powerWriteCard,
-QWidget#powerLogCard,
-QWidget#trendPlotCard,
-QWidget[cardRole="metric"] {
-    background: rgba(255,255,255,0.88);
-    border: 1px solid rgba(0,0,0,0.08);
-    border-radius: 18px;
-}
-
-QWidget#powerSummaryCard *,
-QWidget#powerReadCard *,
-QWidget#powerWriteCard *,
-QWidget#powerLogCard *,
-QWidget[cardRole="metric"] * {
-    background: transparent;
-}
-
-QWidget#powerSummaryCard BodyLabel,
-QWidget#powerReadCard BodyLabel,
-QWidget#powerWriteCard BodyLabel,
-QWidget#powerLogCard BodyLabel,
-QWidget#powerSummaryCard CaptionLabel,
-QWidget#powerReadCard CaptionLabel,
-QWidget#powerWriteCard CaptionLabel,
-QWidget#powerLogCard CaptionLabel,
-QWidget[cardRole="metric"] CaptionLabel {
-    color: #6B7280;
-}
-
-QWidget#powerSummaryCard StrongBodyLabel,
-QWidget#powerReadCard StrongBodyLabel,
-QWidget#powerWriteCard StrongBodyLabel,
-QWidget#powerLogCard StrongBodyLabel,
-QWidget[cardRole="metric"] TitleLabel,
-QWidget[cardRole="metric"] StrongBodyLabel {
-    color: #111827;
-}
-
 QWidget#powerScrollWidget LineEdit,
 QWidget#powerScrollWidget QLineEdit,
 QWidget#powerScrollWidget LineEdit[parameterEditor="true"],

@@ -13,7 +13,7 @@
 import sys
 
 from PyQt5.QtCore import QEvent, Qt, QTimer
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import MSFluentTitleBar
@@ -86,6 +86,14 @@ class Window(UMainWindow):
         logger.warning("Application closed")
         super().close()
 
+    def closeEvent(self, event: QCloseEvent):
+        try:
+            if hasattr(self, "powerInterface") and self.powerInterface is not None:
+                self.powerInterface.shutdown()
+        except Exception as exc:
+            logger.error(f"PowerPage shutdown failed during window close: {exc}")
+        super().closeEvent(event)
+
     def _on_theme_changed(self, *_):
         dark = isDarkTheme()
         bg_color = "#1F1F1F" if dark else "#F3F3F3"
@@ -109,18 +117,23 @@ class Window(UMainWindow):
 
 
 if __name__ == "__main__":
+    import sys
     logger.info("main is running")
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     logger.info("Application started")
+    try:
+        app = QApplication(sys.argv)
 
-    app = QApplication(sys.argv)
-    setTheme(cfg.themeMode.value)
-    language_manager.apply_language(app)
-    load_saved_font(app)
+        setTheme(cfg.themeMode.value)
+        language_manager.apply_language(app)
+        load_saved_font(app)
 
-    w = Window()
-    w.show()
-    app.exec_()
+        w = Window()
+        w.show()
+
+        app.exec_()
+    except Exception as e:
+        logger.error(e)
