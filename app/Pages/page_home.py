@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PyQt5.QtCore import QEvent, QSize, Qt, QUrl
+from PyQt5.QtCore import QSize, Qt, QUrl
 from PyQt5.QtGui import QColor, QFont, QImage
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -18,7 +18,7 @@ from qfluentwidgets import (
     setFont,
 )
 
-from Config import AppIconPath, DirPathsInstance
+from Config import AppIconPath, DirPathsInstance, VERSION
 from app.Core import StyleSheet
 
 
@@ -37,7 +37,7 @@ class StatisticsWidget(QWidget):
         setFont(self.valueLabel, 18, QFont.DemiBold)
         self.titleLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
 
-    def set_title(self, title: str) -> None:
+    def setTitle(self, title: str) -> None:
         self.titleLabel.setText(title)
 
 
@@ -52,7 +52,9 @@ class AppInfoCard(SimpleCardWidget):
         setFont(self.nameLabel, 16, QFont.DemiBold)
 
         self.installButton = PrimaryPushButton(self)
-        self.companyLabel = HyperlinkLabel(QUrl("https://github.com/UF4OVER"), "UF4OVER", self)
+        self.companyLabel = HyperlinkLabel(
+            QUrl("https://github.com/UF4OVER"), "UF4OVER", self
+        )
         self.installButton.setFixedWidth(160)
 
         self.scoreWidget = StatisticsWidget("", "5.0", self)
@@ -78,7 +80,7 @@ class AppInfoCard(SimpleCardWidget):
         self.buttonLayout = QHBoxLayout()
 
         self.initLayout()
-        self.retranslate_ui()
+        self.applyTexts()
 
     def initLayout(self):
         self.hBoxLayout.setSpacing(30)
@@ -114,10 +116,10 @@ class AppInfoCard(SimpleCardWidget):
         self.buttonLayout.addWidget(self.tagButton, 0, Qt.AlignLeft)
         self.buttonLayout.addWidget(self.shareButton, 0, Qt.AlignRight)
 
-    def retranslate_ui(self):
-        self.installButton.setText(self.tr("Update"))
-        self.scoreWidget.set_title(self.tr("Average"))
-        self.commentWidget.set_title(self.tr("Reviews"))
+    def applyTexts(self):
+        self.installButton.setText(self.tr("Check Update"))
+        self.scoreWidget.setTitle(self.tr("Average"))
+        self.commentWidget.setTitle(self.tr("Reviews"))
         self.descriptionLabel.setText(
             self.tr(
                 "Fluor4CellPower is a multi-function host tool that provides serial communication, "
@@ -136,21 +138,97 @@ class GalleryCard(HeaderCardWidget):
         self.expandButton.setFixedSize(32, 32)
         self.expandButton.setIconSize(QSize(12, 12))
 
-        img_path = DirPathsInstance.AssetsDir / "F4CP_2x1_1200x600.png"
-        self.flipView.addImages([QImage(str(img_path))])
+        imgPath = DirPathsInstance.AssetsDir / "F4CP_2x1_1200x600.png"
+        self.flipView.addImages([QImage(str(imgPath))])
         self.flipView.setBorderRadius(8)
         self.flipView.setSpacing(10)
 
-        item_size = QSize(620, 351)
-        self.flipView.setItemSize(item_size)
-        self.flipView.setMinimumSize(item_size)
+        itemSize = QSize(620, 351)
+        self.flipView.setItemSize(itemSize)
+        self.flipView.setMinimumSize(itemSize)
 
         self.headerLayout.addWidget(self.expandButton, 0, Qt.AlignRight)
         self.viewLayout.addWidget(self.flipView)
-        self.retranslate_ui()
+        self.applyTexts()
 
-    def retranslate_ui(self):
+    def applyTexts(self):
         self.setTitle(self.tr("Screenshots"))
+
+
+class FirmwareInfoCard(SimpleCardWidget):
+    def __init__(self, title: str, version: str, description: str, parent=None):
+        super().__init__(parent)
+        self._title = title
+        self._description = description
+
+        self.titleLabel = BodyLabel(self)
+        self.versionCaptionLabel = CaptionLabel(self)
+        self.versionLabel = BodyLabel(version, self)
+        self.descriptionLabel = CaptionLabel(self)
+        self.vBoxLayout = QVBoxLayout(self)
+
+        self.setObjectName("FirmwareInfoCard")
+        self.descriptionLabel.setWordWrap(True)
+        self.descriptionLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
+
+        setFont(self.titleLabel, 15, QFont.DemiBold)
+        setFont(self.versionLabel, 22, QFont.DemiBold)
+
+        self.initLayout()
+        self.applyTexts()
+
+    def initLayout(self):
+        self.setMinimumHeight(150)
+        self.vBoxLayout.setContentsMargins(20, 18, 20, 18)
+        self.vBoxLayout.setSpacing(8)
+        self.vBoxLayout.addWidget(self.titleLabel)
+        self.vBoxLayout.addSpacing(4)
+        self.vBoxLayout.addWidget(self.versionCaptionLabel)
+        self.vBoxLayout.addWidget(self.versionLabel)
+        self.vBoxLayout.addSpacing(4)
+        self.vBoxLayout.addWidget(self.descriptionLabel)
+        self.vBoxLayout.addStretch(1)
+
+    def setVersion(self, version: str):
+        self.versionLabel.setText(version or "--")
+
+    def applyTexts(self):
+        self.titleLabel.setText(self.tr(self._title))
+        self.versionCaptionLabel.setText(self.tr("Version"))
+        self.descriptionLabel.setText(self.tr(self._description))
+
+
+class FirmwareUpdateCard(HeaderCardWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.powerFirmwareCard = FirmwareInfoCard(
+            "Power firmware",
+            "--",
+            "Embedded power controller firmware for output control, protection, and telemetry acquisition.",
+            self,
+        )
+        self.powerUpperCard = FirmwareInfoCard(
+            "Power Upper firmware",
+            VERSION,
+            "Desktop Upper firmware that provides power dashboard, parameter configuration, and device operations.",
+            self,
+        )
+        self.cardLayout = QHBoxLayout()
+
+        self.initLayout()
+        self.applyTexts()
+
+    def initLayout(self):
+        self.cardLayout.setContentsMargins(0, 0, 0, 0)
+        self.cardLayout.setSpacing(12)
+        self.cardLayout.addWidget(self.powerFirmwareCard)
+        self.cardLayout.addWidget(self.powerUpperCard)
+        self.viewLayout.addLayout(self.cardLayout)
+
+    def applyTexts(self):
+        self.setTitle(self.tr("Firmware updates"))
+        self.powerFirmwareCard.applyTexts()
+        self.powerUpperCard.applyTexts()
 
 
 class HomePage(QWidget):
@@ -162,17 +240,13 @@ class HomePage(QWidget):
         self.vBoxLayout.setSpacing(10)
 
         self.appCard = AppInfoCard(self)
+        self.firmwareUpdateCard = FirmwareUpdateCard(self)
         self.galleryCard = GalleryCard(self)
 
         self.vBoxLayout.addWidget(self.appCard, 0, Qt.AlignTop)
+        self.vBoxLayout.addWidget(self.firmwareUpdateCard, 0, Qt.AlignTop)
         self.vBoxLayout.addWidget(self.galleryCard, 0, Qt.AlignTop)
         self.vBoxLayout.addStretch(1)
 
         self.setObjectName("HomePage")
         StyleSheet.HOME_PAGE.apply(self)
-
-    def changeEvent(self, event):
-        super().changeEvent(event)
-        if event.type() == QEvent.Type.LanguageChange:
-            self.appCard.retranslate_ui()
-            self.galleryCard.retranslate_ui()

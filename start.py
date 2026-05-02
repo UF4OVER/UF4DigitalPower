@@ -10,9 +10,7 @@
 #  @Python  :
 # -------------------------------
 
-import sys
-
-from PyQt5.QtCore import QEvent, Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon as FIF
@@ -41,39 +39,30 @@ class Window(UMainWindow):
         self.__initNavigation()
         self.__initWindow()
 
-        cfg.themeChanged.connect(self._on_theme_changed)
-        self._on_theme_changed()
+        cfg.themeChanged.connect(self._onThemeChanged)
+        self._onThemeChanged()
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
         StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
-        self._retranslate_ui()
+        self._applyTexts()
 
-        QTimer.singleShot(0, self._refresh_startup_theme)
+        QTimer.singleShot(0, self._refreshStartupTheme)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
     def __initNavigation(self):
         self.homeNavItem = self.addSubInterface(
-            self.homeInterface,
-            FIF.HOME,
-            self.tr("Home"),
-            FIF.HOME_FILL
+            self.homeInterface, FIF.HOME, self.tr("Home"), FIF.HOME_FILL
         )
         self.deviceNavItem = self.addSubInterface(
-            self.deviceInterface,
-            FIF.DEVELOPER_TOOLS,
-            self.tr("Serial")
+            self.deviceInterface, FIF.DEVELOPER_TOOLS, self.tr("Serial")
         )
-        self.powerNavItem =self.addSubInterface(
-            self.powerInterface,
-            FIF.POWER_BUTTON,
-            self.tr("Device")
+        self.powerNavItem = self.addSubInterface(
+            self.powerInterface, FIF.POWER_BUTTON, self.tr("Device")
         )
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface,
-            FIF.IOT,
-            "DAPLink"
+            self.daplinkInterface, FIF.IOT, self.tr("DAPLink")
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
@@ -109,15 +98,15 @@ class Window(UMainWindow):
             logger.error(f"PowerPage shutdown failed during window close: {exc}")
         super().closeEvent(event)
 
-    def _on_theme_changed(self, *_):
+    def _onThemeChanged(self, *_):
         dark = isDarkTheme()
-        bg_color = "#1F1F1F" if dark else "#F3F3F3"
-        self.setStyleSheet(f"Window {{ background: {bg_color}; }}")
+        bgColor = "#1F1F1F" if dark else "#F3F3F3"
+        self.setStyleSheet(f"Window {{ background: {bgColor}; }}")
 
-    def _refresh_startup_theme(self):
+    def _refreshStartupTheme(self):
         setTheme(cfg.themeMode.value)
 
-    def _retranslate_ui(self):
+    def _applyTexts(self):
         self.homeNavItem.setText(self.tr("Home"))
         self.deviceNavItem.setText(self.tr("Serial"))
         self.powerNavItem.setText(self.tr("Device"))
@@ -125,16 +114,14 @@ class Window(UMainWindow):
         self.settingNavItem.setText(self.tr("Settings"))
         self.setWindowTitle("Fluor4CellPower")
 
-    def changeEvent(self, event):
-        super().changeEvent(event)
-        if event.type() == QEvent.Type.LanguageChange:
-            self._retranslate_ui()
-
 
 if __name__ == "__main__":
     import sys
+
     logger.info("main is running")
-    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
@@ -142,7 +129,7 @@ if __name__ == "__main__":
     try:
         app = QApplication(sys.argv)
 
-        setTheme(cfg.themeMode.value)
+        # setTheme(cfg.themeMode.value)
         language_manager.apply_language(app)
         load_saved_font(app)
 

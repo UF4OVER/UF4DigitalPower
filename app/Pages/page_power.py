@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 import pyqtgraph as pg
-from PyQt5.QtCore import QEvent, QMetaObject, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -34,9 +34,11 @@ from app.Core import DeviceScanner, StyleSheet, showMessage
 from app.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 
 
-def _read_port_identity() -> tuple[int, int]:
+def _readPortIdentity() -> tuple[int, int]:
     try:
-        return int(SettingMangerInstance.get("port", "vid")), int(SettingMangerInstance.get("port", "pid"))
+        return int(SettingMangerInstance.get("port", "vid")), int(
+            SettingMangerInstance.get("port", "pid")
+        )
     except Exception as exc:
         logger.error(f"Failed to load VID/PID from settings: {exc}")
         return -1, -1
@@ -86,7 +88,7 @@ class MetricCard(CardWidget):
         self.titleLabel.setStyleSheet(f"color: {self._accent};")
         self.unitLabel.setStyleSheet(f"color: {self._accent};")
 
-    def set_metric(self, metric: _MetricValue, extra: str = "") -> None:
+    def setMetric(self, metric: _MetricValue, extra: str = "") -> None:
         self.titleLabel.setText(metric.title)
         self.valueLabel.setText(metric.value)
         self.unitLabel.setText(metric.unit)
@@ -98,7 +100,14 @@ class ParameterRow(QWidget):
     VALUE_COLUMN_WIDTH = 118
     UNIT_COLUMN_WIDTH = 52
 
-    def __init__(self, name: str, access: str, unit: str = "", editable: bool = False, parent=None):
+    def __init__(
+        self,
+        name: str,
+        access: str,
+        unit: str = "",
+        editable: bool = False,
+        parent=None,
+    ):
         super().__init__(parent)
         self._editable = editable
         self._unit = unit
@@ -132,19 +141,25 @@ class ParameterRow(QWidget):
         layout.setSpacing(10)
         layout.addWidget(self.nameLabel, 0)
         layout.addWidget(self.accessBadge, 0)
-        layout.addWidget(self.valueLabel if not editable else self.editor, 0, Qt.AlignRight)
+        layout.addWidget(
+            self.valueLabel if not editable else self.editor, 0, Qt.AlignRight
+        )
         layout.addWidget(self.unitLabel, 0)
         layout.addStretch(1)
 
-    def set_display_value(self, value: str) -> None:
+    def setDisplayValue(self, value: str) -> None:
         self.valueLabel.setText(value)
         if self._editable and not self.editor.hasFocus():
             self.editor.setText(value)
 
     def text(self) -> str:
-        return self.editor.text().strip() if self._editable else self.valueLabel.text().strip()
+        return (
+            self.editor.text().strip()
+            if self._editable
+            else self.valueLabel.text().strip()
+        )
 
-    def retranslate_ui(self) -> None:
+    def applyTexts(self) -> None:
         self.nameLabel.setText(self.tr(self._name))
         if self._editable:
             self.editor.setPlaceholderText(self._unit or "value")
@@ -174,18 +189,22 @@ class TrendPlotCard(CardWidget):
 
         self.voltageInCurve = self.plotWidget.plot(name="VIN", pen=pg.mkPen(width=2))
         self.voltageOutCurve = self.plotWidget.plot(name="VOUT", pen=pg.mkPen(width=2))
-        self.currentInCurve = self.plotWidget.plot(name="IIN", pen=pg.mkPen(width=2, style=Qt.DashLine))
-        self.currentOutCurve = self.plotWidget.plot(name="IOUT", pen=pg.mkPen(width=2, style=Qt.DotLine))
+        self.currentInCurve = self.plotWidget.plot(
+            name="IIN", pen=pg.mkPen(width=2, style=Qt.DashLine)
+        )
+        self.currentOutCurve = self.plotWidget.plot(
+            name="IOUT", pen=pg.mkPen(width=2, style=Qt.DotLine)
+        )
 
         self.voltageInCurve.setClipToView(True)
         self.voltageOutCurve.setClipToView(True)
         self.currentInCurve.setClipToView(True)
         self.currentOutCurve.setClipToView(True)
 
-        plot_panel_layout = QVBoxLayout(self.plotPanel)
-        plot_panel_layout.setContentsMargins(14, 14, 14, 14)
-        plot_panel_layout.setSpacing(0)
-        plot_panel_layout.addWidget(self.plotWidget)
+        plotPanelLayout = QVBoxLayout(self.plotPanel)
+        plotPanelLayout.setContentsMargins(14, 14, 14, 14)
+        plotPanelLayout.setSpacing(0)
+        plotPanelLayout.addWidget(self.plotWidget)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -194,83 +213,91 @@ class TrendPlotCard(CardWidget):
         layout.addWidget(self.tipLabel)
         layout.addWidget(self.plotPanel)
 
-        self.retranslate_ui()
-        self.refresh_theme()
+        self.applyTexts()
+        self.refreshTheme()
 
-    def retranslate_ui(self) -> None:
+    def applyTexts(self) -> None:
         self.titleLabel.setText(self.tr("Voltage / Current Trend"))
-        self.tipLabel.setText(self.tr("Wheel zoom, left drag pan, right drag zoom area"))
+        self.tipLabel.setText(
+            self.tr("Wheel zoom, left drag pan, right drag zoom area")
+        )
 
-    def refresh_theme(self) -> None:
+    def refreshTheme(self) -> None:
         dark = isDarkTheme()
-        card_border = "rgba(255,255,255,0.08)" if dark else "rgba(0,0,0,0.08)"
-        panel_background = "rgba(15, 23, 42, 0.72)" if dark else "rgba(248, 250, 252, 0.98)"
-        panel_border = "rgba(255,255,255,0.10)" if dark else "rgba(15,23,42,0.08)"
+        cardBorder = "rgba(255,255,255,0.08)" if dark else "rgba(0,0,0,0.08)"
+        panelBackground = (
+            "rgba(15, 23, 42, 0.72)" if dark else "rgba(248, 250, 252, 0.98)"
+        )
+        panelBorder = "rgba(255,255,255,0.10)" if dark else "rgba(15,23,42,0.08)"
         axis = "#DCE3EA" if dark else "#334155"
-        title_color = "#F5F7FA" if dark else "#111827"
-        tip_color = "#9AA4B2" if dark else "#6B7280"
-        legend_background = QColor(9, 14, 24, 188) if dark else QColor(255, 255, 255, 232)
-        legend_border = QColor(255, 255, 255, 28) if dark else QColor(15, 23, 42, 22)
-        border_pen_color = QColor(255, 255, 255, 24) if dark else QColor(15, 23, 42, 24)
+        titleColor = "#F5F7FA" if dark else "#111827"
+        tipColor = "#9AA4B2" if dark else "#6B7280"
+        legendBackground = (
+            QColor(9, 14, 24, 188) if dark else QColor(255, 255, 255, 232)
+        )
+        legendBorder = QColor(255, 255, 255, 28) if dark else QColor(15, 23, 42, 22)
+        borderPenColor = QColor(255, 255, 255, 24) if dark else QColor(15, 23, 42, 24)
 
-        self.setStyleSheet(
-            f"""
+        self.setStyleSheet(f"""
             #trendPlotCard {{
-                border: 1px solid {card_border};
+                border: 1px solid {cardBorder};
                 border-radius: 18px;
             }}
             #trendPlotPanel {{
-                background: {panel_background};
-                border: 1px solid {panel_border};
+                background: {panelBackground};
+                border: 1px solid {panelBorder};
                 border-radius: 14px;
             }}
-            """
-        )
-        self.titleLabel.setStyleSheet(f"color: {title_color};")
-        self.tipLabel.setStyleSheet(f"color: {tip_color};")
+            """)
+        self.titleLabel.setStyleSheet(f"color: {titleColor};")
+        self.tipLabel.setStyleSheet(f"color: {tipColor};")
 
         self.plotWidget.setBackground((0, 0, 0, 0))
-        plot_item = self.plotWidget.getPlotItem()
-        plot_item.setTitle("")
-        plot_item.getAxis("left").setTextPen(axis)
-        plot_item.getAxis("bottom").setTextPen(axis)
-        plot_item.getAxis("left").setPen(pg.mkPen(axis))
-        plot_item.getAxis("bottom").setPen(pg.mkPen(axis))
-        plot_item.getAxis("left").setLabel(self.tr("Scaled Value"), color=axis)
-        plot_item.getAxis("bottom").setLabel(self.tr("Samples"), color=axis)
-        plot_item.getViewBox().setBorder(pg.mkPen(border_pen_color))
-        plot_item.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
+        plotItem = self.plotWidget.getPlotItem()
+        plotItem.setTitle("")
+        plotItem.getAxis("left").setTextPen(axis)
+        plotItem.getAxis("bottom").setTextPen(axis)
+        plotItem.getAxis("left").setPen(pg.mkPen(axis))
+        plotItem.getAxis("bottom").setPen(pg.mkPen(axis))
+        plotItem.getAxis("left").setLabel(self.tr("Scaled Value"), color=axis)
+        plotItem.getAxis("bottom").setLabel(self.tr("Samples"), color=axis)
+        plotItem.getViewBox().setBorder(pg.mkPen(borderPenColor))
+        plotItem.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
 
-        for axis_name in ("left", "bottom"):
-            axis_item = plot_item.getAxis(axis_name)
-            axis_item.setTickPen(pg.mkPen(axis))
-            axis_item.setStyle(tickTextOffset=10)
+        for axisName in ("left", "bottom"):
+            axisItem = plotItem.getAxis(axisName)
+            axisItem.setTickPen(pg.mkPen(axis))
+            axisItem.setStyle(tickTextOffset=10)
 
         self.voltageInCurve.setPen(pg.mkPen(QColor("#2F80ED"), width=2))
         self.voltageOutCurve.setPen(pg.mkPen(QColor("#27AE60"), width=2))
-        self.currentInCurve.setPen(pg.mkPen(QColor("#F2994A"), width=2, style=Qt.DashLine))
-        self.currentOutCurve.setPen(pg.mkPen(QColor("#EB5757"), width=2, style=Qt.DotLine))
+        self.currentInCurve.setPen(
+            pg.mkPen(QColor("#F2994A"), width=2, style=Qt.DashLine)
+        )
+        self.currentOutCurve.setPen(
+            pg.mkPen(QColor("#EB5757"), width=2, style=Qt.DotLine)
+        )
 
         if self.legend is not None:
-            self.legend.setBrush(legend_background)
-            self.legend.setPen(legend_border)
+            self.legend.setBrush(legendBackground)
+            self.legend.setPen(legendBorder)
             self.legend.setLabelTextColor(axis)
             self.legend.setLabelTextSize("9pt")
-        plot_item.getAxis("left").setGrid(64)
-        plot_item.getAxis("bottom").setGrid(64)
+        plotItem.getAxis("left").setGrid(64)
+        plotItem.getAxis("bottom").setGrid(64)
 
-    def update_series(
+    def updateSeries(
         self,
-        x_values: list[float],
+        xValues: list[float],
         vin: list[float],
         vout: list[float],
         iin: list[float],
         iout: list[float],
     ) -> None:
-        self.voltageInCurve.setData(x_values, vin)
-        self.voltageOutCurve.setData(x_values, vout)
-        self.currentInCurve.setData(x_values, iin)
-        self.currentOutCurve.setData(x_values, iout)
+        self.voltageInCurve.setData(xValues, vin)
+        self.voltageOutCurve.setData(xValues, vout)
+        self.currentInCurve.setData(xValues, iin)
+        self.currentOutCurve.setData(xValues, iout)
 
 
 class PowerPage(ScrollArea):
@@ -287,21 +314,21 @@ class PowerPage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("PowerPage")
-        self._shutdown_done = False
+        self._shutdownDone = False
 
-        vid, pid = _read_port_identity()
+        vid, pid = _readPortIdentity()
         self._client = F4CPPowerClient()
         self._clientThread = QThread(self)
         self._client.moveToThread(self._clientThread)
         self._clientThread.finished.connect(self._client.deleteLater)
         self._clientThread.start()
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
-        self._last_status: PowerStatus | None = None
-        self._last_verbose_log_ts = 0.0
-        self._history_dirty = False
-        self._plot_refresh_timer = QTimer(self)
-        self._plot_refresh_timer.setInterval(200)
-        self._plot_refresh_timer.timeout.connect(self._flush_plot_update)
+        self._lastStatus: PowerStatus | None = None
+        self._lastVerboseLogTs = 0.0
+        self._historyDirty = False
+        self._plotRefreshTimer = QTimer(self)
+        self._plotRefreshTimer.setInterval(200)
+        self._plotRefreshTimer.timeout.connect(self._flushPlotUpdate)
         self._history = {
             "t": collections.deque(maxlen=240),
             "vin": collections.deque(maxlen=240),
@@ -319,26 +346,26 @@ class PowerPage(ScrollArea):
         self.titleLabel = TitleLabel(self.scrollWidget)
         self.rootLayout.addWidget(self.titleLabel)
 
-        self._init_summary_card()
-        self._init_metric_cards()
-        self._init_parameter_cards()
-        self._init_plot_card()
-        self._init_log_card()
+        self._initSummaryCard()
+        self._initMetricCards()
+        self._initParameterCards()
+        self._initPlotCard()
+        self._initLogCard()
 
         self.setWidget(self.scrollWidget)
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setViewportMargins(0, 0, 0, 0)
 
-        self._bind_signals()
-        self._apply_disconnected_state()
+        self._bindSignals()
+        self._applyDisconnectedState()
         StyleSheet.POWER_PAGE.apply(self)
-        self._refresh_theme_bundle()
-        self._retranslate_ui()
+        self._refreshThemeBundle()
+        self._applyTexts()
 
         self._scanner.start()
 
-    def _init_summary_card(self) -> None:
+    def _initSummaryCard(self) -> None:
         self.summaryCard = CardWidget(self.scrollWidget)
         self.summaryCard.setObjectName("powerSummaryCard")
         layout = QHBoxLayout(self.summaryCard)
@@ -371,10 +398,9 @@ class PowerPage(ScrollArea):
         layout.addWidget(self.refreshButton)
         layout.addWidget(self.debugButton)
 
-
         self.rootLayout.addWidget(self.summaryCard)
 
-    def _init_metric_cards(self) -> None:
+    def _initMetricCards(self) -> None:
         self.metricsGrid = QGridLayout()
         self.metricsGrid.setHorizontalSpacing(12)
         self.metricsGrid.setVerticalSpacing(12)
@@ -401,7 +427,7 @@ class PowerPage(ScrollArea):
 
         self.rootLayout.addLayout(self.metricsGrid)
 
-    def _init_parameter_cards(self) -> None:
+    def _initParameterCards(self) -> None:
         self.parameterRowLayout = QHBoxLayout()
         self.parameterRowLayout.setSpacing(12)
 
@@ -420,8 +446,12 @@ class PowerPage(ScrollArea):
         readLayout.addWidget(self.readCardTitle)
 
         self.readParams = {
-            "core_temp": ParameterRow("Core Temperature", "RO", "°C", False, self.readCard),
-            "board_temp": ParameterRow("Board Temperature", "RO", "°C", False, self.readCard),
+            "core_temp": ParameterRow(
+                "Core Temperature", "RO", "°C", False, self.readCard
+            ),
+            "board_temp": ParameterRow(
+                "Board Temperature", "RO", "°C", False, self.readCard
+            ),
             "mode": ParameterRow("CC/CV Mode", "RO", "", False, self.readCard),
             "topology": ParameterRow("Topology", "RO", "", False, self.readCard),
             "state_flag": ParameterRow("State Machine", "RO", "", False, self.readCard),
@@ -439,8 +469,12 @@ class PowerPage(ScrollArea):
         writeLayout.addWidget(self.writeCardTitle)
 
         self.writeParams = {
-            "set_voltage": ParameterRow("Set Voltage Limit", "RW", "V", True, self.writeCard),
-            "set_current": ParameterRow("Set Current Limit", "RW", "A", True, self.writeCard),
+            "set_voltage": ParameterRow(
+                "Set Voltage Limit", "RW", "V", True, self.writeCard
+            ),
+            "set_current": ParameterRow(
+                "Set Current Limit", "RW", "A", True, self.writeCard
+            ),
             "ovp": ParameterRow("OVP Set Value", "RW", "V", True, self.writeCard),
             "ocp": ParameterRow("OCP Set Value", "RW", "A", True, self.writeCard),
             "otp": ParameterRow("OTP Set Value", "RW", "°C", True, self.writeCard),
@@ -466,11 +500,11 @@ class PowerPage(ScrollArea):
 
         self.rootLayout.addLayout(self.parameterRowLayout)
 
-    def _init_plot_card(self) -> None:
+    def _initPlotCard(self) -> None:
         self.plotCard = TrendPlotCard(self.scrollWidget)
         self.rootLayout.addWidget(self.plotCard)
 
-    def _init_log_card(self) -> None:
+    def _initLogCard(self) -> None:
         self.logCard = CardWidget(self.scrollWidget)
         self.logCard.setObjectName("powerLogCard")
         layout = QVBoxLayout(self.logCard)
@@ -496,65 +530,77 @@ class PowerPage(ScrollArea):
         layout.addWidget(self.logEdit)
         self.rootLayout.addWidget(self.logCard)
 
-    def _bind_signals(self) -> None:
-        self._scanner.device_connected.connect(self.on_device_connected)
-        self._scanner.device_disconnected.connect(self.on_device_disconnected)
+    def _bindSignals(self) -> None:
+        self._scanner.device_connected.connect(self.onDeviceConnected)
+        self._scanner.device_disconnected.connect(self.onDeviceDisconnected)
 
-        self._client.log.connect(self._append_log)
-        self._client.error.connect(self._on_client_error)
-        self._client.connectionChanged.connect(self._on_connection_changed)
-        self._client.statusUpdated.connect(self._update_status_view)
-        self._client.debugSnapshotReady.connect(self._handle_debug_snapshot_ready)
-        self._client.outputLimitsWritten.connect(self._on_output_limits_written)
-        self._client.protectionValuesWritten.connect(self._on_protection_values_written)
-        self._client.powerStateWritten.connect(self._on_power_state_written)
+        self._client.log.connect(self._appendLog)
+        self._client.error.connect(self._onClientError)
+        self._client.connectionChanged.connect(self._onConnectionChanged)
+        self._client.statusUpdated.connect(self._updateStatusView)
+        self._client.debugSnapshotReady.connect(self._handleDebugSnapshotReady)
+        self._client.outputLimitsWritten.connect(self._onOutputLimitsWritten)
+        self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
+        self._client.powerStateWritten.connect(self._onPowerStateWritten)
 
         self.attachSessionRequested.connect(self._client.attach_session)
         self.detachSessionRequested.connect(self._client.detach_session)
         self.readStatusRequested.connect(self._client.request_read_status)
         self.debugSnapshotRequested.connect(self._client.request_debug_snapshot)
         self.outputLimitsRequested.connect(self._client.request_set_output_limits)
-        self.protectionValuesRequested.connect(self._client.request_set_protection_values)
+        self.protectionValuesRequested.connect(
+            self._client.request_set_protection_values
+        )
         self.powerStateRequested.connect(self._client.request_set_power_state)
         self.startPollingRequested.connect(self._client.start_polling)
         self.stopPollingRequested.connect(self._client.stop_polling)
 
-        self.refreshButton.clicked.connect(self._read_status_once)
-        self.debugButton.clicked.connect(self._run_debug_snapshot)
-        self.autoPollSwitch.checkedChanged.connect(self._on_auto_poll_changed)
-        self.outputSwitch.checkedChanged.connect(self._on_output_switch_changed)
-        self.applySetButton.clicked.connect(self._apply_output_limits)
-        self.applyProtectButton.clicked.connect(self._apply_protection_values)
+        self.refreshButton.clicked.connect(self._readStatusOnce)
+        self.debugButton.clicked.connect(self._runDebugSnapshot)
+        self.autoPollSwitch.checkedChanged.connect(self._onAutoPollChanged)
+        self.outputSwitch.checkedChanged.connect(self._onOutputSwitchChanged)
+        self.applySetButton.clicked.connect(self._applyOutputLimits)
+        self.applyProtectButton.clicked.connect(self._applyProtectionValues)
         self.clearLogButton.clicked.connect(self.logEdit.clear)
-        cfg.themeChanged.connect(self._on_theme_changed)
+        cfg.themeChanged.connect(self._onThemeChanged)
 
-    def on_device_connected(self, session) -> None:
+    def onDeviceConnected(self, session) -> None:
         self.attachSessionRequested.emit(session)
         self.deviceLabel.setText(session.cfg.port or self.tr("Unknown"))
         self.stateBadge.setText(self.tr("ONLINE"))
         self.stateBadge.setProperty("onlineState", "online")
-        self._append_log(f"Connected on {session.cfg.port}")
+        self._appendLog(f"Connected on {session.cfg.port}")
         if self.autoPollSwitch.isChecked():
             self.startPollingRequested.emit(500)
-        showMessage(self, self.tr("Device Connected"), self.tr("Power device session attached."), level="success")
-        self._read_status_once()
+        showMessage(
+            self,
+            self.tr("Device Connected"),
+            self.tr("Power device session attached."),
+            level="success",
+        )
+        self._readStatusOnce()
 
-    def on_device_disconnected(self) -> None:
+    def onDeviceDisconnected(self) -> None:
         self.detachSessionRequested.emit()
-        self._apply_disconnected_state()
-        self._append_log("Device disconnected")
-        showMessage(self, self.tr("Device Disconnected"), self.tr("Power device session closed."), level="error")
+        self._applyDisconnectedState()
+        self._appendLog("Device disconnected")
+        showMessage(
+            self,
+            self.tr("Device Disconnected"),
+            self.tr("Power device session closed."),
+            level="error",
+        )
 
     def closeEvent(self, event) -> None:
         self.shutdown()
         super().closeEvent(event)
 
     def shutdown(self) -> None:
-        if self._shutdown_done:
+        if self._shutdownDone:
             return
 
-        self._shutdown_done = True
-        self._plot_refresh_timer.stop()
+        self._shutdownDone = True
+        self._plotRefreshTimer.stop()
 
         try:
             self._scanner.stop()
@@ -563,7 +609,9 @@ class PowerPage(ScrollArea):
 
         try:
             if self._clientThread.isRunning():
-                QMetaObject.invokeMethod(self._client, "shutdown", Qt.BlockingQueuedConnection)
+                QMetaObject.invokeMethod(
+                    self._client, "shutdown", Qt.BlockingQueuedConnection
+                )
         except Exception as exc:
             logger.error(f"PowerPage client shutdown failed: {exc}")
 
@@ -572,107 +620,138 @@ class PowerPage(ScrollArea):
             if not self._clientThread.wait(3000):
                 logger.error("PowerPage client thread did not exit within 3000 ms")
 
-    def _read_status_once(self) -> None:
+    def _readStatusOnce(self) -> None:
         if not self._client.is_connected:
-            self._append_log("ERR: Serial session is not connected")
+            self._appendLog("ERR: Serial session is not connected")
             return
         self.readStatusRequested.emit()
 
-    def _run_debug_snapshot(self) -> None:
+    def _runDebugSnapshot(self) -> None:
         if not self._client.is_connected:
-            self._append_log("ERR: Serial session is not connected")
+            self._appendLog("ERR: Serial session is not connected")
             return
         self.debugSnapshotRequested.emit()
 
-    def _apply_output_limits(self) -> None:
+    def _applyOutputLimits(self) -> None:
         if not self._client.is_connected:
-            self._append_log("ERR: Serial session is not connected")
+            self._appendLog("ERR: Serial session is not connected")
             return
-        voltage_mv = int(round(float(self.writeParams["set_voltage"].text() or "0") * 1000))
-        current_ma = int(round(float(self.writeParams["set_current"].text() or "0") * 1000))
-        self.outputLimitsRequested.emit(voltage_mv, current_ma)
+        voltageMv = int(
+            round(float(self.writeParams["set_voltage"].text() or "0") * 1000)
+        )
+        currentMa = int(
+            round(float(self.writeParams["set_current"].text() or "0") * 1000)
+        )
+        self.outputLimitsRequested.emit(voltageMv, currentMa)
 
-    def _apply_protection_values(self) -> None:
+    def _applyProtectionValues(self) -> None:
         if not self._client.is_connected:
-            self._append_log("ERR: Serial session is not connected")
+            self._appendLog("ERR: Serial session is not connected")
             return
-        ovp_mv = int(round(float(self.writeParams["ovp"].text() or "0") * 1000))
-        ocp_ma = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
-        otp_mc = int(round(float(self.writeParams["otp"].text() or "0") * 1000))
-        fan_value = int(float(self.writeParams["fan_set"].text() or "0"))
-        self.protectionValuesRequested.emit(ovp_mv, ocp_ma, otp_mc, fan_value)
+        ovpMv = int(round(float(self.writeParams["ovp"].text() or "0") * 1000))
+        ocpMa = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
+        otpMc = int(round(float(self.writeParams["otp"].text() or "0") * 1000))
+        fanValue = int(float(self.writeParams["fan_set"].text() or "0"))
+        self.protectionValuesRequested.emit(ovpMv, ocpMa, otpMc, fanValue)
 
-    def _on_auto_poll_changed(self, checked: bool) -> None:
+    def _onAutoPollChanged(self, checked: bool) -> None:
         if checked:
             self.startPollingRequested.emit(500)
-            self._append_log("Auto polling enabled")
+            self._appendLog("Auto polling enabled")
         else:
             self.stopPollingRequested.emit()
-            self._append_log("Auto polling disabled")
+            self._appendLog("Auto polling disabled")
 
-    def _on_output_switch_changed(self, checked: bool) -> None:
+    def _onOutputSwitchChanged(self, checked: bool) -> None:
         if not self._client.is_connected:
             return
         self.powerStateRequested.emit(checked)
 
-    def _on_connection_changed(self, connected: bool) -> None:
+    def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setText(self.tr("ONLINE") if connected else self.tr("OFFLINE"))
         self.stateBadge.setProperty("onlineState", "online" if connected else "offline")
-        self._refresh_state_badge_style()
+        self._refreshStateBadgeStyle()
         if not connected:
-            self._apply_disconnected_state()
+            self._applyDisconnectedState()
 
-    def _update_status_view(self, status: PowerStatus) -> None:
-        self._last_status = status
+    def _updateStatusView(self, status: PowerStatus) -> None:
+        self._lastStatus = status
 
-        self.metricCards["vin"].set_metric(_MetricValue(self.tr("Input Voltage"), f"{status.vin_v:.3f}", "V"), f"raw source active | pin={status.pin_w:.2f} W")
-        self.metricCards["iin"].set_metric(_MetricValue(self.tr("Input Current"), f"{status.iin_a:.3f}", "A"), f"efficiency basis | cc/cv={status.mode_name}")
-        self.metricCards["pin"].set_metric(_MetricValue(self.tr("Input Power"), f"{status.pin_w:.3f}", "W"), f"fault mask 0x{status.fault_state:04X}")
-        self.metricCards["vout"].set_metric(_MetricValue(self.tr("Output Voltage"), f"{status.vout_v:.3f}", "V"), f"ovp={status.ovp_set_value_v:.3f} V")
-        self.metricCards["iout"].set_metric(_MetricValue(self.tr("Output Current"), f"{status.iout_a:.3f}", "A"), f"ocp={status.ocp_set_value_a:.3f} A")
-        self.metricCards["pout"].set_metric(_MetricValue(self.tr("Output Power"), f"{status.pout_w:.3f}", "W"), f"efficiency={status.efficiency:.2f} %")
+        self.metricCards["vin"].setMetric(
+            _MetricValue(self.tr("Input Voltage"), f"{status.vin_v:.3f}", "V"),
+            f"raw source active | pin={status.pin_w:.2f} W",
+        )
+        self.metricCards["iin"].setMetric(
+            _MetricValue(self.tr("Input Current"), f"{status.iin_a:.3f}", "A"),
+            f"efficiency basis | cc/cv={status.mode_name}",
+        )
+        self.metricCards["pin"].setMetric(
+            _MetricValue(self.tr("Input Power"), f"{status.pin_w:.3f}", "W"),
+            f"fault mask 0x{status.fault_state:04X}",
+        )
+        self.metricCards["vout"].setMetric(
+            _MetricValue(self.tr("Output Voltage"), f"{status.vout_v:.3f}", "V"),
+            f"ovp={status.ovp_set_value_v:.3f} V",
+        )
+        self.metricCards["iout"].setMetric(
+            _MetricValue(self.tr("Output Current"), f"{status.iout_a:.3f}", "A"),
+            f"ocp={status.ocp_set_value_a:.3f} A",
+        )
+        self.metricCards["pout"].setMetric(
+            _MetricValue(self.tr("Output Power"), f"{status.pout_w:.3f}", "W"),
+            f"efficiency={status.efficiency:.2f} %",
+        )
 
-        self.readParams["core_temp"].set_display_value(f"{status.core_temp_c:.3f}")
-        self.readParams["board_temp"].set_display_value(f"{status.board_temp_c:.3f}")
-        self.readParams["mode"].set_display_value(status.mode_name)
-        self.readParams["topology"].set_display_value(status.topology_name)
-        self.readParams["state_flag"].set_display_value(status.state_flag_name)
-        self.readParams["fault"].set_display_value(pretty_faults(status.fault_state) or self.tr("None"))
-        self.readParams["fan_speed"].set_display_value(str(status.fan_speed))
+        self.readParams["core_temp"].setDisplayValue(f"{status.core_temp_c:.3f}")
+        self.readParams["board_temp"].setDisplayValue(f"{status.board_temp_c:.3f}")
+        self.readParams["mode"].setDisplayValue(status.mode_name)
+        self.readParams["topology"].setDisplayValue(status.topology_name)
+        self.readParams["state_flag"].setDisplayValue(status.state_flag_name)
+        self.readParams["fault"].setDisplayValue(
+            pretty_faults(status.fault_state) or self.tr("None")
+        )
+        self.readParams["fan_speed"].setDisplayValue(str(status.fan_speed))
 
-        self.writeParams["set_voltage"].set_display_value(f"{status.set_voltage_limit_mv / 1000.0:.3f}")
-        self.writeParams["set_current"].set_display_value(f"{status.set_current_limit_ma / 1000.0:.3f}")
-        self.writeParams["ovp"].set_display_value(f"{status.ovp_set_value_v:.3f}")
-        self.writeParams["ocp"].set_display_value(f"{status.ocp_set_value_a:.3f}")
-        self.writeParams["otp"].set_display_value(f"{status.otp_set_value_c:.3f}")
-        self.writeParams["fan_set"].set_display_value(str(status.fan_set_value))
+        self.writeParams["set_voltage"].setDisplayValue(
+            f"{status.set_voltage_limit_mv / 1000.0:.3f}"
+        )
+        self.writeParams["set_current"].setDisplayValue(
+            f"{status.set_current_limit_ma / 1000.0:.3f}"
+        )
+        self.writeParams["ovp"].setDisplayValue(f"{status.ovp_set_value_v:.3f}")
+        self.writeParams["ocp"].setDisplayValue(f"{status.ocp_set_value_a:.3f}")
+        self.writeParams["otp"].setDisplayValue(f"{status.otp_set_value_c:.3f}")
+        self.writeParams["fan_set"].setDisplayValue(str(status.fan_set_value))
 
         self.outputSwitch.blockSignals(True)
         self.outputSwitch.setChecked(status.power_enabled)
         self.outputSwitch.blockSignals(False)
 
-        self._append_history(status)
-        if self.logLevelCombo.currentData() == "verbose" and time.monotonic() - self._last_verbose_log_ts >= 2.0:
-            self._last_verbose_log_ts = time.monotonic()
-            self._append_log(self._client.pretty_print_status(status))
+        self._appendHistory(status)
+        if (
+            self.logLevelCombo.currentData() == "verbose"
+            and time.monotonic() - self._lastVerboseLogTs >= 2.0
+        ):
+            self._lastVerboseLogTs = time.monotonic()
+            self._appendLog(self._client.pretty_print_status(status))
 
-    def _append_history(self, status: PowerStatus) -> None:
+    def _appendHistory(self, status: PowerStatus) -> None:
         index = self._history["t"][-1] + 1 if self._history["t"] else 0
         self._history["t"].append(index)
         self._history["vin"].append(status.vin_v)
         self._history["vout"].append(status.vout_v)
         self._history["iin"].append(status.iin_a)
         self._history["iout"].append(status.iout_a)
-        self._history_dirty = True
-        if not self._plot_refresh_timer.isActive():
-            self._plot_refresh_timer.start()
+        self._historyDirty = True
+        if not self._plotRefreshTimer.isActive():
+            self._plotRefreshTimer.start()
 
-    def _flush_plot_update(self) -> None:
-        if not self._history_dirty:
-            self._plot_refresh_timer.stop()
+    def _flushPlotUpdate(self) -> None:
+        if not self._historyDirty:
+            self._plotRefreshTimer.stop()
             return
-        self._history_dirty = False
-        self.plotCard.update_series(
+        self._historyDirty = False
+        self.plotCard.updateSeries(
             tuple(self._history["t"]),
             tuple(self._history["vin"]),
             tuple(self._history["vout"]),
@@ -680,48 +759,63 @@ class PowerPage(ScrollArea):
             tuple(self._history["iout"]),
         )
 
-    def _diagnose_debug_snapshot(self, snapshot: DebugSnapshot) -> str:
+    def _diagnoseDebugSnapshot(self, snapshot: DebugSnapshot) -> str:
         if snapshot.output_voltage_raw >= 4090:
             return "DEBUG_JUDGEMENT: type27 is close to 4095, check MCU ADC/front-end first."
-        if snapshot.ovp_set_value_mv == 33000 and abs(snapshot.output_voltage_mv - snapshot.ovp_set_value_mv) <= 5:
+        if (
+            snapshot.ovp_set_value_mv == 33000
+            and abs(snapshot.output_voltage_mv - snapshot.ovp_set_value_mv) <= 5
+        ):
             return "DEBUG_JUDGEMENT: type32=33000 overlaps type12, field mapping is likely wrong on host side."
         return "DEBUG_JUDGEMENT: type27 is reasonable, if UI is still wrong check host parsing/binding."
 
-    def _apply_disconnected_state(self) -> None:
+    def _applyDisconnectedState(self) -> None:
         self.deviceLabel.setText(self.tr("Disconnected"))
         self.stateBadge.setText(self.tr("OFFLINE"))
         self.stateBadge.setProperty("onlineState", "offline")
-        self._refresh_state_badge_style()
+        self._refreshStateBadgeStyle()
         self.outputSwitch.blockSignals(True)
         self.outputSwitch.setChecked(False)
         self.outputSwitch.blockSignals(False)
 
-    def _append_log(self, text: str) -> None:
-        if not (text.startswith("REQ ") or text.startswith("RX ") or text.startswith("TX ")):
+    def _appendLog(self, text: str) -> None:
+        if not (
+            text.startswith("REQ ") or text.startswith("RX ") or text.startswith("TX ")
+        ):
             logger.info(text)
         ts = time.strftime("%H:%M:%S")
         self.logEdit.append(f"[{ts}] {text}")
 
-    def _on_client_error(self, message: str) -> None:
-        self._append_log(f"ERR: {message}")
+    def _onClientError(self, message: str) -> None:
+        self._appendLog(f"ERR: {message}")
         showMessage(self, self.tr("Communication Error"), message, level="error")
 
-    def _handle_debug_snapshot_ready(self, snapshot: DebugSnapshot) -> None:
-        self._append_log(self._client.pretty_print_debug_snapshot(snapshot))
-        self._append_log(self._diagnose_debug_snapshot(snapshot))
+    def _handleDebugSnapshotReady(self, snapshot: DebugSnapshot) -> None:
+        self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
+        self._appendLog(self._diagnoseDebugSnapshot(snapshot))
 
-    def _on_output_limits_written(self) -> None:
-        showMessage(self, self.tr("Output Updated"), self.tr("Voltage/current limits have been written."), level="success")
-        self._read_status_once()
+    def _onOutputLimitsWritten(self) -> None:
+        showMessage(
+            self,
+            self.tr("Output Updated"),
+            self.tr("Voltage/current limits have been written."),
+            level="success",
+        )
+        self._readStatusOnce()
 
-    def _on_protection_values_written(self) -> None:
-        showMessage(self, self.tr("Protection Updated"), self.tr("OVP/OCP/OTP/Fan parameters have been written."), level="success")
-        self._read_status_once()
+    def _onProtectionValuesWritten(self) -> None:
+        showMessage(
+            self,
+            self.tr("Protection Updated"),
+            self.tr("OVP/OCP/OTP/Fan parameters have been written."),
+            level="success",
+        )
+        self._readStatusOnce()
 
-    def _on_power_state_written(self, enabled: bool) -> None:
-        self._append_log(f"Output set to {'ON' if enabled else 'OFF'}")
+    def _onPowerStateWritten(self, enabled: bool) -> None:
+        self._appendLog(f"Output set to {'ON' if enabled else 'OFF'}")
 
-    def _retranslate_ui(self) -> None:
+    def _applyTexts(self) -> None:
         self.titleLabel.setText(self.tr("Power Dashboard"))
         self.deviceCaptionLabel.setText(self.tr("Device"))
         self.stateCaptionLabel.setText(self.tr("State"))
@@ -730,7 +824,7 @@ class PowerPage(ScrollArea):
         self.refreshButton.setText(self.tr("Refresh Now"))
         self.debugButton.setText(self.tr("Debug Snapshot"))
 
-        metric_titles = {
+        metricTitles = {
             "vin": "Input Voltage",
             "iin": "Input Current",
             "pin": "Input Power",
@@ -738,13 +832,13 @@ class PowerPage(ScrollArea):
             "iout": "Output Current",
             "pout": "Output Power",
         }
-        for key, text in metric_titles.items():
+        for key, text in metricTitles.items():
             self.metricCards[key].titleLabel.setText(self.tr(text))
 
         self.readCardTitle.setText(self.tr("Live Read Parameters"))
         self.writeCardTitle.setText(self.tr("Read / Write Parameters"))
         for row in list(self.readParams.values()) + list(self.writeParams.values()):
-            row.retranslate_ui()
+            row.applyTexts()
 
         self.outputSwitch.setOnText(self.tr("Output ON"))
         self.outputSwitch.setOffText(self.tr("Output OFF"))
@@ -752,32 +846,27 @@ class PowerPage(ScrollArea):
         self.applyProtectButton.setText(self.tr("Apply Protect"))
 
         self.logCardTitle.setText(self.tr("Protocol / Status Log"))
-        current_level = self.logLevelCombo.currentData()
+        currentLevel = self.logLevelCombo.currentData()
         self.logLevelCombo.blockSignals(True)
         self.logLevelCombo.clear()
         self.logLevelCombo.addItem(self.tr("Normal"), userData="normal")
         self.logLevelCombo.addItem(self.tr("Verbose"), userData="verbose")
-        self.logLevelCombo.setCurrentIndex(1 if current_level == "verbose" else 0)
+        self.logLevelCombo.setCurrentIndex(1 if currentLevel == "verbose" else 0)
         self.logLevelCombo.blockSignals(False)
         self.clearLogButton.setText(self.tr("Clear"))
 
-        self.plotCard.retranslate_ui()
-        self._apply_disconnected_state() if not self._client.is_connected else None
+        self.plotCard.applyTexts()
+        self._applyDisconnectedState() if not self._client.is_connected else None
 
-    def changeEvent(self, event):
-        super().changeEvent(event)
-        if event.type() == QEvent.Type.LanguageChange:
-            self._retranslate_ui()
+    def _onThemeChanged(self, *_):
+        QTimer.singleShot(0, self._refreshThemeBundle)
 
-    def _on_theme_changed(self, *_):
-        QTimer.singleShot(0, self._refresh_theme_bundle)
-
-    def _refresh_theme_bundle(self) -> None:
+    def _refreshThemeBundle(self) -> None:
         StyleSheet.POWER_PAGE.apply(self)
-        self._refresh_state_badge_style()
-        self.plotCard.refresh_theme()
+        self._refreshStateBadgeStyle()
+        self.plotCard.refreshTheme()
 
-    def _refresh_state_badge_style(self) -> None:
+    def _refreshStateBadgeStyle(self) -> None:
         online = self.stateBadge.property("onlineState") == "online"
         if online:
             background = "rgba(34, 197, 94, 0.22)"
@@ -788,13 +877,11 @@ class PowerPage(ScrollArea):
             foreground = "#F87171" if isDarkTheme() else "#B91C1C"
             border = "rgba(239, 68, 68, 0.34)"
 
-        self.stateBadge.setStyleSheet(
-            f"""
+        self.stateBadge.setStyleSheet(f"""
             background: {background};
             color: {foreground};
             border: 1px solid {border};
             border-radius: 14px;
             padding: 0 10px;
             font-weight: 700;
-            """
-        )
+            """)

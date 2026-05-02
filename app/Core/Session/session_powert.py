@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Iterable
 
-from PyQt5.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QCoreApplication, QEventLoop, QIODevice, QObject, QTimer, pyqtSignal, pyqtSlot
+from PyQt5.QtSerialPort import QSerialPort
 
 from app.Core.Session import (
     ErrorEvent,
@@ -39,10 +41,15 @@ class PowerClientNackError(PowerClientError):
     """Raised when the device returns NACK."""
 
 
+class PowerClientAccessError(PowerClientProtocolError):
+    """Raised when a requested operation violates the data metadata."""
+
+
 class PowerCommand(IntEnum):
     ACK = 0x00
     READ = 0x01
     WRITE = 0x02
+    REPORT = 0x03
     NACK = 0xFF
 
 
@@ -73,6 +80,30 @@ class PowerDataType(IntEnum):
     FAN_SPEED = 38
     FAN_SET_VALUE = 39
     APP_TVL_DEBUG_SNAPSHOT = 40
+
+
+class PowerValueType(IntEnum):
+    U8 = 1
+    U32 = 4
+
+
+class PowerAccess(IntEnum):
+    READ = 0x01
+    WRITE = 0x02
+    READ_WRITE = 0x03
+
+
+@dataclass(frozen=True)
+class PowerDataMeta:
+    type_id: PowerDataType
+    value_type: PowerValueType
+    access: PowerAccess
+    unit: str
+    label: str
+
+    @property
+    def length(self) -> int:
+        return int(self.value_type)
 
 
 class FaultFlag(IntEnum):
@@ -117,33 +148,59 @@ CC_CV_NAMES = {
 
 SOF = b"\xAA\x55"
 
-TYPE_LENGTHS = {
-    PowerDataType.INPUT_VOLTAGE: 4,
-    PowerDataType.INPUT_CURRENT: 4,
-    PowerDataType.OUTPUT_VOLTAGE: 4,
-    PowerDataType.OUTPUT_CURRENT: 4,
-    PowerDataType.CORE_TEMPERATURE: 4,
-    PowerDataType.BOARD_TEMPERATURE: 4,
-    PowerDataType.SET_VOLTAGE_LIMIT: 4,
-    PowerDataType.SET_CURRENT_LIMIT: 4,
-    PowerDataType.CC_CV_MODE: 1,
-    PowerDataType.POWER_STATE: 1,
-    PowerDataType.FAULT_STATE: 4,
-    PowerDataType.STATE_MACHINE_FLAG_BITS: 1,
-    PowerDataType.STATE_MACHINE_STATE: 1,
-    PowerDataType.INPUT_VOLTAGE_RAW: 4,
-    PowerDataType.INPUT_CURRENT_RAW: 4,
-    PowerDataType.OUTPUT_VOLTAGE_RAW: 4,
-    PowerDataType.OUTPUT_CURRENT_RAW: 4,
-    PowerDataType.OTP_VALUE: 4,
-    PowerDataType.OTP_SET_VALUE: 4,
-    PowerDataType.OVP_VALUE: 4,
-    PowerDataType.OVP_SET_VALUE: 4,
-    PowerDataType.OCP_VALUE: 4,
-    PowerDataType.OCP_SET_VALUE: 4,
-    PowerDataType.FAN_SPEED: 4,
-    PowerDataType.FAN_SET_VALUE: 4,
+POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
+    PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Input Voltage"),
+    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Input Current"),
+    PowerDataType.OUTPUT_VOLTAGE: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Output Voltage"),
+    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Output Current"),
+    PowerDataType.CORE_TEMPERATURE: PowerDataMeta(PowerDataType.CORE_TEMPERATURE, PowerValueType.U32, PowerAccess.READ, "mC", "Core Temperature"),
+    PowerDataType.BOARD_TEMPERATURE: PowerDataMeta(PowerDataType.BOARD_TEMPERATURE, PowerValueType.U32, PowerAccess.READ, "mC", "Board Temperature"),
+    PowerDataType.SET_VOLTAGE_LIMIT: PowerDataMeta(PowerDataType.SET_VOLTAGE_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "Set Voltage Limit"),
+    PowerDataType.SET_CURRENT_LIMIT: PowerDataMeta(PowerDataType.SET_CURRENT_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "Set Current Limit"),
+    PowerDataType.CC_CV_MODE: PowerDataMeta(PowerDataType.CC_CV_MODE, PowerValueType.U8, PowerAccess.READ, "enum", "CC/CV Mode"),
+    PowerDataType.POWER_STATE: PowerDataMeta(PowerDataType.POWER_STATE, PowerValueType.U8, PowerAccess.READ_WRITE, "bool", "Power State"),
+    PowerDataType.FAULT_STATE: PowerDataMeta(PowerDataType.FAULT_STATE, PowerValueType.U32, PowerAccess.READ, "bitmask", "Fault State"),
+    PowerDataType.STATE_MACHINE_FLAG_BITS: PowerDataMeta(PowerDataType.STATE_MACHINE_FLAG_BITS, PowerValueType.U8, PowerAccess.READ, "enum", "State Machine Flag Bits"),
+    PowerDataType.STATE_MACHINE_STATE: PowerDataMeta(PowerDataType.STATE_MACHINE_STATE, PowerValueType.U8, PowerAccess.READ, "enum", "State Machine State"),
+    PowerDataType.INPUT_VOLTAGE_RAW: PowerDataMeta(PowerDataType.INPUT_VOLTAGE_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Input Voltage Raw"),
+    PowerDataType.INPUT_CURRENT_RAW: PowerDataMeta(PowerDataType.INPUT_CURRENT_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Input Current Raw"),
+    PowerDataType.OUTPUT_VOLTAGE_RAW: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Output Voltage Raw"),
+    PowerDataType.OUTPUT_CURRENT_RAW: PowerDataMeta(PowerDataType.OUTPUT_CURRENT_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Output Current Raw"),
+    PowerDataType.OTP_VALUE: PowerDataMeta(PowerDataType.OTP_VALUE, PowerValueType.U32, PowerAccess.READ, "mC", "OTP Value"),
+    PowerDataType.OTP_SET_VALUE: PowerDataMeta(PowerDataType.OTP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mC", "OTP Set Value"),
+    PowerDataType.OVP_VALUE: PowerDataMeta(PowerDataType.OVP_VALUE, PowerValueType.U32, PowerAccess.READ, "mV", "OVP Value"),
+    PowerDataType.OVP_SET_VALUE: PowerDataMeta(PowerDataType.OVP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "OVP Set Value"),
+    PowerDataType.OCP_VALUE: PowerDataMeta(PowerDataType.OCP_VALUE, PowerValueType.U32, PowerAccess.READ, "mA", "OCP Value"),
+    PowerDataType.OCP_SET_VALUE: PowerDataMeta(PowerDataType.OCP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "OCP Set Value"),
+    PowerDataType.FAN_SPEED: PowerDataMeta(PowerDataType.FAN_SPEED, PowerValueType.U32, PowerAccess.READ, "permille", "Fan Speed"),
+    PowerDataType.FAN_SET_VALUE: PowerDataMeta(PowerDataType.FAN_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "permille", "Fan Set Value"),
 }
+
+TYPE_LENGTHS = {type_id: meta.length for type_id, meta in POWER_DATA_META.items()}
+
+STATUS_TYPES = (
+    PowerDataType.INPUT_VOLTAGE,
+    PowerDataType.INPUT_CURRENT,
+    PowerDataType.OUTPUT_VOLTAGE,
+    PowerDataType.OUTPUT_CURRENT,
+    PowerDataType.CORE_TEMPERATURE,
+    PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.SET_VOLTAGE_LIMIT,
+    PowerDataType.SET_CURRENT_LIMIT,
+    PowerDataType.CC_CV_MODE,
+    PowerDataType.POWER_STATE,
+    PowerDataType.FAULT_STATE,
+    PowerDataType.STATE_MACHINE_FLAG_BITS,
+    PowerDataType.STATE_MACHINE_STATE,
+    PowerDataType.OTP_VALUE,
+    PowerDataType.OTP_SET_VALUE,
+    PowerDataType.OVP_VALUE,
+    PowerDataType.OVP_SET_VALUE,
+    PowerDataType.OCP_VALUE,
+    PowerDataType.OCP_SET_VALUE,
+    PowerDataType.FAN_SPEED,
+    PowerDataType.FAN_SET_VALUE,
+)
 
 
 def crc16_modbus(data: bytes) -> int:
@@ -207,6 +264,24 @@ def decode_tlvs(payload: bytes) -> dict[PowerDataType, int]:
     return items
 
 
+def _ensure_readable(type_id: PowerDataType) -> None:
+    meta = POWER_DATA_META.get(type_id)
+    if meta is not None and not (int(meta.access) & int(PowerAccess.READ)):
+        raise PowerClientAccessError(f"{type_id.name} is not readable")
+
+
+def _ensure_writable(type_id: PowerDataType, value: bytes) -> None:
+    meta = POWER_DATA_META.get(type_id)
+    if meta is None:
+        raise PowerClientAccessError(f"{type_id.name} has no writable metadata")
+    if not (int(meta.access) & int(PowerAccess.WRITE)):
+        raise PowerClientAccessError(f"{type_id.name} is not writable")
+    if len(value) != meta.length:
+        raise PowerClientProtocolError(
+            f"Unexpected write length {len(value)} for {type_id.name}, expected {meta.length}"
+        )
+
+
 def build_frame(cmd: PowerCommand | int, seq: int, payload: bytes) -> bytes:
     body = bytes([int(cmd) & 0xFF, seq & 0xFF]) + payload
     frame = bytearray(SOF)
@@ -214,6 +289,35 @@ def build_frame(cmd: PowerCommand | int, seq: int, payload: bytes) -> bytes:
     frame.extend(body)
     frame.extend(crc16_modbus(frame).to_bytes(2, "little"))
     return bytes(frame)
+
+
+def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
+    missing = [type_id.name for type_id in STATUS_TYPES if type_id not in values]
+    if missing:
+        raise PowerClientProtocolError(f"Missing status types: {', '.join(missing)}")
+    return PowerStatus(
+        vin_mv=values[PowerDataType.INPUT_VOLTAGE],
+        iin_ma=values[PowerDataType.INPUT_CURRENT],
+        vout_mv=values[PowerDataType.OUTPUT_VOLTAGE],
+        iout_ma=values[PowerDataType.OUTPUT_CURRENT],
+        core_temp_mc=values[PowerDataType.CORE_TEMPERATURE],
+        board_temp_mc=values[PowerDataType.BOARD_TEMPERATURE],
+        set_voltage_limit_mv=values[PowerDataType.SET_VOLTAGE_LIMIT],
+        set_current_limit_ma=values[PowerDataType.SET_CURRENT_LIMIT],
+        cc_cv_mode=values[PowerDataType.CC_CV_MODE],
+        power_state=values[PowerDataType.POWER_STATE],
+        fault_state=values[PowerDataType.FAULT_STATE],
+        state_machine_flag_bits=values[PowerDataType.STATE_MACHINE_FLAG_BITS],
+        state_machine_state=values[PowerDataType.STATE_MACHINE_STATE],
+        otp_value_mc=values[PowerDataType.OTP_VALUE],
+        otp_set_value_mc=values[PowerDataType.OTP_SET_VALUE],
+        ovp_value_mv=values[PowerDataType.OVP_VALUE],
+        ovp_set_value_mv=values[PowerDataType.OVP_SET_VALUE],
+        ocp_value_ma=values[PowerDataType.OCP_VALUE],
+        ocp_set_value_ma=values[PowerDataType.OCP_SET_VALUE],
+        fan_speed=values[PowerDataType.FAN_SPEED],
+        fan_set_value=values[PowerDataType.FAN_SET_VALUE],
+    )
 
 
 @dataclass(frozen=True)
@@ -356,6 +460,7 @@ class F4CPPowerClient(QObject):
         self._buffer = bytearray()
         self._seq = 0
         self._pending: _PendingRequest | None = None
+        self._last_values: dict[PowerDataType, int] = {}
         self._shutting_down = False
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_once)
@@ -374,6 +479,7 @@ class F4CPPowerClient(QObject):
         self._session = session
         self._buffer.clear()
         self._pending = None
+        self._last_values.clear()
         session.set_event_receiver(self)
         self.connectionChanged.emit(session.is_open)
         self.log.emit(f"Attached to serial session on {session.cfg.port}")
@@ -390,6 +496,7 @@ class F4CPPowerClient(QObject):
         self._session = None
         self._buffer.clear()
         self._pending = None
+        self._last_values.clear()
         self.connectionChanged.emit(False)
 
     @pyqtSlot()
@@ -430,8 +537,13 @@ class F4CPPowerClient(QObject):
         if not self.is_connected or self.is_busy:
             return
         try:
-            self.set_voltage_limit_mv(voltage_mv, timeout_ms=1000)
-            self.set_current_limit_ma(current_ma, timeout_ms=1000)
+            self.write_values(
+                {
+                    PowerDataType.SET_VOLTAGE_LIMIT: _u32(voltage_mv),
+                    PowerDataType.SET_CURRENT_LIMIT: _u32(current_ma),
+                },
+                timeout_ms=1000,
+            )
             self.outputLimitsWritten.emit()
         except Exception as exc:
             self.error.emit(str(exc))
@@ -441,10 +553,15 @@ class F4CPPowerClient(QObject):
         if not self.is_connected or self.is_busy:
             return
         try:
-            self.set_ovp_mv(ovp_mv, timeout_ms=1000)
-            self.set_ocp_ma(ocp_ma, timeout_ms=1000)
-            self.set_otp_mc(otp_mc, timeout_ms=1000)
-            self.set_fan_value(fan_value, timeout_ms=1000)
+            self.write_values(
+                {
+                    PowerDataType.OVP_SET_VALUE: _u32(ovp_mv),
+                    PowerDataType.OCP_SET_VALUE: _u32(ocp_ma),
+                    PowerDataType.OTP_SET_VALUE: _u32(otp_mc),
+                    PowerDataType.FAN_SET_VALUE: _u32(fan_value),
+                },
+                timeout_ms=1000,
+            )
             self.protectionValuesWritten.emit()
         except Exception as exc:
             self.error.emit(str(exc))
@@ -481,6 +598,8 @@ class F4CPPowerClient(QObject):
         return super().event(event)
 
     def read_values(self, *types: PowerDataType, timeout_ms: int = 1000) -> dict[PowerDataType, int]:
+        for type_id in types:
+            _ensure_readable(type_id)
         payload = b"".join(encode_tlv(type_id) for type_id in types)
         response = self._request(PowerCommand.READ, payload, timeout_ms=timeout_ms)
 
@@ -490,60 +609,24 @@ class F4CPPowerClient(QObject):
         missing = [type_id.name for type_id in types if type_id not in response]
         if missing:
             raise PowerClientProtocolError(f"Missing response types: {', '.join(missing)}")
+        self._last_values.update(response)
         return response
 
     def write_values(self, values: dict[PowerDataType, bytes], timeout_ms: int = 1000) -> None:
+        for type_id, raw_value in values.items():
+            _ensure_writable(type_id, raw_value)
         payload = b"".join(encode_tlv(type_id, raw_value) for type_id, raw_value in values.items())
         self._request(PowerCommand.WRITE, payload, timeout_ms=timeout_ms)
+        self._last_values.update(
+            {
+                type_id: int.from_bytes(raw_value, "little", signed=False)
+                for type_id, raw_value in values.items()
+            }
+        )
 
     def read_status(self, timeout_ms: int = 1000) -> PowerStatus:
-        result = self.read_values(
-            PowerDataType.INPUT_VOLTAGE,
-            PowerDataType.INPUT_CURRENT,
-            PowerDataType.OUTPUT_VOLTAGE,
-            PowerDataType.OUTPUT_CURRENT,
-            PowerDataType.CORE_TEMPERATURE,
-            PowerDataType.BOARD_TEMPERATURE,
-            PowerDataType.SET_VOLTAGE_LIMIT,
-            PowerDataType.SET_CURRENT_LIMIT,
-            PowerDataType.CC_CV_MODE,
-            PowerDataType.POWER_STATE,
-            PowerDataType.FAULT_STATE,
-            PowerDataType.STATE_MACHINE_FLAG_BITS,
-            PowerDataType.STATE_MACHINE_STATE,
-            PowerDataType.OTP_VALUE,
-            PowerDataType.OTP_SET_VALUE,
-            PowerDataType.OVP_VALUE,
-            PowerDataType.OVP_SET_VALUE,
-            PowerDataType.OCP_VALUE,
-            PowerDataType.OCP_SET_VALUE,
-            PowerDataType.FAN_SPEED,
-            PowerDataType.FAN_SET_VALUE,
-            timeout_ms=timeout_ms,
-        )
-        status = PowerStatus(
-            vin_mv=result[PowerDataType.INPUT_VOLTAGE],
-            iin_ma=result[PowerDataType.INPUT_CURRENT],
-            vout_mv=result[PowerDataType.OUTPUT_VOLTAGE],
-            iout_ma=result[PowerDataType.OUTPUT_CURRENT],
-            core_temp_mc=result[PowerDataType.CORE_TEMPERATURE],
-            board_temp_mc=result[PowerDataType.BOARD_TEMPERATURE],
-            set_voltage_limit_mv=result[PowerDataType.SET_VOLTAGE_LIMIT],
-            set_current_limit_ma=result[PowerDataType.SET_CURRENT_LIMIT],
-            cc_cv_mode=result[PowerDataType.CC_CV_MODE],
-            power_state=result[PowerDataType.POWER_STATE],
-            fault_state=result[PowerDataType.FAULT_STATE],
-            state_machine_flag_bits=result[PowerDataType.STATE_MACHINE_FLAG_BITS],
-            state_machine_state=result[PowerDataType.STATE_MACHINE_STATE],
-            otp_value_mc=result[PowerDataType.OTP_VALUE],
-            otp_set_value_mc=result[PowerDataType.OTP_SET_VALUE],
-            ovp_value_mv=result[PowerDataType.OVP_VALUE],
-            ovp_set_value_mv=result[PowerDataType.OVP_SET_VALUE],
-            ocp_value_ma=result[PowerDataType.OCP_VALUE],
-            ocp_set_value_ma=result[PowerDataType.OCP_SET_VALUE],
-            fan_speed=result[PowerDataType.FAN_SPEED],
-            fan_set_value=result[PowerDataType.FAN_SET_VALUE],
-        )
+        result = self.read_values(*STATUS_TYPES, timeout_ms=timeout_ms)
+        status = build_status(result)
         self.statusUpdated.emit(status)
         return status
 
@@ -687,6 +770,10 @@ class F4CPPowerClient(QObject):
             if frame is None:
                 break
 
+            if int(frame["cmd"]) == int(PowerCommand.REPORT):
+                self._handle_report(frame)
+                continue
+
             try:
                 response = self._parse_response(frame)
             except Exception as exc:
@@ -708,6 +795,25 @@ class F4CPPowerClient(QObject):
 
             self._pending.response = response
             self._pending.loop.quit()
+
+    def _handle_report(self, frame: dict[str, int | bytes]) -> None:
+        if int(frame["seq"]) != 0:
+            self.error.emit(f"REPORT seq should be 0, got {frame['seq']}")
+            return
+
+        try:
+            values = decode_tlvs(bytes(frame["payload"]))
+        except Exception as exc:
+            self.error.emit(str(exc))
+            return
+
+        self._last_values.update(values)
+        self.log.emit(f"REPORT types={','.join(type_id.name for type_id in values)}")
+        try:
+            status = build_status(self._last_values)
+        except PowerClientProtocolError:
+            return
+        self.statusUpdated.emit(status)
 
     def _handle_tx(self, event: TxEvent) -> None:
         self.log.emit(f"TX {event.payload.data.hex(' ')}")
@@ -781,3 +887,174 @@ def pretty_faults(mask: int) -> str:
 
 def pack_read_request(types: Iterable[PowerDataType]) -> bytes:
     return b"".join(encode_tlv(item) for item in types)
+
+
+class TVLHost:
+    """Reusable QSerialPort host for the F4CP power protocol."""
+
+    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
+        self._serial = QSerialPort()
+        self._serial.setPortName(port)
+        self._serial.setBaudRate(baudrate)
+        self._serial.setDataBits(QSerialPort.DataBits.Data8)
+        self._serial.setParity(QSerialPort.Parity.NoParity)
+        self._serial.setStopBits(QSerialPort.StopBits.OneStop)
+        if not self._serial.open(QIODevice.OpenModeFlag.ReadWrite):
+            raise PowerClientError(
+                f"Serial port open failed {port}: {self._serial.errorString()}"
+            )
+        self._timeout = float(timeout)
+        self._seq = 0
+        self._buffer = bytearray()
+        self._last_values: dict[PowerDataType, int] = {}
+
+    def close(self) -> None:
+        if self._serial.isOpen():
+            self._serial.close()
+
+    def send_frame(self, cmd: PowerCommand | int, seq: int, payload: bytes) -> None:
+        data = build_frame(cmd, seq, payload)
+        written = self._serial.write(data)
+        if written != len(data):
+            raise PowerClientError(
+                f"Serial write incomplete: expected {len(data)}, wrote {written}"
+            )
+        if not self._serial.waitForBytesWritten(max(1, int(self._timeout * 1000))):
+            raise PowerClientTimeoutError("Serial write timed out")
+
+    def recv_frame(self, timeout: float | None = None) -> dict[str, int | bytes]:
+        deadline = time.monotonic() + (self._timeout if timeout is None else timeout)
+        while time.monotonic() < deadline:
+            frame = self._extract_buffered_frame()
+            if frame is not None:
+                return frame
+
+            wait_ms = max(1, min(50, int((deadline - time.monotonic()) * 1000)))
+            if not self._serial.waitForReadyRead(wait_ms):
+                continue
+
+            raw = self._serial.readAll()
+            chunk = raw.data() if hasattr(raw, "data") else bytes(raw)
+            if chunk:
+                self._buffer.extend(chunk)
+
+        raise PowerClientTimeoutError("Receive timed out")
+
+    def read_values(
+        self,
+        *types: PowerDataType,
+        timeout: float | None = None,
+    ) -> dict[PowerDataType, int]:
+        for type_id in types:
+            _ensure_readable(type_id)
+        payload = b"".join(encode_tlv(type_id) for type_id in types)
+        values = self._request(PowerCommand.READ, payload, timeout=timeout)
+        missing = [type_id.name for type_id in types if type_id not in values]
+        if missing:
+            raise PowerClientProtocolError(f"Missing response types: {', '.join(missing)}")
+        self._last_values.update(values)
+        return values
+
+    def write_values(
+        self,
+        values: dict[PowerDataType, bytes],
+        timeout: float | None = None,
+    ) -> None:
+        for type_id, raw_value in values.items():
+            _ensure_writable(type_id, raw_value)
+        payload = b"".join(encode_tlv(type_id, raw_value) for type_id, raw_value in values.items())
+        self._request(PowerCommand.WRITE, payload, timeout=timeout)
+        self._last_values.update(
+            {
+                type_id: int.from_bytes(raw_value, "little", signed=False)
+                for type_id, raw_value in values.items()
+            }
+        )
+
+    def read_status(self, timeout: float | None = None) -> PowerStatus:
+        return build_status(self.read_values(*STATUS_TYPES, timeout=timeout))
+
+    def set_voltage_limit_mv(self, value_mv: int) -> None:
+        self.write_values({PowerDataType.SET_VOLTAGE_LIMIT: _u32(value_mv)})
+
+    def set_current_limit_ma(self, value_ma: int) -> None:
+        self.write_values({PowerDataType.SET_CURRENT_LIMIT: _u32(value_ma)})
+
+    def set_ovp_mv(self, value_mv: int) -> None:
+        self.write_values({PowerDataType.OVP_SET_VALUE: _u32(value_mv)})
+
+    def set_ocp_ma(self, value_ma: int) -> None:
+        self.write_values({PowerDataType.OCP_SET_VALUE: _u32(value_ma)})
+
+    def set_otp_mc(self, value_mc: int) -> None:
+        self.write_values({PowerDataType.OTP_SET_VALUE: _u32(value_mc)})
+
+    def set_power_state(self, enabled: bool) -> None:
+        self.write_values({PowerDataType.POWER_STATE: _u8(1 if enabled else 0)})
+
+    def _request(
+        self,
+        cmd: PowerCommand,
+        payload: bytes,
+        timeout: float | None = None,
+    ) -> dict[PowerDataType, int]:
+        self._seq = (self._seq + 1) & 0xFF
+        seq = self._seq
+        self.send_frame(cmd, seq, payload)
+
+        deadline = time.monotonic() + (self._timeout if timeout is None else timeout)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise PowerClientTimeoutError(f"Request timed out for seq={seq}")
+
+            frame = self.recv_frame(timeout=remaining)
+            frame_cmd = int(frame["cmd"])
+
+            if frame_cmd == int(PowerCommand.REPORT):
+                self._handle_report(frame)
+                continue
+            if frame_cmd == int(PowerCommand.NACK):
+                raise PowerClientNackError(f"Device returned NACK for seq={frame['seq']}")
+            if frame_cmd != int(PowerCommand.ACK):
+                raise PowerClientProtocolError(f"Unexpected response cmd=0x{frame_cmd:02X}")
+            if int(frame["seq"]) != seq:
+                raise PowerClientProtocolError(
+                    f"Response seq mismatch: expected {seq}, got {frame['seq']}"
+                )
+            return decode_tlvs(bytes(frame["payload"]))
+
+    def _handle_report(self, frame: dict[str, int | bytes]) -> None:
+        if int(frame["seq"]) != 0:
+            raise PowerClientProtocolError(f"REPORT seq should be 0, got {frame['seq']}")
+        self._last_values.update(decode_tlvs(bytes(frame["payload"])))
+
+    def _extract_buffered_frame(self) -> dict[str, int | bytes] | None:
+        while len(self._buffer) >= 2 and self._buffer[:2] != SOF:
+            self._buffer.pop(0)
+
+        if len(self._buffer) < 6:
+            return None
+
+        body_len = int.from_bytes(self._buffer[2:4], "little")
+        total_len = 2 + 2 + body_len + 2
+        if len(self._buffer) < total_len:
+            return None
+
+        raw = bytes(self._buffer[:total_len])
+        del self._buffer[:total_len]
+
+        expected_crc = int.from_bytes(raw[-2:], "little")
+        actual_crc = crc16_modbus(raw[:-2])
+        if expected_crc != actual_crc:
+            raise PowerClientCrcError(
+                f"CRC mismatch: expected 0x{expected_crc:04X}, got 0x{actual_crc:04X}"
+            )
+        if body_len < 2:
+            raise PowerClientProtocolError("Body length is too short")
+
+        return {
+            "cmd": raw[4],
+            "seq": raw[5],
+            "payload": raw[6:-2],
+        }

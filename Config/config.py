@@ -12,18 +12,26 @@
 import logging
 import sys
 from datetime import datetime
-from functools import cached_property, cache
-from os import makedirs
+from functools import cached_property
 from pathlib import Path
 from typing import Union
-from warnings import warn
 from PyQt5.QtCore import QSettings
-from PyQt5.QtGui import QFontDatabase, QFont
-from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator,
-                            Theme, __version__)
+from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator, Theme)
 
 
 class DirPaths:
+
+    def _ensureDir(self, *parts: str) -> Path:
+        """根据基础目录创建并返回目标目录。"""
+        directory = self.BaseDir.joinpath(*parts)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _ensureSubDir(self, baseDir: Path, *parts: str) -> Path:
+        """根据已有目录创建并返回子目录。"""
+        directory = baseDir.joinpath(*parts)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
 
     @cached_property
     def BaseDir(self) -> Path:
@@ -40,70 +48,100 @@ class DirPaths:
         """
         return: Assets目录的Path对象
         """
-        _assetsDir = self.BaseDir / "Resources" / "Assets"
-        if not _assetsDir.exists():
-            makedirs(_assetsDir, exist_ok=True)
-        return _assetsDir
+        return self._ensureSubDir(self.ResourcesDir, "Assets")
 
     @cached_property
     def ConfigDir(self) -> Path:
         """
         return: Config目录的Path对象
         """
-        _configDir = self.BaseDir / "Resources" / "Config"
-        if not _configDir.exists():
-            makedirs(_configDir, exist_ok=True)
-        return _configDir
+        return self._ensureSubDir(self.ResourcesDir, "Config")
 
     @cached_property
     def ThemeDir(self) -> Path:
         """
         return: Theme目录的Path对象
         """
-        _themeDir = self.BaseDir / "Resources" / "Theme"
-        if not _themeDir.exists():
-            makedirs(_themeDir, exist_ok=True)
-        return _themeDir
+        return self._ensureSubDir(self.ResourcesDir, "Theme")
 
     @cached_property
     def FontDir(self) -> Path:
         """
         return: Font目录的Path对象
         """
-        _fontDir = self.BaseDir / "Resources" / "Font"
-        if not _fontDir.exists():
-            makedirs(_fontDir, exist_ok=True)
-        return _fontDir
+        return self._ensureSubDir(self.ResourcesDir, "Font")
 
     @cached_property
     def LogDir(self) -> Path:
         """
         return: Logs目录的Path对象
         """
-        _logDir = self.BaseDir / "Logs"
-        if not _logDir.exists():
-            makedirs(_logDir, exist_ok=True)
-        return _logDir
+        return self._ensureDir("Logs")
+
+    @cached_property
+    def ResourcesDir(self) -> Path:
+        """
+        return: Resources目录的Path对象
+        """
+        return self._ensureDir("Resources")
+
+    @cached_property
+    def ToolsDir(self) -> Path:
+        """
+        return: Tools目录的Path对象
+        """
+        return self._ensureSubDir(self.ResourcesDir, "Tools")
+
+    @cached_property
+    def FirmwareDir(self) -> Path:
+        """
+        return: Firmware目录的Path对象
+        """
+        return self._ensureSubDir(self.ToolsDir, "Firmware")
+
+    @cached_property
+    def McuPackDir(self) -> Path:
+        """
+        return: Pack目录的Path对象
+        """
+        return self._ensureSubDir(self.ToolsDir, "Pack")
 
     @cached_property
     def McuPack(self) -> Path:
         """
         return: McuPack目录的Path对象，0.1.3 之后弃用
         """
-        _McuPack = self.BaseDir / "Resources" / "Tools" / "Pack"
-        if not _McuPack.exists():
-            makedirs(_McuPack, exist_ok=True)
-        return _McuPack
+        return self.McuPackDir
 
     @cached_property
     def LanguageDir(self) -> Path:
         """
-        return:
+        return: Language目录的Path对象
         """
-        _LanguageDir = self.BaseDir / "Resources" / "Language"
-        if not _LanguageDir.exists():
-            makedirs(_LanguageDir, exist_ok=True)
-        return _LanguageDir
+        return self._ensureSubDir(self.ResourcesDir, "Language")
+
+    @cached_property
+    def FirmwarePowerDir(self) -> Path:
+        """
+        return: Power固件目录的Path对象
+        """
+        return self._ensureSubDir(self.FirmwareDir, "Power")
+
+    @cached_property
+    def FirmwarePower(self) -> Path:
+        return self.FirmwarePowerDir
+
+    @cached_property
+    def FirmwareUpperDir(self) -> Path:
+        """
+        return: Upper固件目录的Path对象
+        """
+        return self._ensureSubDir(self.FirmwareDir, "Upper")
+
+    @cached_property
+    def FirmwareUpper(self) -> Path:
+        return self.FirmwareUpperDir
+
 
 
 _dirPaths = DirPaths()

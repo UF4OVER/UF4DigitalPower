@@ -497,7 +497,7 @@ class DaplinkPyocdSession(QObject):
 
     @classmethod
     def pack_dir(cls) -> Path:
-        return Path(DirPathsInstance.McuPack)
+        return Path(DirPathsInstance.McuPackDir)
 
     @classmethod
     def discover_pack_targets(cls) -> tuple[list[Path], list[DaplinkTargetInfo]]:
