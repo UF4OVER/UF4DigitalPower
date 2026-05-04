@@ -16,10 +16,10 @@ from functools import cached_property
 from pathlib import Path
 from typing import Union
 from PyQt5.QtCore import QSettings
-from qfluentwidgets import (qconfig, QConfig, ConfigItem, BoolValidator, Theme)
+from qfluentwidgets import qconfig, QConfig, ConfigItem, BoolValidator
 
 
-class DirPaths:
+class _DirPaths:
 
     def _ensureDir(self, *parts: str) -> Path:
         """根据基础目录创建并返回目标目录。"""
@@ -143,8 +143,8 @@ class DirPaths:
         return self.FirmwareUpperDir
 
 
-
-_dirPaths = DirPaths()
+_dirPaths = _DirPaths()
+DirPathsInstance = _dirPaths
 
 # 日志文件夹路径
 LOG_DIR = _dirPaths.LogDir
@@ -175,7 +175,6 @@ file_handler.setFormatter(formatter)
 if not logger.hasHandlers():
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
-
 
 
 class SettingsManager:
@@ -220,6 +219,22 @@ class Config(QConfig):
 
     enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
 
+
+VERSION_LOCAL_SECTION = "OldVersion"
+VERSION_REMOTE_SECTION = "NewVersion"
+UPDATE_SECTION = "update"
+
+LOCAL_APP_VERSION_OPTION = "OldLocalVersion"
+LOCAL_UPPER_VERSION_OPTION = "OldUpperVersion"
+LOCAL_LOWER_VERSION_OPTION = "OldLowerVersion"
+
+LATEST_APP_VERSION_OPTION = "NewLocalVersion"
+LATEST_UPPER_VERSION_OPTION = "NewUpperVersion"
+LATEST_LOWER_VERSION_OPTION = "NewLowerVersion"
+
+UPDATE_URL_OPTION = "UpdateUrl"
+
+
 YEAR = 2026
 AUTHOR = "UF4OVER"
 VERSION = "1.4.0423"
@@ -232,16 +247,17 @@ ZH_SUPPORT_URL = "https://qfluentwidgets.com/zh/price/"
 EN_SUPPORT_URL = "https://qfluentwidgets.com/price/"
 
 # -------------------------------config of application-------------------------------
-_iniPath = _dirPaths.ConfigDir / "config.ini"
+APP_CONFIG_PATH = _dirPaths.ConfigDir / "config.ini"
 
-SettingMangerInstance = SettingsManager(_iniPath)
-logger.info(f"SettingsManager initialized with config path: {_iniPath}")
+SettingMangerInstance = SettingsManager(APP_CONFIG_PATH)
+logger.info(f"SettingsManager initialized with config path: {APP_CONFIG_PATH}")
 
 # -------------------------------config of qfluentwidgets-------------------------------
 cfg = Config()
-cfg.themeMode.value = Theme.AUTO
+# cfg.themeMode.value = Theme.AUTO
 _config_json_path = _dirPaths.ConfigDir / "config.json"
 qconfig.load(_config_json_path, cfg)
+
 logger.info(f"Config loaded from {_config_json_path}")
 
 AppIconPath = str(_dirPaths.AssetsDir / "F4CP_ICO_256.ico")

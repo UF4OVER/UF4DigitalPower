@@ -15,11 +15,11 @@ from qfluentwidgets import (
     SimpleCardWidget,
     TransparentToolButton,
     VerticalSeparator,
-    setFont,
+    setFont, ScrollArea,
 )
 
-from Config import AppIconPath, DirPathsInstance, VERSION
-from app.Core import StyleSheet
+from Config.config import AppIconPath, DirPathsInstance
+from App.Core import StyleSheet, UpdateCheckFinishedEvent, showMessage, update_manager
 
 
 class StatisticsWidget(QWidget):
@@ -117,7 +117,10 @@ class AppInfoCard(SimpleCardWidget):
         self.buttonLayout.addWidget(self.shareButton, 0, Qt.AlignRight)
 
     def applyTexts(self):
-        self.installButton.setText(self.tr("Check Update"))
+        if not self.installButton.isEnabled():
+            self.installButton.setText(self.tr("Checking..."))
+        else:
+            self.installButton.setText(self.tr("Check Update"))
         self.scoreWidget.setTitle(self.tr("Average"))
         self.commentWidget.setTitle(self.tr("Reviews"))
         self.descriptionLabel.setText(
@@ -127,6 +130,10 @@ class AppInfoCard(SimpleCardWidget):
             )
         )
         self.tagButton.setText(self.tr("Dashboard"))
+
+    def setCheckInProgress(self, checking: bool) -> None:
+        self.installButton.setEnabled(not checking)
+        self.applyTexts()
 
 
 class GalleryCard(HeaderCardWidget):
@@ -156,14 +163,19 @@ class GalleryCard(HeaderCardWidget):
 
 
 class FirmwareInfoCard(SimpleCardWidget):
-    def __init__(self, title: str, version: str, description: str, parent=None):
+    def __init__(self, title: str, localVersion: str, latestVersion: str, description: str, parent=None):
         super().__init__(parent)
         self._title = title
         self._description = description
 
         self.titleLabel = BodyLabel(self)
-        self.versionCaptionLabel = CaptionLabel(self)
-        self.versionLabel = BodyLabel(version, self)
+        self.versionLayout = QHBoxLayout()
+        self.localVersionLayout = QVBoxLayout()
+        self.latestVersionLayout = QVBoxLayout()
+        self.localVersionCaptionLabel = CaptionLabel(self)
+        self.localVersionLabel = BodyLabel(localVersion, self)
+        self.latestVersionCaptionLabel = CaptionLabel(self)
+        self.latestVersionLabel = BodyLabel(latestVersion, self)
         self.descriptionLabel = CaptionLabel(self)
         self.vBoxLayout = QVBoxLayout(self)
 
@@ -172,29 +184,43 @@ class FirmwareInfoCard(SimpleCardWidget):
         self.descriptionLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
 
         setFont(self.titleLabel, 15, QFont.DemiBold)
-        setFont(self.versionLabel, 22, QFont.DemiBold)
+        setFont(self.localVersionLabel, 18, QFont.DemiBold)
+        setFont(self.latestVersionLabel, 18, QFont.DemiBold)
 
         self.initLayout()
         self.applyTexts()
 
     def initLayout(self):
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(180)
         self.vBoxLayout.setContentsMargins(20, 18, 20, 18)
         self.vBoxLayout.setSpacing(8)
         self.vBoxLayout.addWidget(self.titleLabel)
         self.vBoxLayout.addSpacing(4)
-        self.vBoxLayout.addWidget(self.versionCaptionLabel)
-        self.vBoxLayout.addWidget(self.versionLabel)
+        self.versionLayout.setContentsMargins(0, 0, 0, 0)
+        self.versionLayout.setSpacing(24)
+        self.localVersionLayout.setContentsMargins(0, 0, 0, 0)
+        self.localVersionLayout.setSpacing(4)
+        self.latestVersionLayout.setContentsMargins(0, 0, 0, 0)
+        self.latestVersionLayout.setSpacing(4)
+        self.localVersionLayout.addWidget(self.localVersionCaptionLabel)
+        self.localVersionLayout.addWidget(self.localVersionLabel)
+        self.latestVersionLayout.addWidget(self.latestVersionCaptionLabel)
+        self.latestVersionLayout.addWidget(self.latestVersionLabel)
+        self.versionLayout.addLayout(self.localVersionLayout, 1)
+        self.versionLayout.addLayout(self.latestVersionLayout, 1)
+        self.vBoxLayout.addLayout(self.versionLayout)
         self.vBoxLayout.addSpacing(4)
         self.vBoxLayout.addWidget(self.descriptionLabel)
         self.vBoxLayout.addStretch(1)
 
-    def setVersion(self, version: str):
-        self.versionLabel.setText(version or "--")
+    def setVersions(self, localVersion: str, latestVersion: str):
+        self.localVersionLabel.setText(localVersion or "--")
+        self.latestVersionLabel.setText(latestVersion or "--")
 
     def applyTexts(self):
         self.titleLabel.setText(self.tr(self._title))
-        self.versionCaptionLabel.setText(self.tr("Version"))
+        self.localVersionCaptionLabel.setText(self.tr("Local version"))
+        self.latestVersionCaptionLabel.setText(self.tr("Latest version"))
         self.descriptionLabel.setText(self.tr(self._description))
 
 
@@ -204,12 +230,14 @@ class FirmwareUpdateCard(HeaderCardWidget):
         self.powerFirmwareCard = FirmwareInfoCard(
             "Power firmware",
             "--",
+            "--",
             "Embedded power controller firmware for output control, protection, and telemetry acquisition.",
             self,
         )
         self.powerUpperCard = FirmwareInfoCard(
             "Power Upper firmware",
-            VERSION,
+            "--",
+            "--",
             "Desktop Upper firmware that provides power dashboard, parameter configuration, and device operations.",
             self,
         )
@@ -230,23 +258,107 @@ class FirmwareUpdateCard(HeaderCardWidget):
         self.powerFirmwareCard.applyTexts()
         self.powerUpperCard.applyTexts()
 
+    def setVersions(
+        self,
+        *,
+        powerLocalVersion: str,
+        powerLatestVersion: str,
+        upperLocalVersion: str,
+        upperLatestVersion: str,
+    ) -> None:
+        self.powerFirmwareCard.setVersions(powerLocalVersion, powerLatestVersion)
+        self.powerUpperCard.setVersions(upperLocalVersion, upperLatestVersion)
 
-class HomePage(QWidget):
+
+class HomePage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._isCheckingUpdate = False
+        self.setObjectName("HomePage")
 
-        self.vBoxLayout = QVBoxLayout(self)
+        self.scrollWidget = QWidget(self)
+        self.scrollWidget.setObjectName("homeScrollWidget")
+
+        self.vBoxLayout = QVBoxLayout(self.scrollWidget)
         self.vBoxLayout.setContentsMargins(0, 0, 15, 0)
         self.vBoxLayout.setSpacing(10)
 
-        self.appCard = AppInfoCard(self)
-        self.firmwareUpdateCard = FirmwareUpdateCard(self)
-        self.galleryCard = GalleryCard(self)
+        self.appCard = AppInfoCard(self.scrollWidget)
+        self.firmwareUpdateCard = FirmwareUpdateCard(self.scrollWidget)
+        self.galleryCard = GalleryCard(self.scrollWidget)
 
         self.vBoxLayout.addWidget(self.appCard, 0, Qt.AlignTop)
         self.vBoxLayout.addWidget(self.firmwareUpdateCard, 0, Qt.AlignTop)
         self.vBoxLayout.addWidget(self.galleryCard, 0, Qt.AlignTop)
         self.vBoxLayout.addStretch(1)
 
-        self.setObjectName("HomePage")
+        self.appCard.installButton.clicked.connect(lambda: self.requestUpdateCheck(manual=True))
+
+        self._applyVersionSnapshot(update_manager.get_cached_versions())
+
+        self.setWidget(self.scrollWidget)
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         StyleSheet.HOME_PAGE.apply(self)
+
+    def event(self, event):
+        if event.type() == UpdateCheckFinishedEvent.EVENT_TYPE:
+            self._isCheckingUpdate = False
+            self.appCard.setCheckInProgress(False)
+            self._applyVersionSnapshot(event.result.snapshot)
+            self._handleUpdateResult(event.result)
+            return True
+
+        return super().event(event)
+
+    def requestUpdateCheck(self, manual: bool = False) -> None:
+        if self._isCheckingUpdate or update_manager.is_checking:
+            if manual:
+                showMessage(
+                    self,
+                    self.tr("Checking..."),
+                    self.tr("A firmware update check is already in progress."),
+                    "warning",
+                )
+            return
+
+        self._isCheckingUpdate = True
+        self.appCard.setCheckInProgress(True)
+        started = update_manager.check_for_updates(self, manual=manual)
+        if not started:
+            self._isCheckingUpdate = False
+            self.appCard.setCheckInProgress(False)
+
+    def _applyVersionSnapshot(self, snapshot) -> None:
+        self.firmwareUpdateCard.setVersions(
+            powerLocalVersion=snapshot.local_lower_version,
+            powerLatestVersion=snapshot.latest_lower_version,
+            upperLocalVersion=snapshot.local_upper_version,
+            upperLatestVersion=snapshot.latest_upper_version,
+        )
+
+    def _handleUpdateResult(self, result) -> None:
+        if not result.manual:
+            return
+
+        if result.success:
+            showMessage(
+                self,
+                self.tr("Update check completed"),
+                self.tr(
+                    "Latest firmware versions have been refreshed. Upper: {upper}, Power: {power}"
+                ).format(
+                    upper=result.snapshot.latest_upper_version,
+                    power=result.snapshot.latest_lower_version,
+                ),
+                "success",
+            )
+            return
+
+        showMessage(
+            self,
+            self.tr("Update check failed"),
+            self.tr(result.message),
+            "warning",
+        )
+

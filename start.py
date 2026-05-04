@@ -13,22 +13,24 @@
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
-from qfluentwidgets import FluentIcon as FIF
+
+from qfluentwidgets import FluentIcon as FIF, MSFluentWindow
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
 
 from Config import AppIconPath, cfg
-from app import UMainWindow
 
-from app.Core import StyleSheet, language_manager, logger, load_saved_font
-from app.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
+from App.Core import StyleSheet, language_manager, logger, load_saved_font
+from App.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 
-class Window(UMainWindow):
+class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
         self.setObjectName("FluentAcrylicWindow")
+
+        # self.setFixedSize(1200, 800)
 
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
@@ -42,11 +44,13 @@ class Window(UMainWindow):
         cfg.themeChanged.connect(self._onThemeChanged)
         self._onThemeChanged()
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
+        StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
         StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
         self._applyTexts()
 
         QTimer.singleShot(0, self._refreshStartupTheme)
+        QTimer.singleShot(150, self._checkUpdateOnStartUp)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -106,6 +110,10 @@ class Window(UMainWindow):
     def _refreshStartupTheme(self):
         setTheme(cfg.themeMode.value)
 
+    def _checkUpdateOnStartUp(self):
+        if getattr(cfg.checkUpdateAtStartUp, "value", False):
+            self.homeInterface.requestUpdateCheck(manual=False)
+
     def _applyTexts(self):
         self.homeNavItem.setText(self.tr("Home"))
         self.deviceNavItem.setText(self.tr("Serial"))
@@ -119,9 +127,8 @@ if __name__ == "__main__":
     import sys
 
     logger.info("main is running")
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
+
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 

@@ -9,6 +9,3 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .Pages.main_window import UMainWindow
-
-__all__ = ["UMainWindow"]

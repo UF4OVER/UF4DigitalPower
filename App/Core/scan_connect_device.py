@@ -11,7 +11,7 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 from PyQt5.QtSerialPort import QSerialPortInfo
 
 from Config import logger
-from app.Core.Session import SerialConfig, SerialSession
+from App.Core.Session import SerialConfig, SerialSession
 
 
 class DeviceScanner(QObject):

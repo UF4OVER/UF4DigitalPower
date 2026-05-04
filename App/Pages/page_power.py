@@ -4,11 +4,12 @@ from __future__ import annotations
 import collections
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import pyqtgraph as pg
 from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
-from PyQt5.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QFileDialog, QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -30,8 +31,13 @@ from qfluentwidgets import (
 )
 
 from Config import SettingMangerInstance, cfg, logger
-from app.Core import DeviceScanner, StyleSheet, showMessage
-from app.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
+from App.Core import DeviceScanner, StyleSheet, showMessage
+from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
+
+DEFAULT_OVP_SET_VALUE_MV = 44000
+DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
+PLOT_Y_MIN = -10
+PLOT_Y_MAX = 60
 
 
 def _readPortIdentity() -> tuple[int, int]:
@@ -171,6 +177,7 @@ class TrendPlotCard(CardWidget):
         self.setObjectName("trendPlotCard")
         self.titleLabel = SubtitleLabel(self)
         self.tipLabel = CaptionLabel(self)
+        self.saveButton = PushButton(FIF.SAVE, "", self)
         self.plotPanel = QFrame(self)
         self.plotPanel.setObjectName("trendPlotPanel")
 
@@ -178,13 +185,21 @@ class TrendPlotCard(CardWidget):
         self.plotWidget.setObjectName("trendPlotWidget")
         self.plotWidget.setFrameShape(QFrame.NoFrame)
         self.plotWidget.setStyleSheet("background: transparent; border: none;")
-        self.plotWidget.setMouseEnabled(x=True, y=True)
+        self.plotWidget.setMouseEnabled(x=True, y=False)
         self.plotWidget.showGrid(x=True, y=True, alpha=0.16)
         self.plotWidget.setAntialiasing(True)
         self.plotWidget.setMenuEnabled(False)
-        self.plotWidget.getViewBox().setDefaultPadding(0.05)
         self.plotWidget.setMinimumHeight(360)
         self.plotWidget.getPlotItem().hideButtons()
+        self.plotWidget.getViewBox().setMouseEnabled(x=True, y=False)
+        self.plotWidget.getViewBox().setMenuEnabled(False)
+        self.plotWidget.getViewBox().setLimits(
+            yMin=PLOT_Y_MIN,
+            yMax=PLOT_Y_MAX,
+            minYRange=PLOT_Y_MAX - PLOT_Y_MIN,
+            maxYRange=PLOT_Y_MAX - PLOT_Y_MIN,
+        )
+        self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
         self.legend = self.plotWidget.addLegend(offset=(12, 12))
 
         self.voltageInCurve = self.plotWidget.plot(name="VIN", pen=pg.mkPen(width=2))
@@ -206,20 +221,53 @@ class TrendPlotCard(CardWidget):
         plotPanelLayout.setSpacing(0)
         plotPanelLayout.addWidget(self.plotWidget)
 
+        headerLayout = QHBoxLayout()
+        headerLayout.setContentsMargins(0, 0, 0, 0)
+        headerLayout.setSpacing(10)
+        headerLayout.addWidget(self.titleLabel)
+        headerLayout.addStretch(1)
+        headerLayout.addWidget(self.saveButton)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
-        layout.addWidget(self.titleLabel)
+        layout.addLayout(headerLayout)
         layout.addWidget(self.tipLabel)
         layout.addWidget(self.plotPanel)
 
+        self.saveButton.clicked.connect(self.saveImage)
         self.applyTexts()
         self.refreshTheme()
 
     def applyTexts(self) -> None:
         self.titleLabel.setText(self.tr("Voltage / Current Trend"))
-        self.tipLabel.setText(
-            self.tr("Wheel zoom, left drag pan, right drag zoom area")
+        self.tipLabel.setText(self.tr("Y range fixed: -10 to 60; drag or zoom horizontally"))
+        self.saveButton.setText(self.tr("Save Image"))
+
+    def saveImage(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("Select save folder"),
+            str(Path.home()),
+        )
+        if not folder:
+            return
+
+        path = Path(folder) / f"power-trend-{time.strftime('%Y%m%d-%H%M%S')}.png"
+        if not self.plotWidget.grab().save(str(path), "PNG"):
+            showMessage(
+                self,
+                self.tr("Action failed"),
+                self.tr("Failed to save chart image."),
+                level="error",
+            )
+            return
+
+        showMessage(
+            self,
+            self.tr("Chart saved"),
+            self.tr("Saved to {path}").format(path=str(path)),
+            level="success",
         )
 
     def refreshTheme(self) -> None:
@@ -259,8 +307,9 @@ class TrendPlotCard(CardWidget):
         plotItem.getAxis("bottom").setTextPen(axis)
         plotItem.getAxis("left").setPen(pg.mkPen(axis))
         plotItem.getAxis("bottom").setPen(pg.mkPen(axis))
-        plotItem.getAxis("left").setLabel(self.tr("Scaled Value"), color=axis)
+        plotItem.getAxis("left").setLabel(self.tr("Voltage / Current"), color=axis, units="V / A")
         plotItem.getAxis("bottom").setLabel(self.tr("Samples"), color=axis)
+        self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
         plotItem.getViewBox().setBorder(pg.mkPen(borderPenColor))
         plotItem.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
 
@@ -298,6 +347,13 @@ class TrendPlotCard(CardWidget):
         self.voltageOutCurve.setData(xValues, vout)
         self.currentInCurve.setData(xValues, iin)
         self.currentOutCurve.setData(xValues, iout)
+        if xValues:
+            x_min = xValues[0]
+            x_max = xValues[-1]
+            if x_max <= x_min:
+                x_max = x_min + 1
+            self.plotWidget.setXRange(x_min, x_max, padding=0.02)
+        self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
 
 
 class PowerPage(ScrollArea):
@@ -305,7 +361,7 @@ class PowerPage(ScrollArea):
     detachSessionRequested = pyqtSignal()
     readStatusRequested = pyqtSignal()
     debugSnapshotRequested = pyqtSignal()
-    outputLimitsRequested = pyqtSignal(int, int)
+    outputLimitsRequested = pyqtSignal(int, int, bool)
     protectionValuesRequested = pyqtSignal(int, int, int, int)
     powerStateRequested = pyqtSignal(bool)
     startPollingRequested = pyqtSignal(int)
@@ -381,7 +437,7 @@ class PowerPage(ScrollArea):
         self.stateBadge.setFixedWidth(84)
 
         self.autoPollSwitch = SwitchButton(self.summaryCard)
-        self.autoPollSwitch.setChecked(True)
+        self.autoPollSwitch.setChecked(False)
 
         self.refreshButton = PrimaryPushButton(FIF.SYNC, "", self.summaryCard)
         self.debugButton = PushButton(FIF.SEARCH, "", self.summaryCard)
@@ -456,7 +512,7 @@ class PowerPage(ScrollArea):
             "topology": ParameterRow("Topology", "RO", "", False, self.readCard),
             "state_flag": ParameterRow("State Machine", "RO", "", False, self.readCard),
             "fault": ParameterRow("Fault Flags", "RO", "", False, self.readCard),
-            "fan_speed": ParameterRow("Fan Speed", "RO", "RPM", False, self.readCard),
+            "fan_speed": ParameterRow("Fan PWM", "RO", "0-1000", False, self.readCard),
         }
         for row in self.readParams.values():
             readLayout.addWidget(row)
@@ -470,15 +526,15 @@ class PowerPage(ScrollArea):
 
         self.writeParams = {
             "set_voltage": ParameterRow(
-                "Set Voltage Limit", "RW", "V", True, self.writeCard
+                "Output Voltage Setpoint", "RW", "V", True, self.writeCard
             ),
             "set_current": ParameterRow(
-                "Set Current Limit", "RW", "A", True, self.writeCard
+                "Output Current Setpoint", "RW", "A", True, self.writeCard
             ),
-            "ovp": ParameterRow("OVP Set Value", "RW", "V", True, self.writeCard),
-            "ocp": ParameterRow("OCP Set Value", "RW", "A", True, self.writeCard),
-            "otp": ParameterRow("OTP Set Value", "RW", "°C", True, self.writeCard),
-            "fan_set": ParameterRow("Fan Set Value", "RW", "RPM", True, self.writeCard),
+            "ovp": ParameterRow("OVP Threshold", "RW", "V", True, self.writeCard),
+            "ocp": ParameterRow("OCP Threshold", "RW", "A", True, self.writeCard),
+            "otp": ParameterRow("OTP Threshold", "RW", "°C", True, self.writeCard),
+            "fan_set": ParameterRow("Fan Set Value", "RW", "0-1000", True, self.writeCard),
         }
         for row in self.writeParams.values():
             writeLayout.addWidget(row)
@@ -566,19 +622,21 @@ class PowerPage(ScrollArea):
 
     def onDeviceConnected(self, session) -> None:
         self.attachSessionRequested.emit(session)
+        self.stopPollingRequested.emit()
         self.deviceLabel.setText(session.cfg.port or self.tr("Unknown"))
         self.stateBadge.setText(self.tr("ONLINE"))
         self.stateBadge.setProperty("onlineState", "online")
         self._appendLog(f"Connected on {session.cfg.port}")
-        if self.autoPollSwitch.isChecked():
-            self.startPollingRequested.emit(500)
+        self.autoPollSwitch.blockSignals(True)
+        self.autoPollSwitch.setChecked(False)
+        self.autoPollSwitch.blockSignals(False)
         showMessage(
             self,
             self.tr("Device Connected"),
             self.tr("Power device session attached."),
             level="success",
         )
-        self._readStatusOnce()
+        self._appendLog("Waiting for device REPORT frames")
 
     def onDeviceDisconnected(self) -> None:
         self.detachSessionRequested.emit()
@@ -642,7 +700,7 @@ class PowerPage(ScrollArea):
         currentMa = int(
             round(float(self.writeParams["set_current"].text() or "0") * 1000)
         )
-        self.outputLimitsRequested.emit(voltageMv, currentMa)
+        self.outputLimitsRequested.emit(voltageMv, currentMa, self.outputSwitch.isChecked())
 
     def _applyProtectionValues(self) -> None:
         if not self._client.is_connected:
@@ -655,17 +713,19 @@ class PowerPage(ScrollArea):
         self.protectionValuesRequested.emit(ovpMv, ocpMa, otpMc, fanValue)
 
     def _onAutoPollChanged(self, checked: bool) -> None:
+        self.stopPollingRequested.emit()
         if checked:
-            self.startPollingRequested.emit(500)
-            self._appendLog("Auto polling enabled")
+            self.autoPollSwitch.blockSignals(True)
+            self.autoPollSwitch.setChecked(False)
+            self.autoPollSwitch.blockSignals(False)
+            self._appendLog("Host polling is disabled; use REPORT or Refresh Now")
         else:
-            self.stopPollingRequested.emit()
-            self._appendLog("Auto polling disabled")
+            self._appendLog("Host polling disabled")
 
     def _onOutputSwitchChanged(self, checked: bool) -> None:
         if not self._client.is_connected:
             return
-        self.powerStateRequested.emit(checked)
+        self._appendLog(f"Output switch staged as {'ON' if checked else 'OFF'}")
 
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setText(self.tr("ONLINE") if connected else self.tr("OFFLINE"))
@@ -763,10 +823,10 @@ class PowerPage(ScrollArea):
         if snapshot.output_voltage_raw >= 4090:
             return "DEBUG_JUDGEMENT: type27 is close to 4095, check MCU ADC/front-end first."
         if (
-            snapshot.ovp_set_value_mv == 33000
+            snapshot.ovp_set_value_mv == DEFAULT_OVP_SET_VALUE_MV
             and abs(snapshot.output_voltage_mv - snapshot.ovp_set_value_mv) <= 5
         ):
-            return "DEBUG_JUDGEMENT: type32=33000 overlaps type12, field mapping is likely wrong on host side."
+            return "DEBUG_JUDGEMENT: type32=44000 overlaps type12, field mapping is likely wrong on host side."
         return "DEBUG_JUDGEMENT: type27 is reasonable, if UI is still wrong check host parsing/binding."
 
     def _applyDisconnectedState(self) -> None:
@@ -777,6 +837,7 @@ class PowerPage(ScrollArea):
         self.outputSwitch.blockSignals(True)
         self.outputSwitch.setChecked(False)
         self.outputSwitch.blockSignals(False)
+        self.writeParams["ovp"].setDisplayValue(DEFAULT_OVP_SET_VALUE_TEXT)
 
     def _appendLog(self, text: str) -> None:
         if not (
@@ -798,7 +859,7 @@ class PowerPage(ScrollArea):
         showMessage(
             self,
             self.tr("Output Updated"),
-            self.tr("Voltage/current limits have been written."),
+            self.tr("Voltage/current/output state have been written."),
             level="success",
         )
         self._readStatusOnce()
@@ -836,7 +897,7 @@ class PowerPage(ScrollArea):
             self.metricCards[key].titleLabel.setText(self.tr(text))
 
         self.readCardTitle.setText(self.tr("Live Read Parameters"))
-        self.writeCardTitle.setText(self.tr("Read / Write Parameters"))
+        self.writeCardTitle.setText(self.tr("Output and Protection Settings"))
         for row in list(self.readParams.values()) + list(self.writeParams.values()):
             row.applyTexts()
 

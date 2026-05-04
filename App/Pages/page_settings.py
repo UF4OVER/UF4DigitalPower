@@ -4,14 +4,14 @@ from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QLabel, QWidget
 
 from Config import AUTHOR, FEEDBACK_URL, HELP_URL, VERSION, YEAR, cfg
-from app.Core import (
+from App.Core import (
     FontOption,
     apply_font_option,
     discover_font_options,
     get_saved_font_key,
     save_font_selection,
 )
-from app.Core import LANGUAGE_EN_US, LANGUAGE_ZH_CN, language_manager
+from App.Core import LANGUAGE_EN_US, LANGUAGE_ZH_CN, language_manager
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import InfoBar, LargeTitleLabel
 from qfluentwidgets import (
@@ -191,7 +191,7 @@ class SettingsPage(ScrollArea):
             self.tr("Check for updates on startup")
         )
         self.updateOnStartUpCard.contentLabel.setText(
-            self.tr("Check whether a new version is available when the app starts")
+            self.tr("Check whether a new version is available when the App starts")
         )
 
         self.helpCard.setTitle(self.tr("Help"))
@@ -211,7 +211,7 @@ class SettingsPage(ScrollArea):
     def __showRestartTooltip(self):
         InfoBar.success(
             self.tr("Saved"),
-            self.tr("Restart the app to fully apply the change"),
+            self.tr("Restart the App to fully apply the change"),
             duration=1500,
             parent=self,
         )
@@ -251,7 +251,7 @@ class SettingsPage(ScrollArea):
         language_manager.save_language(selectedKey)
         InfoBar.success(
             self.tr("Settings saved"),
-            self.tr("Restart the app to fully apply the change"),
+            self.tr("Restart the App to fully apply the change"),
             duration=2000,
             parent=self,
         )

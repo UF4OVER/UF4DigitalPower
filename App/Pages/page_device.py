@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PyQt5.QtCore import QCoreApplication, QTimer, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt5.QtSerialPort import QSerialPort
 from PyQt5.QtWidgets import (
@@ -28,11 +28,11 @@ from qfluentwidgets import (
     TableWidget,
     TextEdit,
     TitleLabel,
-    isDarkTheme,
+    isDarkTheme, ScrollArea,
 )
 
 from Config import cfg
-from app.Core import (
+from App.Core import (
     SESSION_PAGE_BAUD_RATES,
     SESSION_PAGE_RAW_FORMATS,
     SESSION_PAGE_SEND_MODES,
@@ -41,16 +41,17 @@ from app.Core import (
     SerialConfig,
     SerialEventType,
     SerialSession,
+    StyleSheet,
     listSerialPorts,
     logger,
 )
-from app.TVLCOMV2_FULL import (
+from App.TVLCOMV2_FULL import (
     Dispatcher as V2Dispatcher,
     FrameBuilder as V2FrameBuilder,
     FrameParser as V2FrameParser,
 )
-from app.TVLCOMV2_FULL import Payload as V2Payload, TYPE_REGISTRY
-from app.TVLCOMV2_FULL.dataType import DataFloat, DataInt, DataString, TypeBase
+from App.TVLCOMV2_FULL import Payload as V2Payload, TYPE_REGISTRY
+from App.TVLCOMV2_FULL.dataType import DataFloat, DataInt, DataString, TypeBase
 
 
 @dataclass
@@ -60,7 +61,7 @@ class _TlvRow:
     typeId: int = 0
 
 
-class DevicePage(QWidget):
+class DevicePage(ScrollArea):
     rxEventSignal = pyqtSignal(str)
     stateSignal = pyqtSignal(bool)
     errSignal = pyqtSignal(str)
@@ -80,11 +81,13 @@ class DevicePage(QWidget):
 
         self.setObjectName("DevicePage")
 
-        self.vBoxLayout = QVBoxLayout(self)
+        self.scrollWidget = QWidget(self)
+        self.scrollWidget.setObjectName("deviceScrollWidget")
+        self.vBoxLayout = QVBoxLayout(self.scrollWidget)
         self.vBoxLayout.setContentsMargins(24, 24, 24, 24)
         self.vBoxLayout.setSpacing(12)
 
-        self.titleLabel = TitleLabel("TVL COM", self)
+        self.titleLabel = TitleLabel("TVL COM", self.scrollWidget)
         self.vBoxLayout.addWidget(self.titleLabel)
 
         cfg.themeChanged.connect(self._onThemeChanged)
@@ -95,7 +98,10 @@ class DevicePage(QWidget):
         self._initTlvTable()
         self._initSendBar()
 
-        self.setStyleSheet("QWidget {background:transparent}")
+        self.setWidget(self.scrollWidget)
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        StyleSheet.DEVICE_PAGE.apply(self)
 
         self.refreshButton.clicked.connect(self.refreshPorts)
         self.connectButton.clicked.connect(self.toggleConnection)
@@ -115,7 +121,7 @@ class DevicePage(QWidget):
         self._applyMode()
 
     def _initConnectionBar(self):
-        connBar = QWidget(self)
+        connBar = QWidget(self.scrollWidget)
         connLayout = QHBoxLayout(connBar)
         connLayout.setContentsMargins(0, 0, 0, 0)
         connLayout.setSpacing(8)
@@ -149,13 +155,13 @@ class DevicePage(QWidget):
         self.vBoxLayout.addWidget(connBar)
 
     def _initLogConsole(self):
-        self.logEdit = TextEdit(self)
+        self.logEdit = TextEdit(self.scrollWidget)
         self.logEdit.setReadOnly(True)
         self.logEdit.document().setMaximumBlockCount(400)
         self.vBoxLayout.addWidget(self.logEdit, 1)
 
     def _initModeBar(self):
-        modeBar = QWidget(self)
+        modeBar = QWidget(self.scrollWidget)
         modeLayout = QHBoxLayout(modeBar)
         modeLayout.setContentsMargins(0, 0, 0, 0)
         modeLayout.setSpacing(8)
@@ -174,14 +180,14 @@ class DevicePage(QWidget):
         self.vBoxLayout.addWidget(modeBar)
 
     def _initTlvTable(self):
-        self.tlvTable = TableWidget(self)
+        self.tlvTable = TableWidget(self.scrollWidget)
         self.tlvTable.setColumnCount(4)
         self.tlvTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.tlvTable.setColumnHidden(0, True)
         self.tlvTable.setMinimumHeight(160)
         self.vBoxLayout.addWidget(self.tlvTable)
 
-        tlvBtnBar = QWidget(self)
+        tlvBtnBar = QWidget(self.scrollWidget)
         tlvBtnLayout = QHBoxLayout(tlvBtnBar)
         tlvBtnLayout.setContentsMargins(0, 0, 0, 0)
         tlvBtnLayout.setSpacing(8)
@@ -198,7 +204,7 @@ class DevicePage(QWidget):
         self.vBoxLayout.addWidget(tlvBtnBar)
 
     def _initSendBar(self):
-        sendBar = QWidget(self)
+        sendBar = QWidget(self.scrollWidget)
         sendLayout = QHBoxLayout(sendBar)
         sendLayout.setContentsMargins(0, 0, 0, 0)
         sendLayout.setSpacing(8)
@@ -677,7 +683,7 @@ class DevicePage(QWidget):
         if not self._session or not self._session.is_open:
             return
         try:
-            from app.Core.Session.session_serial import SendEvent
+            from App.Core.Session.session_serial import SendEvent
 
             QCoreApplication.postEvent(self._session, SendEvent(data))
         except Exception:
