@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import zipfile
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -22,9 +23,11 @@ from types import SimpleNamespace
 from typing import Optional
 from xml.etree import ElementTree as ET
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, QTimer, pyqtSignal
 
 from Config import DirPathsInstance, logger
+
+DAPLINK_FLASH_TIMEOUT_MS = 5 * 60 * 1000
 
 
 def _install_pyocd_probe_filter() -> None:
@@ -291,6 +294,11 @@ class DaplinkPyocdSession(QObject):
         self._event_receiver = _event_receiver
         self._busy = False
         self._worker: DaplinkActionThread | None = None
+        self._process: QProcess | None = None
+        self._process_action: str | None = None
+        self._process_timeout_timer = QTimer(self)
+        self._process_timeout_timer.setSingleShot(True)
+        self._process_timeout_timer.timeout.connect(self._kill_process_on_timeout)
         self._pack_paths: list[Path] = []
         self._target_items: list[DaplinkTargetInfo] = []
         self._last_progress_value = -1.0
@@ -331,7 +339,7 @@ class DaplinkPyocdSession(QObject):
             return
 
         if action == "download":
-            self._start_action("download", lambda: self._download_worker(payload))
+            self._start_download_process(payload)
             return
 
         self._post_event(MessageEvent("不支持的操作", f"未知操作: {payload.action}", "error"))
@@ -359,6 +367,133 @@ class DaplinkPyocdSession(QObject):
         if self._worker is not None:
             self._worker.deleteLater()
             self._worker = None
+
+    def _start_download_process(self, payload: DaplinkRequestPayload) -> None:
+        if self._busy:
+            self._post_event(MessageEvent("忙碌中", "当前已有操作在执行，请稍候。", "warning"))
+            return
+
+        if not payload.file_path or not os.path.isfile(payload.file_path):
+            self._post_event(MessageEvent("固件无效", "请先选择有效的固件文件。", "warning"))
+            return
+
+        self._busy = True
+        self._last_progress_value = -1.0
+        self._process_action = "download"
+        self._post_event(StateEvent(busy=True, action="download"))
+
+        try:
+            target_info = self._target_by_name(payload.connect.target_name)
+            args = self._build_pyocd_flash_args(payload, target_info)
+        except Exception as exc:
+            self._busy = False
+            self._process_action = None
+            self._post_event(StateEvent(busy=False, action="download"))
+            self._post_event(MessageEvent("执行失败", str(exc), "error"))
+            self._post_event(ActionFinishedEvent(action="download", success=False, exit_code=1, exit_status=None))
+            return
+
+        self._process = QProcess(self)
+        self._process.setProgram(self._pyocd_executable())
+        self._process.setArguments(args)
+        self._process.setWorkingDirectory(str(DirPathsInstance.BaseDir))
+        self._process.setProcessChannelMode(QProcess.MergedChannels)
+        self._process.readyReadStandardOutput.connect(self._read_process_output)
+        self._process.finished.connect(self._handle_process_finished)
+        self._process.errorOccurred.connect(self._handle_process_error)
+
+        command_text = " ".join([self._process.program(), *args])
+        self._post_event(LogEvent(f"pyOCD: {command_text}", "command"))
+        self._process_timeout_timer.start(DAPLINK_FLASH_TIMEOUT_MS)
+        self._process.start()
+
+        if not self._process.waitForStarted(3000):
+            error_text = self._process.errorString()
+            self._process_timeout_timer.stop()
+            self._finish_process_action(False, 1, f"pyOCD 启动失败: {error_text}")
+
+    def _build_pyocd_flash_args(self, payload: DaplinkRequestPayload, target_info: DaplinkTargetInfo) -> list[str]:
+        file_path = str(Path(payload.file_path or "").resolve())
+        file_ext = Path(file_path).suffix.lower().lstrip(".")
+        base_address = self._resolve_download_address(payload.base_address, f".{file_ext}", target_info)
+        connect_mode = (payload.connect.connect_mode or "under-reset").strip().lower()
+        if connect_mode == "attach":
+            connect_mode = "under-reset"
+        frequency = str(self._parse_frequency(payload.connect.frequency))
+
+        args = [
+            "flash",
+            "--no-config",
+            "--pack",
+            target_info.pack_path,
+            "-t",
+            target_info.target_name,
+            "-f",
+            frequency,
+            "-M",
+            connect_mode,
+            "-e",
+            payload.erase_mode or "sector",
+            "--format",
+            file_ext or "hex",
+        ]
+        if payload.connect.probe_uid:
+            args.extend(["-u", payload.connect.probe_uid])
+        if base_address is not None:
+            args.extend(["-a", f"0x{base_address:08X}"])
+        if payload.trust_crc:
+            args.append("--trust-crc")
+        if not payload.reset_after_download:
+            args.append("--no-reset")
+        args.append(file_path)
+        return args
+
+    def _read_process_output(self) -> None:
+        if self._process is None:
+            return
+        data = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        for line in data.replace("\r\n", "\n").replace("\r", "\n").splitlines():
+            if line.strip():
+                self._post_event(LogEvent(line.strip()))
+
+    def _handle_process_finished(self, exit_code: int, exit_status) -> None:
+        self._process_timeout_timer.stop()
+        success = exit_code == 0
+        message = "固件下载完成。" if success else f"pyOCD 下载失败，退出码: {exit_code}"
+        self._finish_process_action(success, exit_code, message)
+
+    def _handle_process_error(self, error) -> None:
+        if self._process is None:
+            return
+        self._post_event(LogEvent(f"pyOCD process error: {self._process.errorString()}", "error"))
+
+    def _kill_process_on_timeout(self) -> None:
+        if self._process is None:
+            return
+        self._post_event(LogEvent("pyOCD 下载超时，正在终止进程。", "error"))
+        self._process.kill()
+
+    def _finish_process_action(self, success: bool, exit_code: int, message: str) -> None:
+        action = self._process_action or "download"
+        if self._process is not None:
+            self._process.deleteLater()
+            self._process = None
+        self._process_action = None
+        self._busy = False
+        self._post_event(LogEvent(message, None if success else "error"))
+        if success:
+            self._post_event(ProgressEvent(action, 100.0))
+        else:
+            self._post_event(MessageEvent("执行失败", message, "error"))
+        self._post_event(StateEvent(busy=False, action=action))
+        self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
+
+    @staticmethod
+    def _pyocd_executable() -> str:
+        executable = Path(sys.executable).with_name("pyocd.exe")
+        if executable.exists():
+            return str(executable)
+        return "pyocd"
 
     def _scan_probes_worker(self) -> None:
         probes = self.scan_daplink_probes()

@@ -157,7 +157,7 @@ class DaplinkFlashPage(ScrollArea):
         grid.addWidget(self.connectModeLabel, 2, 2)
         self.connectModeCombo = ComboBox(self.connectCard)
         self.connectModeCombo.addItems(["halt", "under-reset", "pre-reset", "attach"])
-        self.connectModeCombo.setCurrentText("attach")
+        self.connectModeCombo.setCurrentText("under-reset")
         grid.addWidget(self.connectModeCombo, 2, 3)
 
         self.stateTitleLabel = BodyLabel(self.connectCard)
