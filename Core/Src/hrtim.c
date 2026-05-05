@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    hrtim.c
@@ -16,13 +16,13 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "hrtim.h"
 
-/* USER CODE BEGIN 0 */
+/* USER_Code CODE BEGIN 0 */
 
-/* USER CODE END 0 */
+/* USER_Code CODE END 0 */
 
 HRTIM_HandleTypeDef hhrtim1;
 
@@ -30,9 +30,9 @@ HRTIM_HandleTypeDef hhrtim1;
 void MX_HRTIM1_Init(void)
 {
 
-  /* USER CODE BEGIN HRTIM1_Init 0 */
+  /* USER_Code CODE BEGIN HRTIM1_Init 0 */
 
-  /* USER CODE END HRTIM1_Init 0 */
+  /* USER_Code CODE END HRTIM1_Init 0 */
 
   HRTIM_ADCTriggerCfgTypeDef pADCTriggerCfg = {0};
   HRTIM_TimeBaseCfgTypeDef pTimeBaseCfg = {0};
@@ -42,9 +42,9 @@ void MX_HRTIM1_Init(void)
   HRTIM_DeadTimeCfgTypeDef pDeadTimeCfg = {0};
   HRTIM_OutputCfgTypeDef pOutputCfg = {0};
 
-  /* USER CODE BEGIN HRTIM1_Init 1 */
+  /* USER_Code CODE BEGIN HRTIM1_Init 1 */
 
-  /* USER CODE END HRTIM1_Init 1 */
+  /* USER_Code CODE END HRTIM1_Init 1 */
   hhrtim1.Instance = HRTIM1;
   hhrtim1.Init.HRTIMInterruptResquests = HRTIM_IT_NONE;
   hhrtim1.Init.SyncOptions = HRTIM_SYNCOPTION_NONE;
@@ -70,7 +70,7 @@ void MX_HRTIM1_Init(void)
   {
     Error_Handler();
   }
-  pTimeBaseCfg.Period = 26000;
+  pTimeBaseCfg.Period = 30000;
   pTimeBaseCfg.RepetitionCounter = 0x00;
   pTimeBaseCfg.PrescalerRatio = HRTIM_PRESCALERRATIO_MUL32;
   pTimeBaseCfg.Mode = HRTIM_MODE_CONTINUOUS;
@@ -123,12 +123,12 @@ void MX_HRTIM1_Init(void)
   {
     Error_Handler();
   }
-  pCompareCfg.CompareValue = 13000;
+  pCompareCfg.CompareValue = 15000;
   if (HAL_HRTIM_WaveformCompareConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, &pCompareCfg) != HAL_OK)
   {
     Error_Handler();
   }
-  pCompareCfg.CompareValue = 6500;
+  pCompareCfg.CompareValue = 7500;
   if (HAL_HRTIM_WaveformCompareConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, &pCompareCfg) != HAL_OK)
   {
     Error_Handler();
@@ -185,14 +185,14 @@ void MX_HRTIM1_Init(void)
   {
     Error_Handler();
   }
-  pCompareCfg.CompareValue = 260;
+  pCompareCfg.CompareValue = 300;
   if (HAL_HRTIM_WaveformCompareConfig(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, &pCompareCfg) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN HRTIM1_Init 2 */
+  /* USER_Code CODE BEGIN HRTIM1_Init 2 */
 
-  /* USER CODE END HRTIM1_Init 2 */
+  /* USER_Code CODE END HRTIM1_Init 2 */
   HAL_HRTIM_MspPostInit(&hhrtim1);
 
 }
@@ -202,18 +202,18 @@ void HAL_HRTIM_MspInit(HRTIM_HandleTypeDef* hrtimHandle)
 
   if(hrtimHandle->Instance==HRTIM1)
   {
-  /* USER CODE BEGIN HRTIM1_MspInit 0 */
+  /* USER_Code CODE BEGIN HRTIM1_MspInit 0 */
 
-  /* USER CODE END HRTIM1_MspInit 0 */
+  /* USER_Code CODE END HRTIM1_MspInit 0 */
     /* HRTIM1 clock enable */
     __HAL_RCC_HRTIM1_CLK_ENABLE();
 
     /* HRTIM1 interrupt Init */
     HAL_NVIC_SetPriority(HRTIM1_TIMA_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(HRTIM1_TIMA_IRQn);
-  /* USER CODE BEGIN HRTIM1_MspInit 1 */
+  /* USER_Code CODE BEGIN HRTIM1_MspInit 1 */
 
-  /* USER CODE END HRTIM1_MspInit 1 */
+  /* USER_Code CODE END HRTIM1_MspInit 1 */
   }
 }
 
@@ -223,9 +223,9 @@ void HAL_HRTIM_MspPostInit(HRTIM_HandleTypeDef* hrtimHandle)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   if(hrtimHandle->Instance==HRTIM1)
   {
-  /* USER CODE BEGIN HRTIM1_MspPostInit 0 */
+  /* USER_Code CODE BEGIN HRTIM1_MspPostInit 0 */
 
-  /* USER CODE END HRTIM1_MspPostInit 0 */
+  /* USER_Code CODE END HRTIM1_MspPostInit 0 */
 
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -249,9 +249,9 @@ void HAL_HRTIM_MspPostInit(HRTIM_HandleTypeDef* hrtimHandle)
     GPIO_InitStruct.Alternate = GPIO_AF13_HRTIM1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /* USER CODE BEGIN HRTIM1_MspPostInit 1 */
+  /* USER_Code CODE BEGIN HRTIM1_MspPostInit 1 */
 
-  /* USER CODE END HRTIM1_MspPostInit 1 */
+  /* USER_Code CODE END HRTIM1_MspPostInit 1 */
   }
 
 }
@@ -261,20 +261,20 @@ void HAL_HRTIM_MspDeInit(HRTIM_HandleTypeDef* hrtimHandle)
 
   if(hrtimHandle->Instance==HRTIM1)
   {
-  /* USER CODE BEGIN HRTIM1_MspDeInit 0 */
+  /* USER_Code CODE BEGIN HRTIM1_MspDeInit 0 */
 
-  /* USER CODE END HRTIM1_MspDeInit 0 */
+  /* USER_Code CODE END HRTIM1_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_HRTIM1_CLK_DISABLE();
 
     /* HRTIM1 interrupt Deinit */
     HAL_NVIC_DisableIRQ(HRTIM1_TIMA_IRQn);
-  /* USER CODE BEGIN HRTIM1_MspDeInit 1 */
+  /* USER_Code CODE BEGIN HRTIM1_MspDeInit 1 */
 
-  /* USER CODE END HRTIM1_MspDeInit 1 */
+  /* USER_Code CODE END HRTIM1_MspDeInit 1 */
   }
 }
 
-/* USER CODE BEGIN 1 */
+/* USER_Code CODE BEGIN 1 */
 
-/* USER CODE END 1 */
+/* USER_Code CODE END 1 */

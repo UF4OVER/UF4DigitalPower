@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    stm32g4xx_it.h
@@ -15,7 +15,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __STM32G4xx_IT_H
@@ -26,24 +26,24 @@ extern "C" {
 #endif
 
 /* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
+/* USER_Code CODE BEGIN Includes */
 
-/* USER CODE END Includes */
+/* USER_Code CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
-/* USER CODE BEGIN ET */
+/* USER_Code CODE BEGIN ET */
 
-/* USER CODE END ET */
+/* USER_Code CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
-/* USER CODE BEGIN EC */
+/* USER_Code CODE BEGIN EC */
 
-/* USER CODE END EC */
+/* USER_Code CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
-/* USER CODE BEGIN EM */
+/* USER_Code CODE BEGIN EM */
 
-/* USER CODE END EM */
+/* USER_Code CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
 void NMI_Handler(void);
@@ -62,12 +62,10 @@ void USB_LP_IRQHandler(void);
 void TIM2_IRQHandler(void);
 void TIM3_IRQHandler(void);
 void TIM4_IRQHandler(void);
-void USART1_IRQHandler(void);
-void USART3_IRQHandler(void);
 void HRTIM1_TIMA_IRQHandler(void);
-/* USER CODE BEGIN EFP */
+/* USER_Code CODE BEGIN EFP */
 
-/* USER CODE END EFP */
+/* USER_Code CODE END EFP */
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    dma.c
@@ -16,22 +16,22 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
 #include "dma.h"
 
-/* USER CODE BEGIN 0 */
+/* USER_Code CODE BEGIN 0 */
 
-/* USER CODE END 0 */
+/* USER_Code CODE END 0 */
 
 /*----------------------------------------------------------------------------*/
 /* Configure DMA                                                              */
 /*----------------------------------------------------------------------------*/
 
-/* USER CODE BEGIN 1 */
+/* USER_Code CODE BEGIN 1 */
 
-/* USER CODE END 1 */
+/* USER_Code CODE END 1 */
 
 /**
   * Enable DMA controller clock
@@ -56,7 +56,7 @@ void MX_DMA_Init(void)
 
 }
 
-/* USER CODE BEGIN 2 */
+/* USER_Code CODE BEGIN 2 */
 
-/* USER CODE END 2 */
+/* USER_Code CODE END 2 */
 

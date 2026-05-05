@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : usb_device.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __USB_DEVICE__H__
@@ -31,9 +31,9 @@
 #include "stm32g4xx_hal.h"
 #include "usbd_def.h"
 
-/* USER CODE BEGIN INCLUDE */
+/* USER_Code CODE BEGIN INCLUDE */
 
-/* USER CODE END INCLUDE */
+/* USER_Code CODE END INCLUDE */
 
 /** @addtogroup USBD_OTG_DRIVER
   * @{
@@ -50,21 +50,21 @@
   */
 
 /* Private variables ---------------------------------------------------------*/
-/* USER CODE BEGIN PV */
+/* USER_Code CODE BEGIN PV */
 
-/* USER CODE END PV */
+/* USER_Code CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-/* USER CODE BEGIN PFP */
+/* USER_Code CODE BEGIN PFP */
 
-/* USER CODE END PFP */
+/* USER_Code CODE END PFP */
 
 /*
  * -- Insert your variables declaration here --
  */
-/* USER CODE BEGIN VARIABLES */
+/* USER_Code CODE BEGIN VARIABLES */
 
-/* USER CODE END VARIABLES */
+/* USER_Code CODE END VARIABLES */
 /**
   * @}
   */
@@ -80,9 +80,9 @@ void MX_USB_Device_Init(void);
 /*
  * -- Insert functions declaration here --
  */
-/* USER CODE BEGIN FD */
+/* USER_Code CODE BEGIN FD */
 
-/* USER CODE END FD */
+/* USER_Code CODE END FD */
 /**
   * @}
   */

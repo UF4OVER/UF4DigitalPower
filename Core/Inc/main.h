@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : main.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __MAIN_H
@@ -30,31 +30,31 @@ extern "C" {
 #include "stm32g4xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
+/* USER_Code CODE BEGIN Includes */
 
-/* USER CODE END Includes */
+/* USER_Code CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
-/* USER CODE BEGIN ET */
+/* USER_Code CODE BEGIN ET */
 
-/* USER CODE END ET */
+/* USER_Code CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
-/* USER CODE BEGIN EC */
+/* USER_Code CODE BEGIN EC */
 
-/* USER CODE END EC */
+/* USER_Code CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
-/* USER CODE BEGIN EM */
+/* USER_Code CODE BEGIN EM */
 
-/* USER CODE END EM */
+/* USER_Code CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
-/* USER CODE BEGIN EFP */
+/* USER_Code CODE BEGIN EFP */
 
-/* USER CODE END EFP */
+/* USER_Code CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
 #define ADC_VIN_Pin GPIO_PIN_0
@@ -88,9 +88,9 @@ void Error_Handler(void);
 #define DIV_SW_Pin GPIO_PIN_7
 #define DIV_SW_GPIO_Port GPIOB
 
-/* USER CODE BEGIN Private defines */
+/* USER_Code CODE BEGIN Private defines */
 
-/* USER CODE END Private defines */
+/* USER_Code CODE END Private defines */
 
 #ifdef __cplusplus
 }

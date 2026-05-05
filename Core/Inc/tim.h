@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    tim.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __TIM_H__
 #define __TIM_H__
@@ -28,9 +28,9 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* USER CODE BEGIN Includes */
+/* USER_Code CODE BEGIN Includes */
 
-/* USER CODE END Includes */
+/* USER_Code CODE END Includes */
 
 extern TIM_HandleTypeDef htim2;
 
@@ -38,22 +38,34 @@ extern TIM_HandleTypeDef htim3;
 
 extern TIM_HandleTypeDef htim4;
 
+extern TIM_HandleTypeDef htim6;
+
+extern TIM_HandleTypeDef htim7;
+
 extern TIM_HandleTypeDef htim8;
 
-/* USER CODE BEGIN Private defines */
+extern TIM_HandleTypeDef htim16;
 
-/* USER CODE END Private defines */
+extern TIM_HandleTypeDef htim17;
+
+/* USER_Code CODE BEGIN Private defines */
+
+/* USER_Code CODE END Private defines */
 
 void MX_TIM2_Init(void);
 void MX_TIM3_Init(void);
 void MX_TIM4_Init(void);
+void MX_TIM6_Init(void);
+void MX_TIM7_Init(void);
 void MX_TIM8_Init(void);
+void MX_TIM16_Init(void);
+void MX_TIM17_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
-/* USER CODE BEGIN Prototypes */
+/* USER_Code CODE BEGIN Prototypes */
 
-/* USER CODE END Prototypes */
+/* USER_Code CODE END Prototypes */
 
 #ifdef __cplusplus
 }

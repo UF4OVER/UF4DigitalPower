@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    hrtim.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __HRTIM_H__
 #define __HRTIM_H__
@@ -28,23 +28,23 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* USER CODE BEGIN Includes */
+/* USER_Code CODE BEGIN Includes */
 
-/* USER CODE END Includes */
+/* USER_Code CODE END Includes */
 
 extern HRTIM_HandleTypeDef hhrtim1;
 
-/* USER CODE BEGIN Private defines */
+/* USER_Code CODE BEGIN Private defines */
 
-/* USER CODE END Private defines */
+/* USER_Code CODE END Private defines */
 
 void MX_HRTIM1_Init(void);
 
 void HAL_HRTIM_MspPostInit(HRTIM_HandleTypeDef *hhrtim);
 
-/* USER CODE BEGIN Prototypes */
+/* USER_Code CODE BEGIN Prototypes */
 
-/* USER CODE END Prototypes */
+/* USER_Code CODE END Prototypes */
 
 #ifdef __cplusplus
 }

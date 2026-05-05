@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    spi.c
@@ -16,13 +16,13 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "spi.h"
 
-/* USER CODE BEGIN 0 */
+/* USER_Code CODE BEGIN 0 */
 
-/* USER CODE END 0 */
+/* USER_Code CODE END 0 */
 
 SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef hdma_spi3_rx;
@@ -32,13 +32,13 @@ DMA_HandleTypeDef hdma_spi3_tx;
 void MX_SPI3_Init(void)
 {
 
-  /* USER CODE BEGIN SPI3_Init 0 */
+  /* USER_Code CODE BEGIN SPI3_Init 0 */
 
-  /* USER CODE END SPI3_Init 0 */
+  /* USER_Code CODE END SPI3_Init 0 */
 
-  /* USER CODE BEGIN SPI3_Init 1 */
+  /* USER_Code CODE BEGIN SPI3_Init 1 */
 
-  /* USER CODE END SPI3_Init 1 */
+  /* USER_Code CODE END SPI3_Init 1 */
   hspi3.Instance = SPI3;
   hspi3.Init.Mode = SPI_MODE_MASTER;
   hspi3.Init.Direction = SPI_DIRECTION_2LINES;
@@ -57,9 +57,9 @@ void MX_SPI3_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN SPI3_Init 2 */
+  /* USER_Code CODE BEGIN SPI3_Init 2 */
 
-  /* USER CODE END SPI3_Init 2 */
+  /* USER_Code CODE END SPI3_Init 2 */
 
 }
 
@@ -69,9 +69,9 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   if(spiHandle->Instance==SPI3)
   {
-  /* USER CODE BEGIN SPI3_MspInit 0 */
+  /* USER_Code CODE BEGIN SPI3_MspInit 0 */
 
-  /* USER CODE END SPI3_MspInit 0 */
+  /* USER_Code CODE END SPI3_MspInit 0 */
     /* SPI3 clock enable */
     __HAL_RCC_SPI3_CLK_ENABLE();
 
@@ -123,9 +123,9 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
 
     __HAL_LINKDMA(spiHandle,hdmatx,hdma_spi3_tx);
 
-  /* USER CODE BEGIN SPI3_MspInit 1 */
+  /* USER_Code CODE BEGIN SPI3_MspInit 1 */
 
-  /* USER CODE END SPI3_MspInit 1 */
+  /* USER_Code CODE END SPI3_MspInit 1 */
   }
 }
 
@@ -134,9 +134,9 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
 
   if(spiHandle->Instance==SPI3)
   {
-  /* USER CODE BEGIN SPI3_MspDeInit 0 */
+  /* USER_Code CODE BEGIN SPI3_MspDeInit 0 */
 
-  /* USER CODE END SPI3_MspDeInit 0 */
+  /* USER_Code CODE END SPI3_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_SPI3_CLK_DISABLE();
 
@@ -150,12 +150,12 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
     /* SPI3 DMA DeInit */
     HAL_DMA_DeInit(spiHandle->hdmarx);
     HAL_DMA_DeInit(spiHandle->hdmatx);
-  /* USER CODE BEGIN SPI3_MspDeInit 1 */
+  /* USER_Code CODE BEGIN SPI3_MspDeInit 1 */
 
-  /* USER CODE END SPI3_MspDeInit 1 */
+  /* USER_Code CODE END SPI3_MspDeInit 1 */
   }
 }
 
-/* USER CODE BEGIN 1 */
+/* USER_Code CODE BEGIN 1 */
 
-/* USER CODE END 1 */
+/* USER_Code CODE END 1 */

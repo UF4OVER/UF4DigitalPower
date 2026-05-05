@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    adc.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __ADC_H__
 #define __ADC_H__
@@ -28,9 +28,9 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* USER CODE BEGIN Includes */
+/* USER_Code CODE BEGIN Includes */
 
-/* USER CODE END Includes */
+/* USER_Code CODE END Includes */
 
 extern ADC_HandleTypeDef hadc1;
 
@@ -38,17 +38,17 @@ extern ADC_HandleTypeDef hadc2;
 
 extern ADC_HandleTypeDef hadc5;
 
-/* USER CODE BEGIN Private defines */
+/* USER_Code CODE BEGIN Private defines */
 
-/* USER CODE END Private defines */
+/* USER_Code CODE END Private defines */
 
 void MX_ADC1_Init(void);
 void MX_ADC2_Init(void);
 void MX_ADC5_Init(void);
 
-/* USER CODE BEGIN Prototypes */
+/* USER_Code CODE BEGIN Prototypes */
 
-/* USER CODE END Prototypes */
+/* USER_Code CODE END Prototypes */
 
 #ifdef __cplusplus
 }

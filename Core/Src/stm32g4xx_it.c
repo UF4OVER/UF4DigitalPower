@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    stm32g4xx_it.c
@@ -15,44 +15,44 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-/* USER CODE END Includes */
+/* USER_Code CODE BEGIN Includes */
+/* USER_Code CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN TD */
+/* USER_Code CODE BEGIN TD */
 
-/* USER CODE END TD */
+/* USER_Code CODE END TD */
 
 /* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
+/* USER_Code CODE BEGIN PD */
 
-/* USER CODE END PD */
+/* USER_Code CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
+/* USER_Code CODE BEGIN PM */
 
-/* USER CODE END PM */
+/* USER_Code CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-/* USER CODE BEGIN PV */
+/* USER_Code CODE BEGIN PV */
 
-/* USER CODE END PV */
+/* USER_Code CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-/* USER CODE BEGIN PFP */
+/* USER_Code CODE BEGIN PFP */
 
-/* USER CODE END PFP */
+/* USER_Code CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
+/* USER_Code CODE BEGIN 0 */
 
-/* USER CODE END 0 */
+/* USER_Code CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_FS;
@@ -63,11 +63,9 @@ extern DMA_HandleTypeDef hdma_spi3_tx;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart3;
-/* USER CODE BEGIN EV */
+/* USER_Code CODE BEGIN EV */
 
-/* USER CODE END EV */
+/* USER_Code CODE END EV */
 
 /******************************************************************************/
 /*           Cortex-M4 Processor Interruption and Exception Handlers          */
@@ -77,14 +75,14 @@ extern UART_HandleTypeDef huart3;
   */
 void NMI_Handler(void)
 {
-  /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
+  /* USER_Code CODE BEGIN NonMaskableInt_IRQn 0 */
 
-  /* USER CODE END NonMaskableInt_IRQn 0 */
-  /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
+  /* USER_Code CODE END NonMaskableInt_IRQn 0 */
+  /* USER_Code CODE BEGIN NonMaskableInt_IRQn 1 */
    while (1)
   {
   }
-  /* USER CODE END NonMaskableInt_IRQn 1 */
+  /* USER_Code CODE END NonMaskableInt_IRQn 1 */
 }
 
 /**
@@ -92,13 +90,13 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
+  /* USER_Code CODE BEGIN HardFault_IRQn 0 */
 
-  /* USER CODE END HardFault_IRQn 0 */
+  /* USER_Code CODE END HardFault_IRQn 0 */
   while (1)
   {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
+    /* USER_Code CODE BEGIN W1_HardFault_IRQn 0 */
+    /* USER_Code CODE END W1_HardFault_IRQn 0 */
   }
 }
 
@@ -107,13 +105,13 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
-  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
+  /* USER_Code CODE BEGIN MemoryManagement_IRQn 0 */
 
-  /* USER CODE END MemoryManagement_IRQn 0 */
+  /* USER_Code CODE END MemoryManagement_IRQn 0 */
   while (1)
   {
-    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
-    /* USER CODE END W1_MemoryManagement_IRQn 0 */
+    /* USER_Code CODE BEGIN W1_MemoryManagement_IRQn 0 */
+    /* USER_Code CODE END W1_MemoryManagement_IRQn 0 */
   }
 }
 
@@ -122,13 +120,13 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
-  /* USER CODE BEGIN BusFault_IRQn 0 */
+  /* USER_Code CODE BEGIN BusFault_IRQn 0 */
 
-  /* USER CODE END BusFault_IRQn 0 */
+  /* USER_Code CODE END BusFault_IRQn 0 */
   while (1)
   {
-    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
-    /* USER CODE END W1_BusFault_IRQn 0 */
+    /* USER_Code CODE BEGIN W1_BusFault_IRQn 0 */
+    /* USER_Code CODE END W1_BusFault_IRQn 0 */
   }
 }
 
@@ -137,13 +135,13 @@ void BusFault_Handler(void)
   */
 void UsageFault_Handler(void)
 {
-  /* USER CODE BEGIN UsageFault_IRQn 0 */
+  /* USER_Code CODE BEGIN UsageFault_IRQn 0 */
 
-  /* USER CODE END UsageFault_IRQn 0 */
+  /* USER_Code CODE END UsageFault_IRQn 0 */
   while (1)
   {
-    /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
-    /* USER CODE END W1_UsageFault_IRQn 0 */
+    /* USER_Code CODE BEGIN W1_UsageFault_IRQn 0 */
+    /* USER_Code CODE END W1_UsageFault_IRQn 0 */
   }
 }
 
@@ -152,12 +150,12 @@ void UsageFault_Handler(void)
   */
 void SVC_Handler(void)
 {
-  /* USER CODE BEGIN SVCall_IRQn 0 */
+  /* USER_Code CODE BEGIN SVCall_IRQn 0 */
 
-  /* USER CODE END SVCall_IRQn 0 */
-  /* USER CODE BEGIN SVCall_IRQn 1 */
+  /* USER_Code CODE END SVCall_IRQn 0 */
+  /* USER_Code CODE BEGIN SVCall_IRQn 1 */
 
-  /* USER CODE END SVCall_IRQn 1 */
+  /* USER_Code CODE END SVCall_IRQn 1 */
 }
 
 /**
@@ -165,12 +163,12 @@ void SVC_Handler(void)
   */
 void DebugMon_Handler(void)
 {
-  /* USER CODE BEGIN DebugMonitor_IRQn 0 */
+  /* USER_Code CODE BEGIN DebugMonitor_IRQn 0 */
 
-  /* USER CODE END DebugMonitor_IRQn 0 */
-  /* USER CODE BEGIN DebugMonitor_IRQn 1 */
+  /* USER_Code CODE END DebugMonitor_IRQn 0 */
+  /* USER_Code CODE BEGIN DebugMonitor_IRQn 1 */
 
-  /* USER CODE END DebugMonitor_IRQn 1 */
+  /* USER_Code CODE END DebugMonitor_IRQn 1 */
 }
 
 /**
@@ -178,12 +176,12 @@ void DebugMon_Handler(void)
   */
 void PendSV_Handler(void)
 {
-  /* USER CODE BEGIN PendSV_IRQn 0 */
+  /* USER_Code CODE BEGIN PendSV_IRQn 0 */
 
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
+  /* USER_Code CODE END PendSV_IRQn 0 */
+  /* USER_Code CODE BEGIN PendSV_IRQn 1 */
 
-  /* USER CODE END PendSV_IRQn 1 */
+  /* USER_Code CODE END PendSV_IRQn 1 */
 }
 
 /**
@@ -191,13 +189,13 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
-  /* USER CODE BEGIN SysTick_IRQn 0 */
+  /* USER_Code CODE BEGIN SysTick_IRQn 0 */
 
-  /* USER CODE END SysTick_IRQn 0 */
+  /* USER_Code CODE END SysTick_IRQn 0 */
   HAL_IncTick();
-  /* USER CODE BEGIN SysTick_IRQn 1 */
+  /* USER_Code CODE BEGIN SysTick_IRQn 1 */
 
-  /* USER CODE END SysTick_IRQn 1 */
+  /* USER_Code CODE END SysTick_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -212,13 +210,13 @@ void SysTick_Handler(void)
   */
 void DMA1_Channel1_IRQHandler(void)
 {
-  /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
+  /* USER_Code CODE BEGIN DMA1_Channel1_IRQn 0 */
 
-  /* USER CODE END DMA1_Channel1_IRQn 0 */
+  /* USER_Code CODE END DMA1_Channel1_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_adc1);
-  /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
+  /* USER_Code CODE BEGIN DMA1_Channel1_IRQn 1 */
 
-  /* USER CODE END DMA1_Channel1_IRQn 1 */
+  /* USER_Code CODE END DMA1_Channel1_IRQn 1 */
 }
 
 /**
@@ -226,13 +224,13 @@ void DMA1_Channel1_IRQHandler(void)
   */
 void DMA1_Channel2_IRQHandler(void)
 {
-  /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
+  /* USER_Code CODE BEGIN DMA1_Channel2_IRQn 0 */
 
-  /* USER CODE END DMA1_Channel2_IRQn 0 */
+  /* USER_Code CODE END DMA1_Channel2_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_spi3_rx);
-  /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
+  /* USER_Code CODE BEGIN DMA1_Channel2_IRQn 1 */
 
-  /* USER CODE END DMA1_Channel2_IRQn 1 */
+  /* USER_Code CODE END DMA1_Channel2_IRQn 1 */
 }
 
 /**
@@ -240,13 +238,13 @@ void DMA1_Channel2_IRQHandler(void)
   */
 void DMA1_Channel3_IRQHandler(void)
 {
-  /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
+  /* USER_Code CODE BEGIN DMA1_Channel3_IRQn 0 */
 
-  /* USER CODE END DMA1_Channel3_IRQn 0 */
+  /* USER_Code CODE END DMA1_Channel3_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_spi3_tx);
-  /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
+  /* USER_Code CODE BEGIN DMA1_Channel3_IRQn 1 */
 
-  /* USER CODE END DMA1_Channel3_IRQn 1 */
+  /* USER_Code CODE END DMA1_Channel3_IRQn 1 */
 }
 
 /**
@@ -254,13 +252,13 @@ void DMA1_Channel3_IRQHandler(void)
   */
 void USB_LP_IRQHandler(void)
 {
-  /* USER CODE BEGIN USB_LP_IRQn 0 */
+  /* USER_Code CODE BEGIN USB_LP_IRQn 0 */
 
-  /* USER CODE END USB_LP_IRQn 0 */
+  /* USER_Code CODE END USB_LP_IRQn 0 */
   HAL_PCD_IRQHandler(&hpcd_USB_FS);
-  /* USER CODE BEGIN USB_LP_IRQn 1 */
+  /* USER_Code CODE BEGIN USB_LP_IRQn 1 */
 
-  /* USER CODE END USB_LP_IRQn 1 */
+  /* USER_Code CODE END USB_LP_IRQn 1 */
 }
 
 /**
@@ -268,13 +266,13 @@ void USB_LP_IRQHandler(void)
   */
 void TIM2_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM2_IRQn 0 */
+  /* USER_Code CODE BEGIN TIM2_IRQn 0 */
 
-  /* USER CODE END TIM2_IRQn 0 */
+  /* USER_Code CODE END TIM2_IRQn 0 */
   HAL_TIM_IRQHandler(&htim2);
-  /* USER CODE BEGIN TIM2_IRQn 1 */
+  /* USER_Code CODE BEGIN TIM2_IRQn 1 */
 
-  /* USER CODE END TIM2_IRQn 1 */
+  /* USER_Code CODE END TIM2_IRQn 1 */
 }
 
 /**
@@ -282,13 +280,13 @@ void TIM2_IRQHandler(void)
   */
 void TIM3_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM3_IRQn 0 */
+  /* USER_Code CODE BEGIN TIM3_IRQn 0 */
 
-  /* USER CODE END TIM3_IRQn 0 */
+  /* USER_Code CODE END TIM3_IRQn 0 */
   HAL_TIM_IRQHandler(&htim3);
-  /* USER CODE BEGIN TIM3_IRQn 1 */
+  /* USER_Code CODE BEGIN TIM3_IRQn 1 */
 
-  /* USER CODE END TIM3_IRQn 1 */
+  /* USER_Code CODE END TIM3_IRQn 1 */
 }
 
 /**
@@ -296,29 +294,13 @@ void TIM3_IRQHandler(void)
   */
 void TIM4_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM4_IRQn 0 */
+  /* USER_Code CODE BEGIN TIM4_IRQn 0 */
 
-  /* USER CODE END TIM4_IRQn 0 */
+  /* USER_Code CODE END TIM4_IRQn 0 */
   HAL_TIM_IRQHandler(&htim4);
-  /* USER CODE BEGIN TIM4_IRQn 1 */
+  /* USER_Code CODE BEGIN TIM4_IRQn 1 */
 
-  /* USER CODE END TIM4_IRQn 1 */
-}
-
-/**
-  * @brief This function handles USART1 global interrupt.
-  */
-void USART1_IRQHandler(void)
-{
-  HAL_UART_IRQHandler(&huart1);
-}
-
-/**
-  * @brief This function handles USART3 global interrupt.
-  */
-void USART3_IRQHandler(void)
-{
-  HAL_UART_IRQHandler(&huart3);
+  /* USER_Code CODE END TIM4_IRQn 1 */
 }
 
 /**
@@ -326,15 +308,15 @@ void USART3_IRQHandler(void)
   */
 void HRTIM1_TIMA_IRQHandler(void)
 {
-  /* USER CODE BEGIN HRTIM1_TIMA_IRQn 0 */
+  /* USER_Code CODE BEGIN HRTIM1_TIMA_IRQn 0 */
 
-  /* USER CODE END HRTIM1_TIMA_IRQn 0 */
+  /* USER_Code CODE END HRTIM1_TIMA_IRQn 0 */
   HAL_HRTIM_IRQHandler(&hhrtim1,HRTIM_TIMERINDEX_TIMER_A);
-  /* USER CODE BEGIN HRTIM1_TIMA_IRQn 1 */
+  /* USER_Code CODE BEGIN HRTIM1_TIMA_IRQn 1 */
 
-  /* USER CODE END HRTIM1_TIMA_IRQn 1 */
+  /* USER_Code CODE END HRTIM1_TIMA_IRQn 1 */
 }
 
-/* USER CODE BEGIN 1 */
+/* USER_Code CODE BEGIN 1 */
 
-/* USER CODE END 1 */
+/* USER_Code CODE END 1 */

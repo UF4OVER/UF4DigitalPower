@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+/* USER_Code CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : usbd_cdc_if.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
+/* USER_Code CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 
@@ -30,9 +30,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_cdc.h"
 
-/* USER CODE BEGIN INCLUDE */
+/* USER_Code CODE BEGIN INCLUDE */
 
-/* USER CODE END INCLUDE */
+/* USER_Code CODE END INCLUDE */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
   * @brief For Usb device.
@@ -51,9 +51,9 @@
 /* Define size for the receive and transmit buffer over CDC */
 #define APP_RX_DATA_SIZE  2048
 #define APP_TX_DATA_SIZE  2048
-/* USER CODE BEGIN EXPORTED_DEFINES */
+/* USER_Code CODE BEGIN EXPORTED_DEFINES */
 
-/* USER CODE END EXPORTED_DEFINES */
+/* USER_Code CODE END EXPORTED_DEFINES */
 
 /**
   * @}
@@ -64,9 +64,9 @@
   * @{
   */
 
-/* USER CODE BEGIN EXPORTED_TYPES */
+/* USER_Code CODE BEGIN EXPORTED_TYPES */
 
-/* USER CODE END EXPORTED_TYPES */
+/* USER_Code CODE END EXPORTED_TYPES */
 
 /**
   * @}
@@ -77,9 +77,9 @@
   * @{
   */
 
-/* USER CODE BEGIN EXPORTED_MACRO */
+/* USER_Code CODE BEGIN EXPORTED_MACRO */
 
-/* USER CODE END EXPORTED_MACRO */
+/* USER_Code CODE END EXPORTED_MACRO */
 
 /**
   * @}
@@ -93,9 +93,9 @@
 /** CDC Interface callback. */
 extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS;
 
-/* USER CODE BEGIN EXPORTED_VARIABLES */
+/* USER_Code CODE BEGIN EXPORTED_VARIABLES */
 
-/* USER CODE END EXPORTED_VARIABLES */
+/* USER_Code CODE END EXPORTED_VARIABLES */
 
 /**
   * @}
@@ -108,9 +108,9 @@ extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS;
 
 uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
 
-/* USER CODE BEGIN EXPORTED_FUNCTIONS */
+/* USER_Code CODE BEGIN EXPORTED_FUNCTIONS */
 
-/* USER CODE END EXPORTED_FUNCTIONS */
+/* USER_Code CODE END EXPORTED_FUNCTIONS */
 
 /**
   * @}
