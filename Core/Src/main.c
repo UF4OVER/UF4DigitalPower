@@ -124,6 +124,7 @@ int main(void)
   /* USER_Code CODE BEGIN WHILE */
   while (1)
   {
+    // commit_usb_device();commit_usb_device
     /* USER_Code CODE END WHILE */
 
     /* USER_Code CODE BEGIN 3 */
