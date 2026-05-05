@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import os
-import threading
 import zipfile
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -23,7 +22,7 @@ from types import SimpleNamespace
 from typing import Optional
 from xml.etree import ElementTree as ET
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject
+from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
 from Config import DirPathsInstance, logger
 
@@ -262,12 +261,36 @@ class ActionFinishedEvent(DaplinkProgrammerEvent):
         )
 
 
+class DaplinkActionThread(QThread):
+    resultReady = pyqtSignal(str, bool, int)
+
+    def __init__(self, action: str, session: "DaplinkPyocdSession", worker, parent: QObject | None = None):
+        super().__init__(parent)
+        self.action = action
+        self.session = session
+        self.worker = worker
+
+    def run(self) -> None:
+        success = False
+        exit_code = 1
+        try:
+            self.worker()
+            success = True
+            exit_code = 0
+        except Exception as exc:  # NOQA broad-except
+            logger.exception(exc)
+            message = self.session._format_worker_error(exc)
+            self.session._post_event(LogEvent(message, "error"))
+            self.session._post_event(MessageEvent("执行失败", message, "error"))
+        self.resultReady.emit(self.action, success, exit_code)
+
+
 class DaplinkPyocdSession(QObject):
     def __init__(self, _event_receiver: Optional[QObject] = None, parent: QObject | None = None):
         super().__init__(parent)
         self._event_receiver = _event_receiver
         self._busy = False
-        self._worker: threading.Thread | None = None
+        self._worker: DaplinkActionThread | None = None
         self._pack_paths: list[Path] = []
         self._target_items: list[DaplinkTargetInfo] = []
         self._last_progress_value = -1.0
@@ -322,24 +345,20 @@ class DaplinkPyocdSession(QObject):
         self._last_progress_value = -1.0
         self._post_event(StateEvent(busy=True, action=action))
 
-        def _runner():
-            success = False
-            exit_code = 1
-            try:
-                worker()
-                success = True
-                exit_code = 0
-            except Exception as exc:  # NOQA broad-except
-                logger.exception(exc)
-                self._post_event(LogEvent(str(exc), "error"))
-                self._post_event(MessageEvent("执行失败", str(exc), "error"))
-            finally:
-                self._busy = False
-                self._post_event(StateEvent(busy=False, action=action))
-                self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
-
-        self._worker = threading.Thread(target=_runner, name=f"daplink-pyocd-{action}", daemon=True)
+        self._worker = DaplinkActionThread(action, self, worker)
+        self._worker.resultReady.connect(self._finish_action)
+        self._worker.finished.connect(self._cleanup_worker)
         self._worker.start()
+
+    def _finish_action(self, action: str, success: bool, exit_code: int) -> None:
+        self._busy = False
+        self._post_event(StateEvent(busy=False, action=action))
+        self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
+
+    def _cleanup_worker(self) -> None:
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
 
     def _scan_probes_worker(self) -> None:
         probes = self.scan_daplink_probes()
@@ -494,6 +513,17 @@ class DaplinkPyocdSession(QObject):
     def _post_event(self, evt: DaplinkProgrammerEvent) -> None:
         if self._event_receiver is not None:
             QCoreApplication.postEvent(self._event_receiver, evt)
+
+    @staticmethod
+    def _format_worker_error(exc: Exception) -> str:
+        text = str(exc) or exc.__class__.__name__
+        lowered = text.lower()
+        if "read error" in lowered or "i/o" in lowered or "hid" in lowered:
+            return (
+                "DAPLink I/O read error. Close the serial session for this device, "
+                "replug DAPLink, lower SWD frequency, then try again."
+            )
+        return text
 
     @classmethod
     def pack_dir(cls) -> Path:

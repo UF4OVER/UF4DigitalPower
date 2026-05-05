@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PyQt5.QtCore import QSize, Qt, QUrl
+from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QImage
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -19,7 +19,16 @@ from qfluentwidgets import (
 )
 
 from Config.config import AppIconPath, DirPathsInstance
-from App.Core import StyleSheet, UpdateCheckFinishedEvent, showMessage, update_manager
+from App.Core import (
+    FirmwareCheckFinishedEvent,
+    FirmwareDownloadFinishedEvent,
+    StyleSheet,
+    UpdateCheckFinishedEvent,
+    firmware_check_manager,
+    firmware_download_manager,
+    showMessage,
+    update_manager,
+)
 
 
 class StatisticsWidget(QWidget):
@@ -163,7 +172,14 @@ class GalleryCard(HeaderCardWidget):
 
 
 class FirmwareInfoCard(SimpleCardWidget):
-    def __init__(self, title: str, localVersion: str, latestVersion: str, description: str, parent=None):
+    def __init__(
+        self,
+        title: str,
+        localVersion: str,
+        latestVersion: str,
+        description: str,
+        parent=None,
+    ):
         super().__init__(parent)
         self._title = title
         self._description = description
@@ -177,11 +193,13 @@ class FirmwareInfoCard(SimpleCardWidget):
         self.latestVersionCaptionLabel = CaptionLabel(self)
         self.latestVersionLabel = BodyLabel(latestVersion, self)
         self.descriptionLabel = CaptionLabel(self)
+        self.downloadButton = PrimaryPushButton(self)
         self.vBoxLayout = QVBoxLayout(self)
 
         self.setObjectName("FirmwareInfoCard")
         self.descriptionLabel.setWordWrap(True)
         self.descriptionLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
+        self.downloadButton.setEnabled(False)
 
         setFont(self.titleLabel, 15, QFont.DemiBold)
         setFont(self.localVersionLabel, 18, QFont.DemiBold)
@@ -211,6 +229,8 @@ class FirmwareInfoCard(SimpleCardWidget):
         self.vBoxLayout.addLayout(self.versionLayout)
         self.vBoxLayout.addSpacing(4)
         self.vBoxLayout.addWidget(self.descriptionLabel)
+        self.vBoxLayout.addSpacing(8)
+        self.vBoxLayout.addWidget(self.downloadButton, 0, Qt.AlignRight)
         self.vBoxLayout.addStretch(1)
 
     def setVersions(self, localVersion: str, latestVersion: str):
@@ -222,9 +242,23 @@ class FirmwareInfoCard(SimpleCardWidget):
         self.localVersionCaptionLabel.setText(self.tr("Local version"))
         self.latestVersionCaptionLabel.setText(self.tr("Latest version"))
         self.descriptionLabel.setText(self.tr(self._description))
+        self.downloadButton.setText(self.tr("Download firmware update"))
+
+    def setDownloadInProgress(self, downloading: bool) -> None:
+        self.downloadButton.setEnabled(not downloading)
+        self.downloadButton.setText(
+            self.tr("Downloading...") if downloading else self.tr("Download firmware update")
+        )
+
+    def setUpdateAvailable(self, available: bool) -> None:
+        self.downloadButton.setEnabled(available)
 
 
 class FirmwareUpdateCard(HeaderCardWidget):
+    firmwareCheckRequested = pyqtSignal()
+    powerFirmwareDownloadRequested = pyqtSignal()
+    upperFirmwareDownloadRequested = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.powerFirmwareCard = FirmwareInfoCard(
@@ -242,19 +276,25 @@ class FirmwareUpdateCard(HeaderCardWidget):
             self,
         )
         self.cardLayout = QHBoxLayout()
+        self.checkFirmwareButton = PrimaryPushButton(self)
 
         self.initLayout()
         self.applyTexts()
+        self.checkFirmwareButton.clicked.connect(self.firmwareCheckRequested)
+        self.powerFirmwareCard.downloadButton.clicked.connect(self.powerFirmwareDownloadRequested)
+        self.powerUpperCard.downloadButton.clicked.connect(self.upperFirmwareDownloadRequested)
 
     def initLayout(self):
         self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(12)
         self.cardLayout.addWidget(self.powerFirmwareCard)
         self.cardLayout.addWidget(self.powerUpperCard)
+        self.headerLayout.addWidget(self.checkFirmwareButton, 0, Qt.AlignRight)
         self.viewLayout.addLayout(self.cardLayout)
 
     def applyTexts(self):
         self.setTitle(self.tr("Firmware updates"))
+        self.checkFirmwareButton.setText(self.tr("Check firmware updates"))
         self.powerFirmwareCard.applyTexts()
         self.powerUpperCard.applyTexts()
 
@@ -269,11 +309,32 @@ class FirmwareUpdateCard(HeaderCardWidget):
         self.powerFirmwareCard.setVersions(powerLocalVersion, powerLatestVersion)
         self.powerUpperCard.setVersions(upperLocalVersion, upperLatestVersion)
 
+    def setFirmwareDownloadInProgress(self, kind: str, downloading: bool) -> None:
+        if kind == "Power":
+            self.powerFirmwareCard.setDownloadInProgress(downloading)
+        elif kind == "Upper":
+            self.powerUpperCard.setDownloadInProgress(downloading)
+
+    def setFirmwareUpdateAvailable(self, kind: str, available: bool) -> None:
+        if kind == "Power":
+            self.powerFirmwareCard.setUpdateAvailable(available)
+        elif kind == "Upper":
+            self.powerUpperCard.setUpdateAvailable(available)
+
+    def setFirmwareCheckInProgress(self, checking: bool) -> None:
+        self.checkFirmwareButton.setEnabled(not checking)
+        self.checkFirmwareButton.setText(
+            self.tr("Checking...") if checking else self.tr("Check firmware updates")
+        )
+
 
 class HomePage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._isCheckingUpdate = False
+        self._isCheckingFirmware = False
+        self._firmwareUpdateAvailable = {"Power": False, "Upper": False}
+        self._downloadingFirmwareKinds: set[str] = set()
         self.setObjectName("HomePage")
 
         self.scrollWidget = QWidget(self)
@@ -293,6 +354,13 @@ class HomePage(ScrollArea):
         self.vBoxLayout.addStretch(1)
 
         self.appCard.installButton.clicked.connect(lambda: self.requestUpdateCheck(manual=True))
+        self.firmwareUpdateCard.firmwareCheckRequested.connect(self.requestFirmwareCheck)
+        self.firmwareUpdateCard.powerFirmwareDownloadRequested.connect(
+            lambda: self.requestFirmwareDownload("Power")
+        )
+        self.firmwareUpdateCard.upperFirmwareDownloadRequested.connect(
+            lambda: self.requestFirmwareDownload("Upper")
+        )
 
         self._applyVersionSnapshot(update_manager.get_cached_versions())
 
@@ -309,6 +377,23 @@ class HomePage(ScrollArea):
             self._handleUpdateResult(event.result)
             return True
 
+        if event.type() == FirmwareCheckFinishedEvent.EVENT_TYPE:
+            self._isCheckingFirmware = False
+            self.firmwareUpdateCard.setFirmwareCheckInProgress(False)
+            self._applyVersionSnapshot(update_manager.get_cached_versions())
+            self._handleFirmwareCheckResult(event.result)
+            return True
+
+        if event.type() == FirmwareDownloadFinishedEvent.EVENT_TYPE:
+            kind = event.result.kind
+            self._downloadingFirmwareKinds.discard(kind)
+            self._firmwareUpdateAvailable[kind] = False
+            self.firmwareUpdateCard.setFirmwareDownloadInProgress(kind, False)
+            self.firmwareUpdateCard.setFirmwareUpdateAvailable(kind, False)
+            self._applyVersionSnapshot(update_manager.get_cached_versions())
+            self._handleFirmwareDownloadResult(event.result)
+            return True
+
         return super().event(event)
 
     def requestUpdateCheck(self, manual: bool = False) -> None:
@@ -317,7 +402,7 @@ class HomePage(ScrollArea):
                 showMessage(
                     self,
                     self.tr("Checking..."),
-                    self.tr("A firmware update check is already in progress."),
+                    self.tr("A software update check is already in progress."),
                     "warning",
                 )
             return
@@ -328,6 +413,49 @@ class HomePage(ScrollArea):
         if not started:
             self._isCheckingUpdate = False
             self.appCard.setCheckInProgress(False)
+
+    def requestFirmwareCheck(self) -> None:
+        if self._isCheckingFirmware or firmware_check_manager.is_checking:
+            showMessage(
+                self,
+                self.tr("Checking..."),
+                self.tr("A firmware update check is already in progress."),
+                "warning",
+            )
+            return
+
+        self._isCheckingFirmware = True
+        self.firmwareUpdateCard.setFirmwareCheckInProgress(True)
+        started = firmware_check_manager.check_updates(self)
+        if not started:
+            self._isCheckingFirmware = False
+            self.firmwareUpdateCard.setFirmwareCheckInProgress(False)
+
+    def requestFirmwareDownload(self, kind: str) -> None:
+        if not self._firmwareUpdateAvailable.get(kind, False):
+            showMessage(
+                self,
+                self.tr("No firmware update"),
+                self.tr("Check firmware updates first. If no update is available, download is skipped."),
+                "info",
+            )
+            return
+
+        if firmware_download_manager.is_downloading(kind):
+            showMessage(
+                self,
+                self.tr("Downloading..."),
+                self.tr("A firmware download is already in progress."),
+                "warning",
+            )
+            return
+
+        started = firmware_download_manager.download_latest(kind, self)
+        if not started:
+            return
+
+        self._downloadingFirmwareKinds.add(kind)
+        self.firmwareUpdateCard.setFirmwareDownloadInProgress(kind, True)
 
     def _applyVersionSnapshot(self, snapshot) -> None:
         self.firmwareUpdateCard.setVersions(
@@ -345,12 +473,7 @@ class HomePage(ScrollArea):
             showMessage(
                 self,
                 self.tr("Update check completed"),
-                self.tr(
-                    "Latest firmware versions have been refreshed. Upper: {upper}, Power: {power}"
-                ).format(
-                    upper=result.snapshot.latest_upper_version,
-                    power=result.snapshot.latest_lower_version,
-                ),
+                self.tr("Latest app version has been refreshed."),
                 "success",
             )
             return
@@ -360,5 +483,58 @@ class HomePage(ScrollArea):
             self.tr("Update check failed"),
             self.tr(result.message),
             "warning",
+        )
+
+    def _handleFirmwareDownloadResult(self, result) -> None:
+        if result.success and result.release is not None:
+            showMessage(
+                self,
+                self.tr("Firmware download completed"),
+                self.tr("{kind} firmware has been downloaded: {version}").format(
+                    kind=self.tr(result.kind),
+                    version=result.release.version,
+                ),
+                "success",
+            )
+            return
+
+        showMessage(
+            self,
+            self.tr("Firmware download failed"),
+            self.tr(result.message),
+            "warning",
+        )
+
+    def _handleFirmwareCheckResult(self, result) -> None:
+        if not result.success:
+            showMessage(
+                self,
+                self.tr("Update check failed"),
+                self.tr(result.message),
+                "warning",
+            )
+            return
+
+        self._firmwareUpdateAvailable = {
+            "Power": bool(result.has_updates.get("Power", False)),
+            "Upper": bool(result.has_updates.get("Upper", False)),
+        }
+        for kind, available in self._firmwareUpdateAvailable.items():
+            self.firmwareUpdateCard.setFirmwareUpdateAvailable(kind, available)
+
+        if any(self._firmwareUpdateAvailable.values()):
+            showMessage(
+                self,
+                self.tr("Firmware update available"),
+                self.tr("New firmware is available. Download manually from the firmware cards."),
+                "success",
+            )
+            return
+
+        showMessage(
+            self,
+            self.tr("No firmware update"),
+            self.tr("Local firmware is already up to date."),
+            "info",
         )
 

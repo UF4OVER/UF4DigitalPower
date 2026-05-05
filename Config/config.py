@@ -97,7 +97,7 @@ class _DirPaths:
         """
         return: Firmware目录的Path对象
         """
-        return self._ensureSubDir(self.ToolsDir, "Firmware")
+        return self._ensureSubDir(self.ResourcesDir, "Firmware")
 
     @cached_property
     def McuPackDir(self) -> Path:
@@ -106,12 +106,6 @@ class _DirPaths:
         """
         return self._ensureSubDir(self.ToolsDir, "Pack")
 
-    @cached_property
-    def McuPack(self) -> Path:
-        """
-        return: McuPack目录的Path对象，0.1.3 之后弃用
-        """
-        return self.McuPackDir
 
     @cached_property
     def LanguageDir(self) -> Path:
@@ -223,6 +217,7 @@ class Config(QConfig):
 VERSION_LOCAL_SECTION = "OldVersion"
 VERSION_REMOTE_SECTION = "NewVersion"
 UPDATE_SECTION = "update"
+FIRMWARE_REMOTE_SECTION = "FirmwareRemote"
 
 LOCAL_APP_VERSION_OPTION = "OldLocalVersion"
 LOCAL_UPPER_VERSION_OPTION = "OldUpperVersion"
@@ -233,6 +228,8 @@ LATEST_UPPER_VERSION_OPTION = "NewUpperVersion"
 LATEST_LOWER_VERSION_OPTION = "NewLowerVersion"
 
 UPDATE_URL_OPTION = "UpdateUrl"
+FIRMWARE_GITHUB_OWNER_OPTION = "GithubOwner"
+FIRMWARE_GITHUB_REPO_OPTION = "GithubRepo"
 
 
 YEAR = 2026

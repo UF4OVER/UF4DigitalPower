@@ -678,6 +678,23 @@ class PowerPage(ScrollArea):
             if not self._clientThread.wait(3000):
                 logger.error("PowerPage client thread did not exit within 3000 ms")
 
+    def suspendForDaplink(self) -> None:
+        self._appendLog("DAPLink operation started; serial polling is suspended.")
+        self.stopPollingRequested.emit()
+        try:
+            self._scanner.stop()
+        except Exception as exc:
+            logger.error(f"PowerPage scanner suspend failed: {exc}")
+
+    def resumeAfterDaplink(self) -> None:
+        if self._shutdownDone:
+            return
+        self._appendLog("DAPLink operation finished; serial scanner is resumed.")
+        try:
+            self._scanner.start()
+        except Exception as exc:
+            logger.error(f"PowerPage scanner resume failed: {exc}")
+
     def _readStatusOnce(self) -> None:
         if not self._client.is_connected:
             self._appendLog("ERR: Serial session is not connected")

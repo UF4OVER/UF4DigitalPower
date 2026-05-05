@@ -24,6 +24,7 @@ from qfluentwidgets import (
 )
 
 from Config import DirPathsInstance, logger
+from App.Core.Manager import firmware_manager
 from App.Core.utility import showMessage
 from App.Core.Session import session_daplink as daplink_pyocd
 
@@ -36,7 +37,9 @@ class DaplinkFlashPage(ScrollArea):
         self._probeItems: list[daplink_pyocd.DaplinkProbeInfo] = []
         self._allTargetItems: list[daplink_pyocd.DaplinkTargetInfo] = []
         self._targetItems: list[daplink_pyocd.DaplinkTargetInfo] = []
+        self._internalFirmwareItems: list[Path] = []
         self._deviceInfo: daplink_pyocd.DaplinkDeviceInfo | None = None
+        self._powerPageSuspended = False
 
         self.view = QWidget(self)
         self.view.setObjectName("daplinkScrollWidget")
@@ -89,6 +92,7 @@ class DaplinkFlashPage(ScrollArea):
             self._applyProgress(e.payload.percent)
             return True
         if eventType == int(daplink_pyocd.DaplinkProgrammerEventType.ACTION_FINISHED):
+            self._restorePowerPageAfterDaplink()
             self._handleActionFinished(e.payload)
             return True
 
@@ -146,14 +150,14 @@ class DaplinkFlashPage(ScrollArea):
         self.frequencyLabel = BodyLabel(self.connectCard)
         grid.addWidget(self.frequencyLabel, 2, 0)
         self.frequencyInput = LineEdit(self.connectCard)
-        self.frequencyInput.setText("1000000")
+        self.frequencyInput.setText("100000")
         grid.addWidget(self.frequencyInput, 2, 1)
 
         self.connectModeLabel = BodyLabel(self.connectCard)
         grid.addWidget(self.connectModeLabel, 2, 2)
         self.connectModeCombo = ComboBox(self.connectCard)
         self.connectModeCombo.addItems(["halt", "under-reset", "pre-reset", "attach"])
-        self.connectModeCombo.setCurrentText("halt")
+        self.connectModeCombo.setCurrentText("attach")
         grid.addWidget(self.connectModeCombo, 2, 3)
 
         self.stateTitleLabel = BodyLabel(self.connectCard)
@@ -234,14 +238,34 @@ class DaplinkFlashPage(ScrollArea):
         self.downloadCardTitle = SubtitleLabel(self.downloadCard)
         layout.addWidget(self.downloadCardTitle)
 
-        fileRow = QHBoxLayout()
+        sourceRow = QHBoxLayout()
+        self.firmwareSourceLabel = BodyLabel(self.downloadCard)
+        sourceRow.addWidget(self.firmwareSourceLabel)
+        self.firmwareSourceCombo = ComboBox(self.downloadCard)
+        self.firmwareSourceCombo.currentIndexChanged.connect(self._onFirmwareSourceChanged)
+        sourceRow.addWidget(self.firmwareSourceCombo, 1)
+        layout.addLayout(sourceRow)
+
+        internalRow = QHBoxLayout()
+        self.internalFirmwareCombo = ComboBox(self.downloadCard)
+        self.internalFirmwareCombo.currentIndexChanged.connect(self._onInternalFirmwareChanged)
+        internalRow.addWidget(self.internalFirmwareCombo, 1)
+
+        self.refreshFirmwareButton = PushButton(FIF.SYNC, "", self.downloadCard)
+        self.refreshFirmwareButton.clicked.connect(self._reloadInternalFirmwareOptions)
+        internalRow.addWidget(self.refreshFirmwareButton)
+        layout.addLayout(internalRow)
+
+        self.externalFileRowWidget = QWidget(self.downloadCard)
+        fileRow = QHBoxLayout(self.externalFileRowWidget)
+        fileRow.setContentsMargins(0, 0, 0, 0)
         self.filePathInput = LineEdit(self.downloadCard)
         fileRow.addWidget(self.filePathInput, 1)
 
         self.browseButton = PushButton(FIF.FOLDER, "", self.downloadCard)
         self.browseButton.clicked.connect(self.browseFile)
         fileRow.addWidget(self.browseButton)
-        layout.addLayout(fileRow)
+        layout.addWidget(self.externalFileRowWidget)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
@@ -340,6 +364,12 @@ class DaplinkFlashPage(ScrollArea):
             label.setText(self.tr(label.property("sourceText")))
 
         self.downloadCardTitle.setText(self.tr("Download firmware"))
+        self.firmwareSourceLabel.setText(self.tr("Firmware source"))
+        self._setFirmwareSourceItems()
+        self.internalFirmwareCombo.setPlaceholderText(
+            self.tr("Select internal firmware from Resources/Firmware")
+        )
+        self.refreshFirmwareButton.setText(self.tr("Refresh firmware"))
         self.filePathInput.setPlaceholderText(
             self.tr("Select the firmware file to download (.bin/.hex/.elf)")
         )
@@ -362,6 +392,7 @@ class DaplinkFlashPage(ScrollArea):
         self.saveLogButton.setText(self.tr("Save log"))
 
         self._applyProgress(self.progressBar.value())
+        self._reloadInternalFirmwareOptions()
         if self._deviceInfo is None and not self.summaryLabel.text():
             self._resetDeviceInfo()
 
@@ -397,6 +428,127 @@ class DaplinkFlashPage(ScrollArea):
         if filePath:
             self.filePathInput.setText(filePath)
 
+    def _setFirmwareSourceItems(self):
+        currentIndex = self.firmwareSourceCombo.currentIndex()
+        if currentIndex < 0:
+            currentIndex = 0
+
+        self.firmwareSourceCombo.blockSignals(True)
+        self.firmwareSourceCombo.clear()
+        self.firmwareSourceCombo.addItem(self.tr("Internal firmware"))
+        self.firmwareSourceCombo.addItem(self.tr("External file"))
+
+        self.firmwareSourceCombo.setCurrentIndex(min(currentIndex, self.firmwareSourceCombo.count() - 1))
+        self.firmwareSourceCombo.blockSignals(False)
+        self._onFirmwareSourceChanged()
+
+    def _reloadInternalFirmwareOptions(self):
+        currentPath = self._selectedInternalFirmwarePath()
+        firmwareFiles = firmware_manager.GetLowerFirmware() + firmware_manager.GetUpperFirmware()
+        self._internalFirmwareItems = sorted(
+            firmwareFiles,
+            key=lambda item: (item.parent.name, item.name),
+            reverse=True,
+        )
+
+        self.internalFirmwareCombo.blockSignals(True)
+        self.internalFirmwareCombo.clear()
+        if not self._internalFirmwareItems:
+            self.internalFirmwareCombo.addItem(self.tr("No internal firmware found"))
+        else:
+            for path in self._internalFirmwareItems:
+                self.internalFirmwareCombo.addItem(self._formatInternalFirmwareItem(path))
+
+        if currentPath is not None:
+            for index, path in enumerate(self._internalFirmwareItems):
+                if path == currentPath:
+                    self.internalFirmwareCombo.setCurrentIndex(index)
+                    break
+        self.internalFirmwareCombo.blockSignals(False)
+
+    def _onFirmwareSourceChanged(self):
+        useInternal = self.firmwareSourceCombo.currentIndex() == 0
+        self.internalFirmwareCombo.setVisible(useInternal)
+        self.refreshFirmwareButton.setVisible(useInternal)
+        self.externalFileRowWidget.setVisible(not useInternal)
+        if useInternal:
+            self._onInternalFirmwareChanged()
+
+    def _selectedInternalFirmwarePath(self) -> Path | None:
+        index = self.internalFirmwareCombo.currentIndex()
+        if 0 <= index < len(self._internalFirmwareItems):
+            return self._internalFirmwareItems[index]
+        return None
+
+    def _selectedFirmwarePath(self) -> str:
+        if self.firmwareSourceCombo.currentIndex() == 1:
+            return self.filePathInput.text().strip()
+
+        internalPath = self._selectedInternalFirmwarePath()
+        return str(internalPath) if internalPath is not None else ""
+
+    def _formatInternalFirmwareItem(self, path: Path) -> str:
+        try:
+            relative = path.relative_to(DirPathsInstance.FirmwareDir)
+        except ValueError:
+            relative = path
+        return str(relative)
+
+    def _onInternalFirmwareChanged(self):
+        if self.firmwareSourceCombo.currentIndex() != 0:
+            return
+
+        firmwareKind = self._firmwareKindFromPath(self._selectedInternalFirmwarePath())
+        if firmwareKind == "Power":
+            self.targetFilterInput.setText("STM32G474")
+        elif firmwareKind == "Upper":
+            self.targetFilterInput.setText("STM32H750")
+
+    @staticmethod
+    def _firmwareKindFromPath(path: Path | str | None) -> str | None:
+        if path is None:
+            return None
+
+        text = str(path).lower()
+        if "uf4dp_power" in text or "\\power\\" in text or "/power/" in text:
+            return "Power"
+        if "uf4dp_upper" in text or "\\upper\\" in text or "/upper/" in text:
+            return "Upper"
+        return None
+
+    def _validateFirmwareTargetMatch(self, firmwarePath: str) -> bool:
+        target = self._selectedTarget()
+        if target is None:
+            return True
+
+        firmwareKind = self._firmwareKindFromPath(firmwarePath)
+        targetText = " ".join(
+            [
+                target.target_name,
+                target.part_number,
+                target.family,
+                target.pack_name,
+            ]
+        ).lower()
+
+        if firmwareKind == "Power" and "g474" not in targetText:
+            self.showMessage(
+                self.tr("Firmware and target mismatch"),
+                self.tr("Power firmware must be downloaded to STM32G474."),
+                "warning",
+            )
+            return False
+
+        if firmwareKind == "Upper" and "h750" not in targetText:
+            self.showMessage(
+                self.tr("Firmware and target mismatch"),
+                self.tr("Upper firmware must be downloaded to STM32H750."),
+                "warning",
+            )
+            return False
+
+        return True
+
     def clearLog(self):
         self.logEdit.clear()
         self.log(self.tr("The log has been cleared."), "#888888")
@@ -428,6 +580,9 @@ class DaplinkFlashPage(ScrollArea):
         self._postRequest(daplink_pyocd.DaplinkRequestPayload(action="scan_probes"))
 
     def readInfo(self):
+        if self._session.is_busy:
+            return
+        self._preparePowerPageForDaplink()
         self._postRequest(
             daplink_pyocd.DaplinkRequestPayload(
                 action="connect", connect=self._buildConnectConfig()
@@ -435,7 +590,7 @@ class DaplinkFlashPage(ScrollArea):
         )
 
     def startDownload(self):
-        filePath = self.filePathInput.text().strip()
+        filePath = self._selectedFirmwarePath()
         if not filePath or not os.path.isfile(filePath):
             self.showMessage(
                 self.tr("Invalid firmware"),
@@ -452,6 +607,9 @@ class DaplinkFlashPage(ScrollArea):
             )
             return
 
+        if not self._validateFirmwareTargetMatch(filePath):
+            return
+
         baseAddress = self.baseAddressInput.text().strip()
         if baseAddress:
             try:
@@ -466,6 +624,9 @@ class DaplinkFlashPage(ScrollArea):
                 )
                 return
 
+        if self._session.is_busy:
+            return
+        self._preparePowerPageForDaplink()
         self._postRequest(
             daplink_pyocd.DaplinkRequestPayload(
                 action="download",
@@ -478,6 +639,24 @@ class DaplinkFlashPage(ScrollArea):
                 reset_after_download=self.resetAfterDownloadSwitch.isChecked(),
             )
         )
+
+    def _preparePowerPageForDaplink(self) -> None:
+        if self._powerPageSuspended:
+            return
+
+        powerPage = getattr(self.window(), "powerInterface", None)
+        if powerPage is not None and hasattr(powerPage, "suspendForDaplink"):
+            powerPage.suspendForDaplink()
+            self._powerPageSuspended = True
+
+    def _restorePowerPageAfterDaplink(self) -> None:
+        if not self._powerPageSuspended:
+            return
+
+        powerPage = getattr(self.window(), "powerInterface", None)
+        if powerPage is not None and hasattr(powerPage, "resumeAfterDaplink"):
+            powerPage.resumeAfterDaplink()
+        self._powerPageSuspended = False
 
     def _buildConnectConfig(self) -> daplink_pyocd.DaplinkConnectConfig:
         probe = self._selectedProbe()
@@ -518,6 +697,9 @@ class DaplinkFlashPage(ScrollArea):
             self.frequencyInput,
             self.connectModeCombo,
             self.browseButton,
+            self.firmwareSourceCombo,
+            self.internalFirmwareCombo,
+            self.refreshFirmwareButton,
             self.eraseModeCombo,
         ]:
             widget.setEnabled(enabled)

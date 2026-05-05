@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import configparser
 import json
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject
+from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
 from Config import (
 	APP_CONFIG_PATH,
@@ -20,6 +19,7 @@ from Config import (
 	LOCAL_APP_VERSION_OPTION,
 	LOCAL_LOWER_VERSION_OPTION,
 	LOCAL_UPPER_VERSION_OPTION,
+	SettingMangerInstance,
 	UPDATE_SECTION,
 	UPDATE_URL_OPTION,
 	VERSION_LOCAL_SECTION,
@@ -27,6 +27,7 @@ from Config import (
 	SettingsManager,
 	logger,
 )
+from .manage_firmware import firmware_manager
 
 
 def _normalize_version(value: object, fallback: str = "--") -> str:
@@ -61,26 +62,44 @@ class UpdateCheckFinishedEvent(QEvent):
 		self.result = result
 
 
+class UpdateCheckThread(QThread):
+	resultReady = pyqtSignal(object)
+
+	def __init__(self, manager: "UpdateManager", manual: bool, parent: QObject | None = None):
+		super().__init__(parent)
+		self.manager = manager
+		self.manual = manual
+
+	def run(self) -> None:
+		try:
+			result = self.manager._perform_check(self.manual)
+		except Exception:
+			logger.exception("Unexpected error during app update check")
+			result = UpdateCheckResult(
+				success=False,
+				manual=self.manual,
+				message="Failed to check updates.",
+				snapshot=self.manager.get_cached_versions(),
+			)
+		self.resultReady.emit(result)
+
+
 class UpdateManager:
 	def __init__(self, config_path: Path):
 		self._config_path = Path(config_path)
-		self._lock = threading.Lock()
-		self._is_checking = False
+		self._worker: UpdateCheckThread | None = None
 
 	@property
 	def is_checking(self) -> bool:
-		with self._lock:
-			return self._is_checking
-
-	def _set_checking(self, checking: bool) -> None:
-		with self._lock:
-			self._is_checking = checking
+		return bool(self._worker and self._worker.isRunning())
 
 	def _settings(self) -> SettingsManager:
-		return SettingsManager(self._config_path)
+		return SettingMangerInstance
 
 	def get_cached_versions(self) -> FirmwareVersionSnapshot:
 		settings = self._settings()
+		local_upper = firmware_manager.get_latest_local_release("Upper")
+		local_lower = firmware_manager.get_latest_local_release("Power")
 		return FirmwareVersionSnapshot(
 			local_app_version=_normalize_version(
 				settings.get(VERSION_LOCAL_SECTION, LOCAL_APP_VERSION_OPTION, "--")
@@ -89,13 +108,13 @@ class UpdateManager:
 				settings.get(VERSION_REMOTE_SECTION, LATEST_APP_VERSION_OPTION, "--")
 			),
 			local_upper_version=_normalize_version(
-				settings.get(VERSION_LOCAL_SECTION, LOCAL_UPPER_VERSION_OPTION, "--")
+				local_upper.version if local_upper else settings.get(VERSION_LOCAL_SECTION, LOCAL_UPPER_VERSION_OPTION, "--")
 			),
 			latest_upper_version=_normalize_version(
 				settings.get(VERSION_REMOTE_SECTION, LATEST_UPPER_VERSION_OPTION, "--")
 			),
 			local_lower_version=_normalize_version(
-				settings.get(VERSION_LOCAL_SECTION, LOCAL_LOWER_VERSION_OPTION, "--")
+				local_lower.version if local_lower else settings.get(VERSION_LOCAL_SECTION, LOCAL_LOWER_VERSION_OPTION, "--")
 			),
 			latest_lower_version=_normalize_version(
 				settings.get(VERSION_REMOTE_SECTION, LATEST_LOWER_VERSION_OPTION, "--")
@@ -104,34 +123,22 @@ class UpdateManager:
 
 	def check_for_updates(self, receiver: QObject, manual: bool = False) -> bool:
 		if self.is_checking:
-			logger.info("UpdateManager skipped update check because another check is running")
+			logger.info("UpdateManager skipped app update check because another check is running")
 			return False
 
-		self._set_checking(True)
-		worker = threading.Thread(
-			target=self._run_check,
-			args=(receiver, manual),
-			name="FirmwareUpdateChecker",
-			daemon=True,
-		)
-		worker.start()
+		self._worker = UpdateCheckThread(self, manual)
+		self._worker.resultReady.connect(lambda result, target=receiver: self._publish_result(target, result))
+		self._worker.finished.connect(self._cleanup_worker)
+		self._worker.start()
 		return True
 
-	def _run_check(self, receiver: QObject, manual: bool) -> None:
-		try:
-			result = self._perform_check(manual)
-		except Exception as exc:
-			logger.exception("Unexpected error during firmware update check")
-			result = UpdateCheckResult(
-				success=False,
-				manual=manual,
-				message="Failed to check updates.",
-				snapshot=self.get_cached_versions(),
-			)
-		finally:
-			self._set_checking(False)
-
+	def _publish_result(self, receiver: QObject, result: UpdateCheckResult) -> None:
 		QCoreApplication.postEvent(receiver, UpdateCheckFinishedEvent(result))
+
+	def _cleanup_worker(self) -> None:
+		if self._worker is not None:
+			self._worker.deleteLater()
+			self._worker = None
 
 	def _perform_check(self, manual: bool) -> UpdateCheckResult:
 		snapshot_before = self.get_cached_versions()
@@ -139,11 +146,11 @@ class UpdateManager:
 		update_url = str(settings.get(UPDATE_SECTION, UPDATE_URL_OPTION, "") or "").strip()
 
 		if not update_url:
-			logger.warning("UpdateManager skipped update check because UpdateUrl is empty")
+			logger.info("UpdateManager skipped app update check because UpdateUrl is empty")
 			return UpdateCheckResult(
 				success=False,
 				manual=manual,
-				message="Update URL is not configured.",
+				message="App update URL is not configured.",
 				snapshot=snapshot_before,
 			)
 
@@ -171,25 +178,17 @@ class UpdateManager:
 			)
 
 		settings.set(VERSION_REMOTE_SECTION, LATEST_APP_VERSION_OPTION, latest_versions["app"])
-		settings.set(VERSION_REMOTE_SECTION, LATEST_UPPER_VERSION_OPTION, latest_versions["upper"])
-		settings.set(VERSION_REMOTE_SECTION, LATEST_LOWER_VERSION_OPTION, latest_versions["lower"])
 
 		snapshot_after = self.get_cached_versions()
-		has_changes = (
-			snapshot_before.latest_app_version != snapshot_after.latest_app_version
-			or snapshot_before.latest_upper_version != snapshot_after.latest_upper_version
-			or snapshot_before.latest_lower_version != snapshot_after.latest_lower_version
-		)
+		has_changes = snapshot_before.latest_app_version != snapshot_after.latest_app_version
 		logger.info(
-			"UpdateManager refreshed latest versions: "
-			f"app={snapshot_after.latest_app_version}, "
-			f"upper={snapshot_after.latest_upper_version}, "
-			f"lower={snapshot_after.latest_lower_version}"
+			"UpdateManager refreshed latest app version: "
+			f"app={snapshot_after.latest_app_version}"
 		)
 		return UpdateCheckResult(
 			success=True,
 			manual=manual,
-			message="Latest firmware versions have been refreshed.",
+			message="Latest app version has been refreshed.",
 			snapshot=snapshot_after,
 			has_changes=has_changes,
 		)

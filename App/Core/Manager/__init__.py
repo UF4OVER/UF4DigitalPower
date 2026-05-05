@@ -14,4 +14,5 @@
 from .manager_stylesheet import *
 from .manager_font import *
 from .manager_language import *
+from .manage_firmware import *
 from .manager_update import *
