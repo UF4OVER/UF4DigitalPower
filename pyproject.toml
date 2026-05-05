@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.1.3"
+version = "0.1.6"
 description = "Fluor4CellPower battery and power management system"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -9,11 +9,13 @@ license-files = ["LICENSE"]
 authors = [
   { name = "UF4OVER", email = "heping@hepi.ng" }
 ]
+
 dependencies = [
-    "pyqt-fluent-widgets[full] >=1.11.0",
+    "pyqt-fluent-widgets >=1.11.0",
     "cx-freeze>=8.5.3",
     "pyqtgraph >=0.14.0",
     "pyocd>=0.44.0",
+    "numpy>=2.2.6",
 ]
 
 [tool.uv]
@@ -35,18 +37,13 @@ includes = [
     "PyQt5.QtWidgets",
     "pyocd",
     "qfluentwidgets",
-    "qframelesswindow",
     "Config",
 ]
 
 packages = [
     "app",
     "Config",
-    "pyocd"
 ]
-
-# 注意：Config/config.py 里使用 Path("config.ini")，且 frozen 时 BaseDir=exe 同级
-# 所以这里把 config.ini 直接放到 exe 同级，避免运行时找不到
 
 include_files = [
     "Resources",
@@ -56,16 +53,18 @@ include_files = [
 zip_include_packages = ["*"]
 
 zip_exclude_packages = [
-    "PyQt5",
-    "qfluentwidgets",
-    "qframelesswindow",
+   "PyQt5",
+   "lark",
+   "pyocd",
+   "cmsis_pack_manager",
+   "qfluentwidgets",
 ]
 
 excludes = [
-    "numpy",
-    "numpy.core",
-    "numpy.linalg",
-    "numpy.lib",
+#    "numpy",
+#    "numpy.core",
+#    "numpy.linalg",
+#    "numpy.lib",
     "scipy",
     "scipy.linalg",
     "scipy.sparse",
@@ -80,10 +79,11 @@ excludes = [
     "setuptools",
     "tkinter",
     "unittest",
-    "pydoc",
+    "pylink",
+    "pyocd.probe.jlink_probe",
 ]
 
 optimize = 2
 
 # Windows 运行时更稳（避免目标机器缺 VC++ runtime）
-include_msvcr = false
+include_msvcr = true

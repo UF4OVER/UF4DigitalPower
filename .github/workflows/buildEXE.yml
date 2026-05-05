@@ -2,9 +2,12 @@ name: Build F4CP (Windows)
 
 on:
   push:
-    branches: [ F4CP_release ]
+    branches: [F4CP_release]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -13,6 +16,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
@@ -25,33 +30,96 @@ jobs:
           python -m pip install --upgrade pip
           pip install uv
 
-      - name: Install dependencies (uv)
+      - name: Install dependencies
         run: |
           uv sync --all-extras
 
-      - name: Build with cx_Freeze
+      - name: Resolve release metadata
+        id: meta
+        shell: pwsh
         run: |
-          uv run cxfreeze build
+          $version = python -c 'import pathlib, re; text = pathlib.Path("pyproject.toml").read_text(encoding="utf-8"); match = re.search(r"(?ms)^\[project\].*?^version\s*=\s*\"([^\"]+)\"", text); print(match.group(1) if match else "")'
+          if (-not $version) {
+            throw 'Failed to resolve project.version from pyproject.toml'
+          }
 
-      # === 下载并准备 UPX ===
+          $tag = "v$version"
+          $asset = "F4CP-$version-windows-x64.zip"
+          $event = Get-Content -Raw -Path $env:GITHUB_EVENT_PATH | ConvertFrom-Json
+          $commitLines = @()
+
+          if ($event.commits) {
+            foreach ($commit in $event.commits) {
+              if ($commit.id -and $commit.message) {
+                $shortSha = $commit.id.Substring(0, [Math]::Min(7, $commit.id.Length))
+                $commitLines += "- $shortSha $($commit.message)"
+              }
+            }
+          }
+
+          if (-not $commitLines -or $commitLines.Count -eq 0) {
+            $commitSubject = git log -1 --pretty=%s
+            $commitBody = git log -1 --pretty=%b
+            $commitLines += "- $commitSubject"
+            if ($commitBody) {
+              $commitLines += ""
+              $commitLines += $commitBody
+            }
+          }
+
+          $commitText = $commitLines -join "`r`n"
+          $releaseBody = @"
+          Automated Windows build for version $version.
+
+          Commits:
+          $commitText
+          "@
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "asset_name=$asset" >> $env:GITHUB_OUTPUT
+
+          $releaseBody | Out-File -FilePath release_notes.md -Encoding utf8
+
+      - name: Build packaged exe
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\Script\package_exe.ps1
+
       - name: Download UPX
         run: |
           curl -L -o upx.zip https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-win64.zip
           tar -xf upx.zip
           echo "${{ github.workspace }}\\upx-4.2.4-win64" >> $env:GITHUB_PATH
 
-      # === 运行你的 UPX 压缩脚本 ===
       - name: Compress binaries with UPX
         run: |
           python Script/upx_zip.py
 
-      # === 打包成 zip 分发 ===
-      - name: Package build into zip
+      - name: Package build output for release
+        shell: pwsh
         run: |
-          powershell Compress-Archive -Path build\exe\* -DestinationPath F4CP-Windows-x64.zip
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          if (Test-Path "release\${{ steps.meta.outputs.asset_name }}") {
+            Remove-Item -LiteralPath "release\${{ steps.meta.outputs.asset_name }}" -Force
+          }
+          Compress-Archive -Path build\exe\* -DestinationPath "release\${{ steps.meta.outputs.asset_name }}"
 
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: F4CP-Windows-x64
-          path: F4CP-Windows-x64.zip
+          name: F4CP-${{ steps.meta.outputs.version }}-Windows-x64
+          path: release/${{ steps.meta.outputs.asset_name }}
+
+      - name: Publish GitHub release
+        if: github.event_name != 'pull_request'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.tag }}
+          commit: ${{ github.sha }}
+          name: F4CP ${{ steps.meta.outputs.version }}
+          bodyFile: release_notes.md
+          artifacts: release/${{ steps.meta.outputs.asset_name }}
+          artifactContentType: application/zip
+          allowUpdates: true
+          replacesArtifacts: true
+          generateReleaseNotes: false

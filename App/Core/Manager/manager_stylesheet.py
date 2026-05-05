@@ -1,0 +1,32 @@
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 02-09 11:50
+#  @FileName: manager_stylesheet.py
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact : 
+#  @Python  : 
+# -------------------------------
+# coding: utf-8
+from enum import Enum
+
+from Config import DirPathsInstance
+from qfluentwidgets import StyleSheetBase, Theme, qconfig
+
+
+class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举成员
+
+    # Core pages present in App/Pages
+    DAPLINK_FLASH_PAGE = "DaplinkFlashPage"
+    DEVICE_PAGE = "DevicePage"
+    HOME_PAGE = "HomePage"
+    POWER_PAGE = "PowerPage"
+    SETTINGS_PAGE = "SettingsPage"
+    STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
+    BASE_PAGE = "FluentAcrylicWindow"
+
+    def path(self, theme=Theme.AUTO):
+        theme = qconfig.theme if theme == Theme.AUTO else theme
+        return str(DirPathsInstance.ThemeDir / "qss" / theme.name.lower() / f"{self.value}.qss")

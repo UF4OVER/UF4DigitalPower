@@ -1,0 +1,33 @@
+QScrollArea#PowerPage {
+    background: transparent;
+    border: none;
+}
+
+QWidget#powerScrollWidget {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+QWidget#powerScrollWidget TitleLabel,
+QWidget#powerScrollWidget SubtitleLabel,
+QWidget#powerScrollWidget StrongBodyLabel {
+    color: #F5F7FA;
+}
+
+QWidget#powerScrollWidget BodyLabel,
+QWidget#powerScrollWidget CaptionLabel {
+    color: #9AA4B2;
+}
+
+QWidget#powerScrollWidget PillPushButton[accessBadge="true"][accessType="RO"] {
+    background: rgba(249, 115, 22, 0.22);
+    color: #FDBA74;
+    border: 1px solid rgba(249, 115, 22, 0.34);
+}
+
+QWidget#powerScrollWidget PillPushButton[accessBadge="true"][accessType="RW"] {
+    background: rgba(59, 130, 246, 0.22);
+    color: #93C5FD;
+    border: 1px solid rgba(59, 130, 246, 0.34);
+}

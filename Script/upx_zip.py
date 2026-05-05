@@ -11,11 +11,27 @@
 # -------------------------------
 
 import os
-import subprocess
 import shutil
+import subprocess
+from pathlib import Path
+
+
+TRIM_PATHS = [
+    os.path.join("lib", "pyocd", "debug", "svd", "svd_data.zip"),
+]
+
+
+def trim_known_unused_files(directory):
+    for relative_path in TRIM_PATHS:
+        target_path = os.path.join(directory, relative_path)
+        if os.path.isfile(target_path):
+            os.remove(target_path)
+            print(f"Deleted {target_path}")
 
 
 def compress_with_upx(directory):
+    trim_known_unused_files(directory)
+
     for root, dirs, files in os.walk(directory):
         if 'lib' in dirs and 'PyQt5' in dirs and 'Qt5' in dirs and 'translations' in dirs:
             translations_path = os.path.join(root, 'translations')
@@ -38,8 +54,10 @@ def compress_with_upx(directory):
 
 
 if __name__ == "__main__":
-    if os.path.exists("E:\\PROJECT_Python\\F4CP\\build\\exe"):
-        target_directory = "E:\\PROJECT_Python\\F4CP\\build\\exe"
-        compress_with_upx(target_directory)
+    repo_root = Path(__file__).resolve().parent.parent
+    target_directory = repo_root / "build" / "exe"
+
+    if target_directory.exists():
+        compress_with_upx(str(target_directory))
     else:
-        print("build\\exe does not exist")
+        print(f"{target_directory} does not exist")

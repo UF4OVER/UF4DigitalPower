@@ -1,3 +1,4 @@
+# AGENTS.md
 ## 项目概览
 - `F4CP` 是一个以 Windows 为优先平台的 PyQt5 桌面应用，基于 `qfluentwidgets` 构建；真实入口在 `start.py`，它会把五个页面组装进 `Window(UMainWindow)`。
 - UI 外壳位于 `app/Pages/main_window.py`；`app/Pages/` 下的各页面模块同时负责界面组件和大部分页面级行为。
