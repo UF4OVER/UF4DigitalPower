@@ -199,8 +199,9 @@ static tvlcom_status_t user_tvlcom_append_type(uint8_t *payload,
     case USER_TVL_OCP_SET_VALUE:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint32_t)user_tvlcom_float_to_ma(config->ocp_a));
     case USER_TVL_FAN_SPEED:
-    case USER_TVL_FAN_SET_VALUE:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, status->fan_speed);
+    case USER_TVL_FAN_SET_VALUE:
+        return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, config->fan_set_value);
     default:
         return TVLCOM_ERR_NOT_FOUND;
     }
@@ -321,6 +322,7 @@ static void user_tvlcom_handle_write(uint8_t seq, const uint8_t *payload, uint16
             UserPower_SetOcpMa(value_u32);
             break;
         case USER_TVL_FAN_SET_VALUE:
+            UserPower_SetFanValue(value_u32);
             break;
         default:
             user_tvlcom_send_nack(seq);

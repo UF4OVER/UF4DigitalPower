@@ -62,6 +62,7 @@ typedef struct
     float ocp_a;
     float input_uvp_v;
     float input_ovp_v;
+    uint32_t fan_set_value;
     uint8_t power_enabled;
     user_power_pid_t voltage_pid;
     user_power_pid_t current_pid;

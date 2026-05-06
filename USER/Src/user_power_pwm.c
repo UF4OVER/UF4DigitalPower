@@ -2,11 +2,11 @@
 
 #include "hrtim.h"
 
-#define USER_PWR_PWM_PERIOD        30000U
+#define USER_PWR_PWM_PERIOD        26000U
 #define USER_PWR_BUCK_MIN_COMPARE  260U
 #define USER_PWR_BOOST_MIN_COMPARE 260U
 #define USER_PWR_BUCK_FIXED_MIX    24000U
-#define USER_PWR_BUCK_FIXED_BOOST  28200U
+#define USER_PWR_BUCK_FIXED_BOOST  24440U
 
 static float user_pwr_clamp(float value, float min_value, float max_value)
 {

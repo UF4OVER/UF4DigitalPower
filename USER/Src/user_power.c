@@ -9,6 +9,7 @@
 #include "hrtim.h"
 #include "tim.h"
 
+#include <math.h>
 #include <string.h>
 
 static user_power_config_t g_user_config;
@@ -17,6 +18,9 @@ static volatile uint16_t *g_adc_result = NULL;
 static uint8_t g_save_pending = 0U;
 static uint16_t g_softstart_tick = 0U;
 static uint16_t g_voltage_loop_divider = 0U;
+static uint8_t g_measurement_ready = 0U;
+static uint8_t g_aux_measurement_ready = 0U;
+static uint32_t g_aux_sample_tick = 0U;
 static float g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
 static float g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
 
@@ -52,6 +56,7 @@ static void user_pwr_set_defaults(void)
     g_user_config.otp_c = USER_PWR_DEFAULT_OTP_C;
     g_user_config.input_uvp_v = USER_PWR_DEFAULT_INPUT_UVP_V;
     g_user_config.input_ovp_v = USER_PWR_DEFAULT_INPUT_OVP_V;
+    g_user_config.fan_set_value = USER_PWR_DEFAULT_FAN_VALUE;
     g_user_config.power_enabled = USER_PWR_DEFAULT_POWER_ENABLED;
 
     g_user_config.voltage_pid.kp = USER_PWR_VOLTAGE_KP;
@@ -102,6 +107,8 @@ static void user_pwr_update_measurements(void)
     float iout_sensor_v;
     float iin;
     float iout;
+    float vin_v;
+    float vout_v;
 
     if (g_adc_result == NULL)
     {
@@ -114,8 +121,8 @@ static void user_pwr_update_measurements(void)
     g_user_status.raw_adc[2] = g_adc_result[2];
     g_user_status.raw_adc[3] = g_adc_result[3];
 
-    g_user_status.vin_v = user_pwr_lpf(g_user_status.vin_v, user_pwr_adc_to_voltage(g_adc_result[0]));
-    g_user_status.vout_v = user_pwr_lpf(g_user_status.vout_v, user_pwr_adc_to_voltage(g_adc_result[2]));
+    vin_v = user_pwr_adc_to_voltage(g_adc_result[0]);
+    vout_v = user_pwr_adc_to_voltage(g_adc_result[2]);
 
     iin_sensor_v = user_pwr_adc_to_sensor_voltage(g_adc_result[1]);
     iout_sensor_v = user_pwr_adc_to_sensor_voltage(g_adc_result[3]);
@@ -130,8 +137,151 @@ static void user_pwr_update_measurements(void)
     iin = user_pwr_sensor_voltage_to_current(iin_sensor_v, g_iin_zero_v);
     iout = user_pwr_sensor_voltage_to_current(iout_sensor_v, g_iout_zero_v);
 
+    if (g_measurement_ready == 0U)
+    {
+        g_user_status.vin_v = vin_v;
+        g_user_status.vout_v = vout_v;
+        g_user_status.iin_a = user_pwr_clamp(iin, -12.0f, 12.0f);
+        g_user_status.iout_a = user_pwr_clamp(iout, -12.0f, 12.0f);
+        g_measurement_ready = 1U;
+        return;
+    }
+
+    g_user_status.vin_v = user_pwr_lpf(g_user_status.vin_v, vin_v);
+    g_user_status.vout_v = user_pwr_lpf(g_user_status.vout_v, vout_v);
     g_user_status.iin_a = user_pwr_lpf(g_user_status.iin_a, user_pwr_clamp(iin, -12.0f, 12.0f));
     g_user_status.iout_a = user_pwr_lpf(g_user_status.iout_a, user_pwr_clamp(iout, -12.0f, 12.0f));
+}
+
+static uint8_t user_pwr_input_ready(void)
+{
+    float start_min_v = user_pwr_clamp(USER_PWR_INPUT_START_MIN_V,
+                                       g_user_config.input_uvp_v,
+                                       g_user_config.input_ovp_v);
+
+    return (g_measurement_ready != 0U) &&
+           (g_user_status.vin_v >= start_min_v) &&
+           (g_user_status.vin_v <= g_user_config.input_ovp_v);
+}
+
+static uint8_t user_pwr_has_only_input_fault(void)
+{
+    const uint16_t input_faults = USER_POWER_FAULT_INPUT_UNDER_VOLTAGE |
+                                  USER_POWER_FAULT_INPUT_OVER_VOLTAGE;
+
+    return (g_user_status.fault_mask != 0U) &&
+           ((g_user_status.fault_mask & (uint16_t)~input_faults) == 0U);
+}
+
+static float user_pwr_board_temp_from_adc(uint16_t adc)
+{
+    float ratio;
+    float ntc_ohm;
+    float temp_k;
+
+    if (adc == 0U)
+    {
+        return -40.0f;
+    }
+    if (adc >= 4095U)
+    {
+        return 150.0f;
+    }
+
+    ratio = (float)adc / 4095.0f;
+    ntc_ohm = USER_PWR_BOARD_PULLDOWN_OHM * ((1.0f / ratio) - 1.0f);
+    temp_k = 1.0f / ((1.0f / USER_PWR_BOARD_NTC_T0_K) +
+                     (logf(ntc_ohm / USER_PWR_BOARD_NTC_R0_OHM) / USER_PWR_BOARD_NTC_BETA));
+
+    return temp_k - 273.15f;
+}
+
+static uint16_t user_pwr_adc2_oversampled_to_12bit(uint32_t raw)
+{
+    raw = (raw + 8U) / 16U;
+    return raw > 4095U ? 4095U : (uint16_t)raw;
+}
+
+static uint16_t user_pwr_adc5_oversampled_to_12bit(uint32_t raw)
+{
+    raw = (raw + 4U) / 8U;
+    return raw > 4095U ? 4095U : (uint16_t)raw;
+}
+
+static uint8_t user_pwr_adc_read_blocking(ADC_HandleTypeDef *hadc, uint32_t *value)
+{
+    if ((hadc == NULL) || (value == NULL))
+    {
+        return 0U;
+    }
+
+    if (HAL_ADC_Start(hadc) != HAL_OK)
+    {
+        return 0U;
+    }
+
+    if (HAL_ADC_PollForConversion(hadc, 2U) != HAL_OK)
+    {
+        (void)HAL_ADC_Stop(hadc);
+        return 0U;
+    }
+
+    *value = HAL_ADC_GetValue(hadc);
+    (void)HAL_ADC_Stop(hadc);
+    return 1U;
+}
+
+static void user_pwr_apply_fan_value(uint32_t value)
+{
+    uint32_t clamped = value > 1000U ? 1000U : value;
+
+    g_user_config.fan_set_value = clamped;
+    g_user_status.fan_speed = clamped;
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, clamped);
+}
+
+static void user_pwr_update_aux_measurements(void)
+{
+    uint32_t raw;
+    uint16_t raw_12bit;
+    int32_t core_temp_c;
+    uint8_t updated = 0U;
+    float board_temp_c = g_user_status.board_temp_c;
+    float mcu_temp_c = g_user_status.core_temp_c;
+
+    if (user_pwr_adc_read_blocking(&hadc2, &raw) != 0U)
+    {
+        raw_12bit = user_pwr_adc2_oversampled_to_12bit(raw);
+        board_temp_c = user_pwr_board_temp_from_adc(raw_12bit);
+        updated = 1U;
+    }
+
+    if (user_pwr_adc_read_blocking(&hadc5, &raw) != 0U)
+    {
+        raw_12bit = user_pwr_adc5_oversampled_to_12bit(raw);
+        core_temp_c = __HAL_ADC_CALC_TEMPERATURE(3300UL, raw_12bit, ADC_RESOLUTION_12B);
+        if (core_temp_c != LL_ADC_TEMPERATURE_CALC_ERROR)
+        {
+            mcu_temp_c = (float)core_temp_c;
+            updated = 1U;
+        }
+    }
+
+    if (updated == 0U)
+    {
+        return;
+    }
+
+    if (g_aux_measurement_ready == 0U)
+    {
+        g_user_status.board_temp_c = board_temp_c;
+        g_user_status.core_temp_c = mcu_temp_c;
+        g_aux_measurement_ready = 1U;
+        return;
+    }
+
+    g_user_status.board_temp_c = user_pwr_lpf(g_user_status.board_temp_c, board_temp_c);
+    g_user_status.core_temp_c = user_pwr_lpf(g_user_status.core_temp_c, mcu_temp_c);
 }
 
 static void user_pwr_select_topology(void)
@@ -286,6 +436,9 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     g_save_pending = 0U;
     g_softstart_tick = 0U;
     g_voltage_loop_divider = 0U;
+    g_measurement_ready = 0U;
+    g_aux_measurement_ready = 0U;
+    g_aux_sample_tick = 0U;
     g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
     g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
 
@@ -305,6 +458,7 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
 
     (void)UserPowerStore_Init();
     UserPowerStore_Load(&g_user_config);
+    user_pwr_apply_fan_value(g_user_config.fan_set_value);
 
     user_pwr_pid_reset(&g_user_config.voltage_pid);
     user_pwr_pid_reset(&g_user_config.current_pid);
@@ -338,6 +492,18 @@ void UserPower_5msTask(void)
         g_user_status.state = USER_POWER_STATE_WAIT;
     }
 
+    if ((g_user_status.state == USER_POWER_STATE_ERR) &&
+        (g_user_config.power_enabled != 0U) &&
+        (user_pwr_has_only_input_fault() != 0U) &&
+        (user_pwr_input_ready() != 0U))
+    {
+        g_user_status.state = USER_POWER_STATE_WAIT;
+        g_user_status.fault_mask = 0U;
+        g_softstart_tick = 0U;
+        user_pwr_pid_reset(&g_user_config.voltage_pid);
+        user_pwr_pid_reset(&g_user_config.current_pid);
+    }
+
     if (g_user_config.power_enabled == 0U)
     {
         if (g_user_status.state != USER_POWER_STATE_ERR)
@@ -352,6 +518,12 @@ void UserPower_5msTask(void)
 
     if (g_user_status.state == USER_POWER_STATE_WAIT)
     {
+        if (user_pwr_input_ready() == 0U)
+        {
+            UserPowerPwm_Stop(&g_user_status);
+            return;
+        }
+
         g_user_status.state = USER_POWER_STATE_RISE;
         g_softstart_tick = 0U;
         g_user_status.fault_mask = 0U;
@@ -374,6 +546,12 @@ void UserPower_5msTask(void)
 void UserPower_BackgroundTask(void)
 {
     UserTvlcom_BackgroundTask();
+
+    if ((HAL_GetTick() - g_aux_sample_tick) >= 100U)
+    {
+        g_aux_sample_tick = HAL_GetTick();
+        user_pwr_update_aux_measurements();
+    }
 
     if (g_save_pending != 0U)
     {
@@ -421,6 +599,11 @@ void UserPower_SetOcpMa(uint32_t value_ma)
 void UserPower_SetOtpMc(uint32_t value_mc)
 {
     g_user_config.otp_c = user_pwr_clamp((float)value_mc / 1000.0f, 20.0f, 120.0f);
+}
+
+void UserPower_SetFanValue(uint32_t value)
+{
+    user_pwr_apply_fan_value(value);
 }
 
 void UserPower_SetPowerState(uint8_t enabled)

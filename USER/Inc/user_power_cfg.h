@@ -21,6 +21,18 @@
 #define USER_PWR_DEFAULT_INPUT_UVP_V       6.0f
 #define USER_PWR_DEFAULT_INPUT_OVP_V       36.0f
 #define USER_PWR_DEFAULT_POWER_ENABLED     1U
+#define USER_PWR_DEFAULT_FAN_VALUE         500U
+
+/* The MCU may stay powered while the power input is hot-plugged.
+ * Do not start conversion until VIN is safely above this threshold. */
+#define USER_PWR_INPUT_START_MIN_V         7.0f
+
+/* Board temperature NTC divider on ADC_TEMP(PA4):
+ * 3.3V -> 10K B3380 NTC -> PA4 -> 10K resistor -> GND. */
+#define USER_PWR_BOARD_NTC_R0_OHM          10000.0f
+#define USER_PWR_BOARD_NTC_BETA            3380.0f
+#define USER_PWR_BOARD_NTC_T0_K            298.15f
+#define USER_PWR_BOARD_PULLDOWN_OHM        10000.0f
 
 #define USER_PWR_VOLTAGE_KP                0.03f
 #define USER_PWR_VOLTAGE_KI                0.0005f

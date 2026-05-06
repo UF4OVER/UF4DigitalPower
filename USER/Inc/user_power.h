@@ -17,6 +17,7 @@ void UserPower_SetCurrentLimitMa(uint32_t value_ma);
 void UserPower_SetOvpMv(uint32_t value_mv);
 void UserPower_SetOcpMa(uint32_t value_ma);
 void UserPower_SetOtpMc(uint32_t value_mc);
+void UserPower_SetFanValue(uint32_t value);
 void UserPower_SetPowerState(uint8_t enabled);
 void UserPower_RequestSave(void);
 
