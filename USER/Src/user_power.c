@@ -52,7 +52,7 @@ static void user_pwr_set_defaults(void)
     g_user_config.otp_c = USER_PWR_DEFAULT_OTP_C;
     g_user_config.input_uvp_v = USER_PWR_DEFAULT_INPUT_UVP_V;
     g_user_config.input_ovp_v = USER_PWR_DEFAULT_INPUT_OVP_V;
-    g_user_config.power_enabled = 0U;
+    g_user_config.power_enabled = USER_PWR_DEFAULT_POWER_ENABLED;
 
     g_user_config.voltage_pid.kp = USER_PWR_VOLTAGE_KP;
     g_user_config.voltage_pid.ki = USER_PWR_VOLTAGE_KI;

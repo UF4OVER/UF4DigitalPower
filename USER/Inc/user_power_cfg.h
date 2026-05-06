@@ -3,7 +3,8 @@
 
 /* ADC and sensor conversion constants from README assumptions. */
 #define USER_PWR_ADC_VREF_V                3.3f
-#define USER_PWR_ADC_MAX_COUNT             4095.0f
+/* ADC1 uses oversampling ratio 4 + right shift 1, effective full-scale is 8190. */
+#define USER_PWR_ADC_MAX_COUNT             8190.0f
 #define USER_PWR_VOLTAGE_SCALE             13.3f
 
 #define USER_PWR_SHUNT_RES_OHM             0.008f
@@ -12,13 +13,14 @@
 #define USER_PWR_CURRENT_SCALE             (USER_PWR_SHUNT_RES_OHM * USER_PWR_CURRENT_GAIN)
 
 /* Control and protection defaults (single-direction first). */
-#define USER_PWR_DEFAULT_VOUT_V            12.0f
+#define USER_PWR_DEFAULT_VOUT_V            5.0f
 #define USER_PWR_DEFAULT_IOUT_A            3.0f
 #define USER_PWR_DEFAULT_OVP_V             33.0f
 #define USER_PWR_DEFAULT_OCP_A             10.0f
 #define USER_PWR_DEFAULT_OTP_C             80.0f
 #define USER_PWR_DEFAULT_INPUT_UVP_V       6.0f
 #define USER_PWR_DEFAULT_INPUT_OVP_V       36.0f
+#define USER_PWR_DEFAULT_POWER_ENABLED     1U
 
 #define USER_PWR_VOLTAGE_KP                0.03f
 #define USER_PWR_VOLTAGE_KI                0.0005f
@@ -34,4 +36,3 @@
 #define USER_PWR_SHORT_DETECT_DELAY_TICKS  2000U
 
 #endif
-
