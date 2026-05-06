@@ -32,6 +32,9 @@ const user_tvl_data_descriptor_t g_user_tvl_data_descriptors[] = {
     {USER_TVL_OVP_SET_VALUE, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ_WRITE, "mV"},
     {USER_TVL_OCP_VALUE, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ, "mA"},
     {USER_TVL_OCP_SET_VALUE, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ_WRITE, "mA"},
+    {USER_TVL_DUTY_CMD, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ, "permille"},
+    {USER_TVL_PWM_A_COMPARE, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ, "ticks"},
+    {USER_TVL_PWM_D_COMPARE, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ, "ticks"},
     {USER_TVL_FAN_SPEED, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ, "permille"},
     {USER_TVL_FAN_SET_VALUE, USER_TVL_VALUE_U32, USER_TVL_ACCESS_READ_WRITE, "permille"}};
 
@@ -177,7 +180,7 @@ static tvlcom_status_t user_tvlcom_append_type(uint8_t *payload,
     case USER_TVL_STATE_MACHINE_FLAG_BITS:
         return tvlcom_payload_add_u8(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, user_tvlcom_state_bits(status->state));
     case USER_TVL_STATE_MACHINE_STATE:
-        return tvlcom_payload_add_u8(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint8_t)status->topology);
+        return tvlcom_payload_add_u8(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint8_t)status->state);
     case USER_TVL_INPUT_VOLTAGE_RAW:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, status->raw_adc[0]);
     case USER_TVL_INPUT_CURRENT_RAW:
@@ -198,6 +201,12 @@ static tvlcom_status_t user_tvlcom_append_type(uint8_t *payload,
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint32_t)user_tvlcom_float_to_ma(status->iout_a));
     case USER_TVL_OCP_SET_VALUE:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint32_t)user_tvlcom_float_to_ma(config->ocp_a));
+    case USER_TVL_DUTY_CMD:
+        return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint32_t)(status->duty_cmd * 1000.0f + 0.5f));
+    case USER_TVL_PWM_A_COMPARE:
+        return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, status->pwm_a_compare);
+    case USER_TVL_PWM_D_COMPARE:
+        return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, status->pwm_d_compare);
     case USER_TVL_FAN_SPEED:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, status->fan_speed);
     case USER_TVL_FAN_SET_VALUE:

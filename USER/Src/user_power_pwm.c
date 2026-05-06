@@ -37,29 +37,14 @@ void UserPowerPwm_Start(void)
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, USER_PWR_PWM_PERIOD / 2U);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, USER_PWR_PWM_PERIOD);
 
-    g_synchronous_enabled = 0U;
-    (void)HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TD1);
-    (void)HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA2 | HRTIM_OUTPUT_TD2);
+    g_synchronous_enabled = 1U;
+    (void)HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2);
+    (void)HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2);
 }
 
 void UserPowerPwm_SetSynchronous(uint8_t enabled)
 {
-    if (enabled != 0U)
-    {
-        if (g_synchronous_enabled == 0U)
-        {
-            (void)HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TD1);
-            g_synchronous_enabled = 1U;
-        }
-    }
-    else
-    {
-        if (g_synchronous_enabled != 0U)
-        {
-            (void)HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TD1);
-            g_synchronous_enabled = 0U;
-        }
-    }
+    g_synchronous_enabled = enabled ? 1U : 0U;
 }
 
 void UserPowerPwm_Stop(user_power_status_t *status)
@@ -113,10 +98,6 @@ void UserPowerPwm_ApplyDuty(user_power_topology_t topology, float duty, user_pow
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, compare_a);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, compare_a / 2U);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, compare_d);
-    if (g_synchronous_enabled == 0U)
-    {
-        (void)HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TD1);
-    }
 
     if (status != NULL)
     {

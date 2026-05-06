@@ -36,17 +36,19 @@
 #define USER_PWR_BOARD_NTC_T0_K            298.15f
 #define USER_PWR_BOARD_PULLDOWN_OHM        10000.0f
 
-#define USER_PWR_VOLTAGE_KP                0.03f
-#define USER_PWR_VOLTAGE_KI                0.0005f
+#define USER_PWR_VOLTAGE_KP                0.025f
+#define USER_PWR_VOLTAGE_KI                0.00008f
 #define USER_PWR_CURRENT_KP                0.02f
 #define USER_PWR_CURRENT_KI                0.0003f
 
+#define USER_PWR_CONTROL_DIVIDER_TICKS     50U
 #define USER_PWR_DUTY_MIN                  0.01f
 #define USER_PWR_DUTY_MAX                  0.95f
 #define USER_PWR_DUTY_BOOTSTRAP            0.05f
 #define USER_PWR_RISE_DUTY_START           0.01f
-#define USER_PWR_RISE_DUTY_STEP            0.0002f
-#define USER_PWR_RISE_DUTY_MAX             0.45f
+#define USER_PWR_RISE_DUTY_STEP            0.001f
+#define USER_PWR_RISE_DUTY_MAX             0.85f
+#define USER_PWR_RISE_DUTY_MARGIN          0.08f
 #define USER_PWR_SOFTSTART_STEP_V          0.01f
 
 #define USER_PWR_SHORT_VOUT_V              0.5f

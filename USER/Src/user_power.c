@@ -25,6 +25,7 @@ static uint32_t g_aux_sample_tick = 0U;
 static uint32_t g_background_1ms_tick = 0U;
 static float g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
 static float g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
+static float g_control_duty = USER_PWR_DUTY_MIN;
 
 static float user_pwr_clamp(float value, float min_value, float max_value)
 {
@@ -44,6 +45,15 @@ static void user_pwr_pid_reset(user_power_pid_t *pid)
     pid->integral = 0.0f;
     pid->prev_error = 0.0f;
     pid->prev_measurement = 0.0f;
+}
+
+static void user_pwr_control_reset(void)
+{
+    g_control_duty = USER_PWR_DUTY_MIN;
+    g_voltage_loop_divider = 0U;
+    user_pwr_pid_reset(&g_user_config.voltage_pid);
+    user_pwr_pid_reset(&g_user_config.current_pid);
+    g_user_status.current_ref_a = 0.0f;
 }
 
 static void user_pwr_set_defaults(void)
@@ -73,8 +83,7 @@ static void user_pwr_set_defaults(void)
     g_user_config.current_pid.out_min = USER_PWR_DUTY_MIN;
     g_user_config.current_pid.out_max = USER_PWR_DUTY_MAX;
 
-    user_pwr_pid_reset(&g_user_config.voltage_pid);
-    user_pwr_pid_reset(&g_user_config.current_pid);
+    user_pwr_control_reset();
 
     g_user_status.state = USER_POWER_STATE_INIT;
     g_user_status.topology = USER_POWER_TOPOLOGY_NA;
@@ -383,15 +392,16 @@ static float user_pwr_pi_step(user_power_pid_t *pid, float setpoint, float measu
 static void user_pwr_fast_control_loop(void)
 {
     float vref;
-    float iref;
-    float input_limit_a;
-    float duty_base;
-    float duty_delta;
+    float error;
+    float duty_ff;
     float duty;
+    float duty_max = USER_PWR_DUTY_MAX;
+    float input_limit_a = USER_PWR_INPUT_CURRENT_LIMIT_A;
 
     if ((g_user_status.state != USER_POWER_STATE_RISE) && (g_user_status.state != USER_POWER_STATE_RUN))
     {
         UserPowerPwm_ApplyDuty(USER_POWER_TOPOLOGY_NA, USER_PWR_DUTY_MIN, &g_user_status);
+        g_control_duty = USER_PWR_DUTY_MIN;
         return;
     }
 
@@ -407,82 +417,72 @@ static void user_pwr_fast_control_loop(void)
         }
     }
 
-    if (++g_voltage_loop_divider >= 10U)
-    {
-        g_voltage_loop_divider = 0U;
-        g_user_status.current_ref_a = user_pwr_pi_step(&g_user_config.voltage_pid, vref, g_user_status.vout_v);
-    }
-
-    input_limit_a = USER_PWR_INPUT_CURRENT_LIMIT_A;
     if (g_user_status.state == USER_POWER_STATE_RISE)
     {
+        float target_duty_need = USER_PWR_RISE_DUTY_MAX;
+
+        if (g_user_status.vin_v > 0.5f)
+        {
+            target_duty_need = (g_user_config.target_voltage_v / g_user_status.vin_v) + USER_PWR_RISE_DUTY_MARGIN;
+        }
+
+        duty_max = USER_PWR_RISE_DUTY_START + ((float)g_softstart_tick * USER_PWR_RISE_DUTY_STEP);
+        duty_max = user_pwr_clamp(duty_max,
+                                  USER_PWR_RISE_DUTY_START,
+                                  user_pwr_clamp(target_duty_need, USER_PWR_RISE_DUTY_START, USER_PWR_RISE_DUTY_MAX));
         input_limit_a *= 0.6f;
     }
 
-    iref = user_pwr_clamp(g_user_status.current_ref_a, 0.0f, g_user_config.target_current_a);
-    if (g_user_status.iin_a > input_limit_a)
-    {
-        iref *= 0.85f;
-        g_user_status.current_ref_a = iref;
-    }
-    if (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V)
-    {
-        iref *= 0.5f;
-        g_user_status.current_ref_a = iref;
-    }
-
-    if (g_user_status.state == USER_POWER_STATE_RISE)
-    {
-        duty_delta = 0.5f;
-    }
-    else
-    {
-        duty_delta = user_pwr_pi_step(&g_user_config.current_pid, iref, g_user_status.iout_a);
-    }
+    error = vref - g_user_status.vout_v;
 
     if (g_user_status.vin_v < 0.5f)
     {
+        g_control_duty = USER_PWR_DUTY_MIN;
         UserPowerPwm_ApplyDuty(USER_POWER_TOPOLOGY_NA, USER_PWR_DUTY_MIN, &g_user_status);
         return;
     }
 
     if (g_user_status.topology == USER_POWER_TOPOLOGY_BUCK)
     {
-        duty_base = vref / g_user_status.vin_v;
+        duty_ff = vref / g_user_status.vin_v;
     }
     else if (g_user_status.topology == USER_POWER_TOPOLOGY_BOOST)
     {
-        duty_base = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f));
+        duty_ff = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f));
     }
     else
     {
-        duty_base = 0.5f;
+        duty_ff = 0.5f;
     }
 
-    duty = user_pwr_clamp(duty_base + (duty_delta - 0.5f), USER_PWR_DUTY_MIN, USER_PWR_DUTY_MAX);
-    if (g_user_status.state == USER_POWER_STATE_RISE)
+    if (++g_voltage_loop_divider >= USER_PWR_CONTROL_DIVIDER_TICKS)
     {
-        float rise_duty_max = USER_PWR_RISE_DUTY_START +
-                              ((float)g_softstart_tick * USER_PWR_RISE_DUTY_STEP);
-        rise_duty_max = user_pwr_clamp(rise_duty_max,
-                                       USER_PWR_RISE_DUTY_START,
-                                       USER_PWR_RISE_DUTY_MAX);
-        if (duty > rise_duty_max)
-        {
-            duty = rise_duty_max;
-        }
+        g_voltage_loop_divider = 0U;
+        g_user_config.voltage_pid.integral += g_user_config.voltage_pid.ki * error;
+        g_user_config.voltage_pid.integral = user_pwr_clamp(g_user_config.voltage_pid.integral, -0.2f, 0.2f);
+        g_user_config.voltage_pid.prev_error = error;
     }
 
-    if ((g_user_status.iin_a > input_limit_a) || (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V))
+    duty = duty_ff + (g_user_config.voltage_pid.kp * error) + g_user_config.voltage_pid.integral;
+
+    if ((g_user_status.iin_a > input_limit_a) || (g_user_status.iout_a > g_user_config.target_current_a))
     {
-        duty = user_pwr_clamp(duty * 0.95f, USER_PWR_DUTY_MIN, USER_PWR_DUTY_MAX);
-        g_user_config.current_pid.integral *= 0.9f;
+        duty -= 0.02f;
+        g_user_config.voltage_pid.integral *= 0.95f;
+    }
+
+    if (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V)
+    {
+        duty -= 0.03f;
         g_user_config.voltage_pid.integral *= 0.9f;
     }
 
-    g_user_status.duty_cmd = duty;
-    g_user_status.regulation_mode = (iref >= (g_user_config.target_current_a - 0.05f)) ? USER_POWER_MODE_CC : USER_POWER_MODE_CV;
-    UserPowerPwm_ApplyDuty(g_user_status.topology, duty, &g_user_status);
+    g_control_duty = user_pwr_clamp(duty, USER_PWR_DUTY_MIN, duty_max);
+
+    g_user_status.current_ref_a = g_user_config.target_current_a;
+    g_user_status.duty_cmd = g_control_duty;
+    g_user_status.regulation_mode = USER_POWER_MODE_CV;
+    UserPowerPwm_ApplyDuty(g_user_status.topology, g_control_duty, &g_user_status);
 }
 
 void UserPower_Init(volatile uint16_t *adc_dma_buffer)
@@ -517,8 +517,11 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     UserPowerStore_Load(&g_user_config);
     user_pwr_apply_fan_value(g_user_config.fan_set_value);
 
-    user_pwr_pid_reset(&g_user_config.voltage_pid);
-    user_pwr_pid_reset(&g_user_config.current_pid);
+    g_user_config.voltage_pid.kp = USER_PWR_VOLTAGE_KP;
+    g_user_config.voltage_pid.ki = USER_PWR_VOLTAGE_KI;
+    g_user_config.current_pid.kp = USER_PWR_CURRENT_KP;
+    g_user_config.current_pid.ki = USER_PWR_CURRENT_KI;
+    user_pwr_control_reset();
 
     UserPowerPwm_Init(&g_user_status);
     UserTvlcom_Init();
@@ -564,8 +567,7 @@ void UserPower_5msTask(void)
         g_user_status.state = USER_POWER_STATE_WAIT;
         g_user_status.fault_mask = 0U;
         g_softstart_tick = 0U;
-        user_pwr_pid_reset(&g_user_config.voltage_pid);
-        user_pwr_pid_reset(&g_user_config.current_pid);
+        user_pwr_control_reset();
     }
 
     if (g_user_config.power_enabled == 0U)
@@ -591,22 +593,19 @@ void UserPower_5msTask(void)
         g_user_status.state = USER_POWER_STATE_RISE;
         g_softstart_tick = 0U;
         g_user_status.fault_mask = 0U;
-        user_pwr_pid_reset(&g_user_config.voltage_pid);
-        user_pwr_pid_reset(&g_user_config.current_pid);
+        user_pwr_control_reset();
         UserPowerPwm_Start();
         return;
     }
 
     if (g_user_status.state == USER_POWER_STATE_RISE)
     {
-        UserPowerPwm_SetSynchronous(0U);
         if (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V)
         {
             g_user_status.state = USER_POWER_STATE_WAIT;
             g_user_status.topology = USER_POWER_TOPOLOGY_NA;
             g_softstart_tick = 0U;
-            user_pwr_pid_reset(&g_user_config.voltage_pid);
-            user_pwr_pid_reset(&g_user_config.current_pid);
+            user_pwr_control_reset();
             UserPowerPwm_Stop(&g_user_status);
             return;
         }
@@ -615,7 +614,6 @@ void UserPower_5msTask(void)
         if (((float)g_softstart_tick * USER_PWR_SOFTSTART_STEP_V) >= g_user_config.target_voltage_v)
         {
             g_user_status.state = USER_POWER_STATE_RUN;
-            UserPowerPwm_SetSynchronous(1U);
         }
     }
 }
@@ -664,6 +662,8 @@ void UserPower_GetConfig(user_power_config_t *out_config)
 void UserPower_SetVoltageLimitMv(uint32_t value_mv)
 {
     g_user_config.target_voltage_v = user_pwr_clamp((float)value_mv / 1000.0f, 0.0f, 33.0f);
+    g_user_config.voltage_pid.prev_error = 0.0f;
+    g_voltage_loop_divider = USER_PWR_CONTROL_DIVIDER_TICKS;
 }
 
 void UserPower_SetCurrentLimitMa(uint32_t value_ma)
@@ -693,11 +693,23 @@ void UserPower_SetFanValue(uint32_t value)
 
 void UserPower_SetPowerState(uint8_t enabled)
 {
+    uint8_t was_enabled = g_user_config.power_enabled;
+
     g_user_config.power_enabled = enabled ? 1U : 0U;
-    if ((g_user_config.power_enabled == 0U) && (g_user_status.state == USER_POWER_STATE_ERR))
+    if (g_user_config.power_enabled == 0U)
     {
         g_user_status.state = USER_POWER_STATE_WAIT;
         g_user_status.fault_mask = 0U;
+        g_softstart_tick = 0U;
+        user_pwr_control_reset();
+        UserPowerPwm_Stop(&g_user_status);
+    }
+    else if (was_enabled == 0U)
+    {
+        g_user_status.state = USER_POWER_STATE_WAIT;
+        g_user_status.fault_mask = 0U;
+        g_softstart_tick = 0U;
+        user_pwr_control_reset();
     }
 }
 
