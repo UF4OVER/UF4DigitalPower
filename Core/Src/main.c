@@ -117,6 +117,8 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  HAL_GPIO_WritePin(DIV_SW_GPIO_Port, DIV_SW_Pin, GPIO_PIN_SET);
+
   UserPower_Init(g_user_adc_result);
 
   /* USER CODE END 2 */

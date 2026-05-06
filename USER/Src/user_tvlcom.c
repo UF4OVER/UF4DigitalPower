@@ -142,6 +142,16 @@ static tvlcom_status_t user_tvlcom_append_type(uint8_t *payload,
 {
     switch (type)
     {
+    case USER_TVL_DEBUG_SNAPSHOT:
+        if (tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, USER_TVL_OUTPUT_VOLTAGE_RAW, status->raw_adc[2]) != TVLCOM_OK)
+        {
+            return TVLCOM_ERR_OVERFLOW;
+        }
+        if (tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, USER_TVL_OUTPUT_VOLTAGE, user_tvlcom_float_to_mv(status->vout_v)) != TVLCOM_OK)
+        {
+            return TVLCOM_ERR_OVERFLOW;
+        }
+        return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, USER_TVL_OVP_SET_VALUE, user_tvlcom_float_to_mv(config->ovp_v));
     case USER_TVL_INPUT_VOLTAGE:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, user_tvlcom_float_to_mv(status->vin_v));
     case USER_TVL_INPUT_CURRENT:
