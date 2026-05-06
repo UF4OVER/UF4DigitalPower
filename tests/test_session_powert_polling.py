@@ -54,6 +54,9 @@ class _TestPowerClient(F4CPPowerClient):
             ovp_set_value_mv=44000,
             ocp_value_ma=500,
             ocp_set_value_ma=3500,
+            duty_cmd_permille=420,
+            pwm_a_compare=15080,
+            pwm_d_compare=1560,
             fan_speed=650,
             fan_set_value=700,
         )

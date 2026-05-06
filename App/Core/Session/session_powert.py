@@ -77,9 +77,13 @@ class PowerDataType(IntEnum):
     OVP_SET_VALUE = 32
     OCP_VALUE = 33
     OCP_SET_VALUE = 34
+    DUTY_CMD = 35
+    PWM_A_COMPARE = 36
+    PWM_D_COMPARE = 37
     FAN_SPEED = 38
     FAN_SET_VALUE = 39
-    APP_TVL_DEBUG_SNAPSHOT = 40
+    DEBUG_SNAPSHOT = 40
+    APP_TVL_DEBUG_SNAPSHOT = 40  # Legacy alias; use DEBUG_SNAPSHOT in new code.
 
 
 class PowerValueType(IntEnum):
@@ -172,6 +176,9 @@ POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.OVP_SET_VALUE: PowerDataMeta(PowerDataType.OVP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "OVP Set Value"),
     PowerDataType.OCP_VALUE: PowerDataMeta(PowerDataType.OCP_VALUE, PowerValueType.U32, PowerAccess.READ, "mA", "OCP Value"),
     PowerDataType.OCP_SET_VALUE: PowerDataMeta(PowerDataType.OCP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "OCP Set Value"),
+    PowerDataType.DUTY_CMD: PowerDataMeta(PowerDataType.DUTY_CMD, PowerValueType.U32, PowerAccess.READ, "permille", "Duty Command"),
+    PowerDataType.PWM_A_COMPARE: PowerDataMeta(PowerDataType.PWM_A_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM A Compare"),
+    PowerDataType.PWM_D_COMPARE: PowerDataMeta(PowerDataType.PWM_D_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM D Compare"),
     PowerDataType.FAN_SPEED: PowerDataMeta(PowerDataType.FAN_SPEED, PowerValueType.U32, PowerAccess.READ, "permille", "Fan Speed"),
     PowerDataType.FAN_SET_VALUE: PowerDataMeta(PowerDataType.FAN_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "permille", "Fan Set Value"),
 }
@@ -198,6 +205,9 @@ POWER_STATUS_FIELD_MAP = {
     PowerDataType.OVP_SET_VALUE: "ovp_set_value_mv",
     PowerDataType.OCP_VALUE: "ocp_value_ma",
     PowerDataType.OCP_SET_VALUE: "ocp_set_value_ma",
+    PowerDataType.DUTY_CMD: "duty_cmd_permille",
+    PowerDataType.PWM_A_COMPARE: "pwm_a_compare",
+    PowerDataType.PWM_D_COMPARE: "pwm_d_compare",
     PowerDataType.FAN_SPEED: "fan_speed",
     PowerDataType.FAN_SET_VALUE: "fan_set_value",
 }
@@ -222,6 +232,9 @@ STATUS_TYPES = (
     PowerDataType.OVP_SET_VALUE,
     PowerDataType.OCP_VALUE,
     PowerDataType.OCP_SET_VALUE,
+    PowerDataType.DUTY_CMD,
+    PowerDataType.PWM_A_COMPARE,
+    PowerDataType.PWM_D_COMPARE,
     PowerDataType.FAN_SPEED,
     PowerDataType.FAN_SET_VALUE,
 )
@@ -364,6 +377,9 @@ def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
         ovp_set_value_mv=normalized[PowerDataType.OVP_SET_VALUE],
         ocp_value_ma=normalized[PowerDataType.OCP_VALUE],
         ocp_set_value_ma=normalized[PowerDataType.OCP_SET_VALUE],
+        duty_cmd_permille=normalized[PowerDataType.DUTY_CMD],
+        pwm_a_compare=normalized[PowerDataType.PWM_A_COMPARE],
+        pwm_d_compare=normalized[PowerDataType.PWM_D_COMPARE],
         fan_speed=normalized[PowerDataType.FAN_SPEED],
         fan_set_value=normalized[PowerDataType.FAN_SET_VALUE],
     )
@@ -403,6 +419,9 @@ class PowerStatus:
     ovp_set_value_mv: int
     ocp_value_ma: int
     ocp_set_value_ma: int
+    duty_cmd_permille: int
+    pwm_a_compare: int
+    pwm_d_compare: int
     fan_speed: int
     fan_set_value: int
 
@@ -691,7 +710,7 @@ class F4CPPowerClient(QObject):
         payload = b"".join(encode_tlv(type_id) for type_id in types)
         response = self._request(PowerCommand.READ, payload, timeout_ms=timeout_ms)
 
-        if types == (PowerDataType.APP_TVL_DEBUG_SNAPSHOT,):
+        if types == (PowerDataType.DEBUG_SNAPSHOT,):
             return response
 
         missing = [type_id.name for type_id in types if type_id not in response]
@@ -720,7 +739,7 @@ class F4CPPowerClient(QObject):
         return status
 
     def read_debug_snapshot(self, timeout_ms: int = 1000) -> DebugSnapshot:
-        result = self.read_values(PowerDataType.APP_TVL_DEBUG_SNAPSHOT, timeout_ms=timeout_ms)
+        result = self.read_values(PowerDataType.DEBUG_SNAPSHOT, timeout_ms=timeout_ms)
 
         missing = [
             type_id.name
