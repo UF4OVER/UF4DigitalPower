@@ -1,4 +1,4 @@
-/* USER_Code CODE BEGIN Header */
+/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    usart.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER_Code CODE END Header */
+/* USER CODE END Header */
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __USART_H__
 #define __USART_H__
@@ -28,24 +28,24 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* USER_Code CODE BEGIN Includes */
+/* USER CODE BEGIN Includes */
 
-/* USER_Code CODE END Includes */
+/* USER CODE END Includes */
 
 extern UART_HandleTypeDef huart1;
 
 extern UART_HandleTypeDef huart3;
 
-/* USER_Code CODE BEGIN Private defines */
+/* USER CODE BEGIN Private defines */
 
-/* USER_Code CODE END Private defines */
+/* USER CODE END Private defines */
 
 void MX_USART1_UART_Init(void);
 void MX_USART3_UART_Init(void);
 
-/* USER_Code CODE BEGIN Prototypes */
+/* USER CODE BEGIN Prototypes */
 
-/* USER_Code CODE END Prototypes */
+/* USER CODE END Prototypes */
 
 #ifdef __cplusplus
 }

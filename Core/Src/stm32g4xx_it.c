@@ -63,8 +63,6 @@ extern DMA_HandleTypeDef hdma_spi3_tx;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart3;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -306,22 +304,6 @@ void TIM4_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles USART1 global interrupt.
-  */
-void USART1_IRQHandler(void)
-{
-  HAL_UART_IRQHandler(&huart1);
-}
-
-/**
-  * @brief This function handles USART3 global interrupt.
-  */
-void USART3_IRQHandler(void)
-{
-  HAL_UART_IRQHandler(&huart3);
-}
-
-/**
   * @brief This function handles HRTIM timer A global interrupt.
   */
 void HRTIM1_TIMA_IRQHandler(void)
@@ -333,6 +315,20 @@ void HRTIM1_TIMA_IRQHandler(void)
   /* USER CODE BEGIN HRTIM1_TIMA_IRQn 1 */
 
   /* USER CODE END HRTIM1_TIMA_IRQn 1 */
+}
+
+/**
+  * @brief This function handles HRTIM fault global interrupt.
+  */
+void HRTIM1_FLT_IRQHandler(void)
+{
+  /* USER CODE BEGIN HRTIM1_FLT_IRQn 0 */
+
+  /* USER CODE END HRTIM1_FLT_IRQn 0 */
+  HAL_HRTIM_IRQHandler(&hhrtim1,HRTIM_TIMERINDEX_COMMON);
+  /* USER CODE BEGIN HRTIM1_FLT_IRQn 1 */
+
+  /* USER CODE END HRTIM1_FLT_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */

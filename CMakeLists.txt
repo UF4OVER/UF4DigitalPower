@@ -59,7 +59,7 @@ include_directories(
         Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
-        APP/Inc
+        USER/Inc
         TVLCOM_V2_FULL/Inc
 )
 
@@ -70,7 +70,7 @@ file(GLOB_RECURSE SOURCES
         "Core/*.*"
         "Middlewares/*.*"
         "Drivers/*.*"
-        "APP/*.*")
+        "USER/*.*")
 
 list(APPEND SOURCES
         TVLCOM_V2_FULL/Src/tvlcom.c)
