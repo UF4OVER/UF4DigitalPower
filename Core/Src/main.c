@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "adc.h"
 #include "dma.h"
 #include "hrtim.h"
 #include "iwdg.h"
@@ -41,6 +40,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+/* Set to 1 for a minimal HRTIM A/D pin + ADC trigger health demo. */
+#define HRTIM_AD_PIN_DEMO          1U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,13 +53,20 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+#if !HRTIM_AD_PIN_DEMO
 static volatile uint32_t g_tick_1ms = 0U;
+#else
+static volatile uint32_t g_demo_hrtim_rep_count = 0U;
+#endif
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 static void PowerControl_StartRuntime(void);
+#if HRTIM_AD_PIN_DEMO
+static void HrtimAdPinDemo_Start(void);
+#endif
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -66,6 +75,35 @@ static void PowerControl_StartRuntime(void)
 {
   PowerApp_Init();
 }
+
+#if HRTIM_AD_PIN_DEMO
+static void HrtimAdPinDemo_Start(void)
+{
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET);
+
+  if (HAL_HRTIM_WaveformCountStart_IT(&hhrtim1, HRTIM_TIMERID_TIMER_A) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  if (HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  if (HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  if (HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+#endif
 
 /* USER CODE END 0 */
 
@@ -100,10 +138,12 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_HRTIM1_Init();
+#if !HRTIM_AD_PIN_DEMO
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_ADC5_Init();
   MX_IWDG_Init();
+#endif
   MX_SPI3_Init();
   MX_TIM4_Init();
   MX_USB_Device_Init();
@@ -115,7 +155,11 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
 
+#if HRTIM_AD_PIN_DEMO
+  HrtimAdPinDemo_Start();
+#else
   PowerControl_StartRuntime();
+#endif
 
   /* USER CODE END 2 */
 
@@ -126,9 +170,34 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+#if HRTIM_AD_PIN_DEMO
+    static uint32_t last_check_ms = 0U;
+    static uint32_t last_rep_count = 0U;
+
+    if ((HAL_GetTick() - last_check_ms) >= 200U)
+    {
+      uint8_t rep_alive = (g_demo_hrtim_rep_count != last_rep_count) ? 1U : 0U;
+
+      last_check_ms = HAL_GetTick();
+      last_rep_count = g_demo_hrtim_rep_count;
+
+      if (rep_alive != 0U)
+      {
+        HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
+        HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET);
+      }
+      else
+      {
+        HAL_GPIO_TogglePin(LED3_GPIO_Port, LED3_Pin);
+      }
+    }
+
+    HAL_Delay(10);
+#else
     /* Keep non-time-critical work in foreground loop. */
     PowerApp_BackgroundTask();
     HAL_Delay(100);
+#endif
   }
   /* USER CODE END 3 */
 }
@@ -186,12 +255,19 @@ void HAL_HRTIM_RepetitionEventCallback(HRTIM_HandleTypeDef *hhrtim, uint32_t Tim
 {
   if ((hhrtim == &hhrtim1) && (TimerIdx == HRTIM_TIMERINDEX_TIMER_A))
   {
+#if HRTIM_AD_PIN_DEMO
+    g_demo_hrtim_rep_count++;
+#else
     PowerApp_FastLoop();
+#endif
   }
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
+#if HRTIM_AD_PIN_DEMO
+  (void)htim;
+#else
   if (htim->Instance == TIM2)
   {
     g_tick_1ms++;
@@ -205,6 +281,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   {
     PowerApp_5msTask();
   }
+#endif
 }
 
 /* USER CODE END 4 */
