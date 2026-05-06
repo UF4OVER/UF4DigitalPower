@@ -18,9 +18,11 @@ static volatile uint16_t *g_adc_result = NULL;
 static uint8_t g_save_pending = 0U;
 static uint16_t g_softstart_tick = 0U;
 static uint16_t g_voltage_loop_divider = 0U;
+static uint16_t g_fast_state_divider = 0U;
 static uint8_t g_measurement_ready = 0U;
 static uint8_t g_aux_measurement_ready = 0U;
 static uint32_t g_aux_sample_tick = 0U;
+static uint32_t g_background_1ms_tick = 0U;
 static float g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
 static float g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
 
@@ -127,8 +129,10 @@ static void user_pwr_update_measurements(void)
     iin_sensor_v = user_pwr_adc_to_sensor_voltage(g_adc_result[1]);
     iout_sensor_v = user_pwr_adc_to_sensor_voltage(g_adc_result[3]);
 
-    /* Track current-sense zero when output is disabled to suppress false full-scale current. */
-    if (g_user_config.power_enabled == 0U)
+    /* Track current-sense zero whenever PWM is not delivering power. */
+    if ((g_user_config.power_enabled == 0U) ||
+        ((g_user_status.state != USER_POWER_STATE_RISE) &&
+         (g_user_status.state != USER_POWER_STATE_RUN)))
     {
         g_iin_zero_v = g_iin_zero_v + 0.02f * (iin_sensor_v - g_iin_zero_v);
         g_iout_zero_v = g_iout_zero_v + 0.02f * (iout_sensor_v - g_iout_zero_v);
@@ -289,6 +293,12 @@ static void user_pwr_select_topology(void)
     float vin = g_user_status.vin_v;
     float vref = g_user_config.target_voltage_v;
 
+    if (g_user_status.state == USER_POWER_STATE_RISE)
+    {
+        g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
+        return;
+    }
+
     if (vref < (vin - 1.0f))
     {
         g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
@@ -374,6 +384,7 @@ static void user_pwr_fast_control_loop(void)
 {
     float vref;
     float iref;
+    float input_limit_a;
     float duty_base;
     float duty_delta;
     float duty;
@@ -402,8 +413,32 @@ static void user_pwr_fast_control_loop(void)
         g_user_status.current_ref_a = user_pwr_pi_step(&g_user_config.voltage_pid, vref, g_user_status.vout_v);
     }
 
+    input_limit_a = USER_PWR_INPUT_CURRENT_LIMIT_A;
+    if (g_user_status.state == USER_POWER_STATE_RISE)
+    {
+        input_limit_a *= 0.6f;
+    }
+
     iref = user_pwr_clamp(g_user_status.current_ref_a, 0.0f, g_user_config.target_current_a);
-    duty_delta = user_pwr_pi_step(&g_user_config.current_pid, iref, g_user_status.iout_a);
+    if (g_user_status.iin_a > input_limit_a)
+    {
+        iref *= 0.85f;
+        g_user_status.current_ref_a = iref;
+    }
+    if (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V)
+    {
+        iref *= 0.5f;
+        g_user_status.current_ref_a = iref;
+    }
+
+    if (g_user_status.state == USER_POWER_STATE_RISE)
+    {
+        duty_delta = 0.5f;
+    }
+    else
+    {
+        duty_delta = user_pwr_pi_step(&g_user_config.current_pid, iref, g_user_status.iout_a);
+    }
 
     if (g_user_status.vin_v < 0.5f)
     {
@@ -425,6 +460,26 @@ static void user_pwr_fast_control_loop(void)
     }
 
     duty = user_pwr_clamp(duty_base + (duty_delta - 0.5f), USER_PWR_DUTY_MIN, USER_PWR_DUTY_MAX);
+    if (g_user_status.state == USER_POWER_STATE_RISE)
+    {
+        float rise_duty_max = USER_PWR_RISE_DUTY_START +
+                              ((float)g_softstart_tick * USER_PWR_RISE_DUTY_STEP);
+        rise_duty_max = user_pwr_clamp(rise_duty_max,
+                                       USER_PWR_RISE_DUTY_START,
+                                       USER_PWR_RISE_DUTY_MAX);
+        if (duty > rise_duty_max)
+        {
+            duty = rise_duty_max;
+        }
+    }
+
+    if ((g_user_status.iin_a > input_limit_a) || (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V))
+    {
+        duty = user_pwr_clamp(duty * 0.95f, USER_PWR_DUTY_MIN, USER_PWR_DUTY_MAX);
+        g_user_config.current_pid.integral *= 0.9f;
+        g_user_config.voltage_pid.integral *= 0.9f;
+    }
+
     g_user_status.duty_cmd = duty;
     g_user_status.regulation_mode = (iref >= (g_user_config.target_current_a - 0.05f)) ? USER_POWER_MODE_CC : USER_POWER_MODE_CV;
     UserPowerPwm_ApplyDuty(g_user_status.topology, duty, &g_user_status);
@@ -436,9 +491,11 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     g_save_pending = 0U;
     g_softstart_tick = 0U;
     g_voltage_loop_divider = 0U;
+    g_fast_state_divider = 0U;
     g_measurement_ready = 0U;
     g_aux_measurement_ready = 0U;
     g_aux_sample_tick = 0U;
+    g_background_1ms_tick = 0U;
     g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
     g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
 
@@ -470,6 +527,13 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
 void UserPower_FastLoop(void)
 {
     user_pwr_update_measurements();
+
+    if (++g_fast_state_divider >= 1000U)
+    {
+        g_fast_state_divider = 0U;
+        UserPower_5msTask();
+    }
+
     user_pwr_protection_fast_check();
 
     if (g_user_status.state == USER_POWER_STATE_ERR)
@@ -535,21 +599,42 @@ void UserPower_5msTask(void)
 
     if (g_user_status.state == USER_POWER_STATE_RISE)
     {
+        UserPowerPwm_SetSynchronous(0U);
+        if (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V)
+        {
+            g_user_status.state = USER_POWER_STATE_WAIT;
+            g_user_status.topology = USER_POWER_TOPOLOGY_NA;
+            g_softstart_tick = 0U;
+            user_pwr_pid_reset(&g_user_config.voltage_pid);
+            user_pwr_pid_reset(&g_user_config.current_pid);
+            UserPowerPwm_Stop(&g_user_status);
+            return;
+        }
+
         g_softstart_tick++;
         if (((float)g_softstart_tick * USER_PWR_SOFTSTART_STEP_V) >= g_user_config.target_voltage_v)
         {
             g_user_status.state = USER_POWER_STATE_RUN;
+            UserPowerPwm_SetSynchronous(1U);
         }
     }
 }
 
 void UserPower_BackgroundTask(void)
 {
+    uint32_t now = HAL_GetTick();
+
     UserTvlcom_BackgroundTask();
 
-    if ((HAL_GetTick() - g_aux_sample_tick) >= 100U)
+    if ((now - g_background_1ms_tick) >= 1U)
     {
-        g_aux_sample_tick = HAL_GetTick();
+        g_background_1ms_tick = now;
+        UserPower_1msTask();
+    }
+
+    if ((now - g_aux_sample_tick) >= 100U)
+    {
+        g_aux_sample_tick = now;
         user_pwr_update_aux_measurements();
     }
 

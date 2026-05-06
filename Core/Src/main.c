@@ -132,7 +132,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
     HAL_IWDG_Refresh(&hiwdg);
     UserPower_BackgroundTask();
-    HAL_Delay(10);
+    HAL_Delay(1);
   }
   /* USER CODE END 3 */
 }
@@ -204,11 +204,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
       HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
     }
-    UserPower_1msTask();
   }
   else if (htim->Instance == TIM3)
   {
-    UserPower_5msTask();
   }
 }
 

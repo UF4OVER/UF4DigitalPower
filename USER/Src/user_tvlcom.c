@@ -251,6 +251,11 @@ static void user_tvlcom_handle_read(uint8_t seq, const uint8_t *payload, uint16_
     uint16_t ack_len = 0U;
 
     UserPower_GetStatus(&status);
+    if ((status.state == USER_POWER_STATE_INIT) || (status.state == USER_POWER_STATE_WAIT))
+    {
+        UserPower_5msTask();
+        UserPower_GetStatus(&status);
+    }
     UserPower_GetConfig(&config);
 
     while (tvlcom_payload_next(payload, payload_len, &offset, &tlv) == TVLCOM_OK)
