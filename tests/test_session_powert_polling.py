@@ -1,6 +1,7 @@
 import time
 import unittest
 from types import SimpleNamespace
+from typing import cast
 
 from PyQt5.QtCore import QCoreApplication
 
@@ -9,6 +10,7 @@ from App.Core.Session.session_powert import (
     PowerDataType,
     PowerStatus,
 )
+from App.Core.Session.session_serial import SerialSession
 
 
 class _FakeSerialSession:
@@ -72,7 +74,7 @@ class PowerClientPollingTests(unittest.TestCase):
 
     def test_start_polling_uses_host_timer_and_immediately_requests_status(self):
         client = _TestPowerClient()
-        client.attach_session(_FakeSerialSession())
+        client.attach_session(cast(SerialSession, _FakeSerialSession()))
 
         logs = []
         client.log.connect(logs.append)
@@ -90,7 +92,7 @@ class PowerClientPollingTests(unittest.TestCase):
 
     def test_output_limit_write_refreshes_status_after_ack(self):
         client = _TestPowerClient()
-        client.attach_session(_FakeSerialSession())
+        client.attach_session(cast(SerialSession, _FakeSerialSession()))
 
         written = []
         errors = []
@@ -111,7 +113,7 @@ class PowerClientPollingTests(unittest.TestCase):
 
     def test_protection_write_and_power_state_write_both_trigger_readback(self):
         client = _TestPowerClient()
-        client.attach_session(_FakeSerialSession())
+        client.attach_session(cast(SerialSession, _FakeSerialSession()))
 
         protection_written = []
         power_state_values = []

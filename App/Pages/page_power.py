@@ -36,6 +36,7 @@ from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
+POWER_POLL_INTERVAL_MS = 500
 PLOT_Y_MIN = -10
 PLOT_Y_MAX = 60
 
@@ -437,7 +438,7 @@ class PowerPage(ScrollArea):
         self.stateBadge.setFixedWidth(84)
 
         self.autoPollSwitch = SwitchButton(self.summaryCard)
-        self.autoPollSwitch.setChecked(False)
+        self.autoPollSwitch.setChecked(True)
 
         self.refreshButton = PrimaryPushButton(FIF.SYNC, "", self.summaryCard)
         self.debugButton = PushButton(FIF.SEARCH, "", self.summaryCard)
@@ -622,21 +623,20 @@ class PowerPage(ScrollArea):
 
     def onDeviceConnected(self, session) -> None:
         self.attachSessionRequested.emit(session)
-        self.stopPollingRequested.emit()
         self.deviceLabel.setText(session.cfg.port or self.tr("Unknown"))
         self.stateBadge.setText(self.tr("ONLINE"))
         self.stateBadge.setProperty("onlineState", "online")
         self._appendLog(f"Connected on {session.cfg.port}")
-        self.autoPollSwitch.blockSignals(True)
-        self.autoPollSwitch.setChecked(False)
-        self.autoPollSwitch.blockSignals(False)
         showMessage(
             self,
             self.tr("Device Connected"),
             self.tr("Power device session attached."),
             level="success",
         )
-        self._appendLog("Waiting for device REPORT frames")
+        if self.autoPollSwitch.isChecked():
+            self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
+        else:
+            self.readStatusRequested.emit()
 
     def onDeviceDisconnected(self) -> None:
         self.detachSessionRequested.emit()
@@ -730,13 +730,10 @@ class PowerPage(ScrollArea):
         self.protectionValuesRequested.emit(ovpMv, ocpMa, otpMc, fanValue)
 
     def _onAutoPollChanged(self, checked: bool) -> None:
-        self.stopPollingRequested.emit()
         if checked:
-            self.autoPollSwitch.blockSignals(True)
-            self.autoPollSwitch.setChecked(False)
-            self.autoPollSwitch.blockSignals(False)
-            self._appendLog("Host polling is disabled; use REPORT or Refresh Now")
+            self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
         else:
+            self.stopPollingRequested.emit()
             self._appendLog("Host polling disabled")
 
     def _onOutputSwitchChanged(self, checked: bool) -> None:
@@ -879,7 +876,6 @@ class PowerPage(ScrollArea):
             self.tr("Voltage/current/output state have been written."),
             level="success",
         )
-        self._readStatusOnce()
 
     def _onProtectionValuesWritten(self) -> None:
         showMessage(
@@ -888,7 +884,6 @@ class PowerPage(ScrollArea):
             self.tr("OVP/OCP/OTP/Fan parameters have been written."),
             level="success",
         )
-        self._readStatusOnce()
 
     def _onPowerStateWritten(self, enabled: bool) -> None:
         self._appendLog(f"Output set to {'ON' if enabled else 'OFF'}")

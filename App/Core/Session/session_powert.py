@@ -572,8 +572,14 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
-        self.stop_polling()
-        self.log.emit("Host polling disabled; waiting for device REPORT frames")
+        interval = max(200, int(interval_ms))
+        was_active = self._poll_timer.isActive()
+        previous_interval = self._poll_timer.interval()
+        self._poll_timer.start(interval)
+        if (not was_active) or previous_interval != interval:
+            self.log.emit(f"Host polling started ({interval} ms)")
+        if self.is_connected and not self.is_busy:
+            QTimer.singleShot(0, self._poll_once)
 
     @pyqtSlot()
     def stop_polling(self) -> None:
@@ -616,6 +622,7 @@ class F4CPPowerClient(QObject):
                 timeout_ms=1000,
             )
             self.outputLimitsWritten.emit()
+            self._refresh_status_after_write(timeout_ms=1000)
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -638,6 +645,7 @@ class F4CPPowerClient(QObject):
                 timeout_ms=1000,
             )
             self.protectionValuesWritten.emit()
+            self._refresh_status_after_write(timeout_ms=1000)
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -652,6 +660,7 @@ class F4CPPowerClient(QObject):
         try:
             self.set_power_state(enabled, timeout_ms=1000)
             self.powerStateWritten.emit(enabled)
+            self._refresh_status_after_write(timeout_ms=1000)
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -811,6 +820,14 @@ class F4CPPowerClient(QObject):
             self.read_status(timeout_ms=800)
         except Exception as exc:
             self.error.emit(str(exc))
+
+    def _refresh_status_after_write(self, timeout_ms: int = 1000) -> None:
+        if self._shutting_down or not self.is_connected or self.is_busy:
+            return
+        try:
+            self.read_status(timeout_ms=timeout_ms)
+        except Exception as exc:
+            self.error.emit(f"WRITE ACK received, but status refresh failed: {exc}")
 
     def _request(self, cmd: PowerCommand, payload: bytes, timeout_ms: int = 1000) -> dict[PowerDataType, int]:
         if not self.is_connected or self._session is None:

@@ -43,14 +43,35 @@ class DaplinkProcessOutputTests(unittest.TestCase):
     def test_progress_fragments_are_not_logged_and_emit_incremental_progress(self):
         self.session._consume_process_output_chunk("0001794 I Erasing... [loader]\r\n")
         self.session._consume_process_output_chunk("[---|---|---|---|---|---|---|---|---|----]\r\n")
-        self.session._consume_process_output_chunk("[")
-        self.session._consume_process_output_chunk("===============")
-        self.session._consume_process_output_chunk("]\r\n")
+        for chunk in ["[", "=", "==", "=", "==", "=", "==", "==]", "\r\n"]:
+            self.session._consume_process_output_chunk(chunk)
         self.session._consume_process_output_chunk("0005220 I Programming... [loader]\r\n")
         self.session._consume_process_output_chunk("[---|---|---|---|---|---|---|---|---|----]\r\n")
-        self.session._consume_process_output_chunk("[")
-        self.session._consume_process_output_chunk("===============================")
-        self.session._consume_process_output_chunk("]\r\n")
+        for chunk in [
+            "[",
+            "=",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "=",
+            "==",
+            "==]",
+            "\r\n",
+        ]:
+            self.session._consume_process_output_chunk(chunk)
 
         logs = self._event_texts(DaplinkProgrammerEventType.LOG)
         progress_values = self._progress_values()
@@ -62,6 +83,7 @@ class DaplinkProcessOutputTests(unittest.TestCase):
                 "0005220 I Programming... [loader]",
             ],
         )
+        self.assertFalse(any(log in {"[", "=", "==", "==]"} for log in logs))
         self.assertIn(0, progress_values)
         self.assertTrue(any(0 < value < 20 for value in progress_values))
         self.assertEqual(progress_values[-1], 100)

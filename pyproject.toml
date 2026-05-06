@@ -29,7 +29,7 @@ executables = [
 
 [tool.cxfreeze.build_exe]
 
-build_exe = "build/exe"
+build_exe = "Build/exe_for_{{target_platform}}-{{python_version}}"
 
 includes = [
     "PyQt5.QtCore",

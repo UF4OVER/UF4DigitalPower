@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import zipfile
 from dataclasses import dataclass, field
@@ -28,6 +29,13 @@ from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, Q
 from Config import DirPathsInstance, logger
 
 DAPLINK_FLASH_TIMEOUT_MS = 5 * 60 * 1000
+PYOCD_PROGRESS_PHASE_RANGES = {
+    "erase": (0.0, 20.0),
+    "program": (20.0, 100.0),
+}
+PYOCD_DEFAULT_PROGRESS_STEPS = 40
+ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+PYOCD_PROGRESS_FRAGMENT_RE = re.compile(r"^[\[\]=\-|\s]+$")
 
 
 def _install_pyocd_probe_filter() -> None:
@@ -302,6 +310,9 @@ class DaplinkPyocdSession(QObject):
         self._pack_paths: list[Path] = []
         self._target_items: list[DaplinkTargetInfo] = []
         self._last_progress_value = -1.0
+        self._process_line_buffer = ""
+        self._process_progress_phase: str | None = None
+        self._process_progress_total_steps = PYOCD_DEFAULT_PROGRESS_STEPS
 
     def set_event_receiver(self, receiver: Optional[QObject]) -> None:
         if receiver is not None and not isinstance(receiver, QObject):
@@ -358,6 +369,11 @@ class DaplinkPyocdSession(QObject):
         self._worker.finished.connect(self._cleanup_worker)
         self._worker.start()
 
+    def _reset_process_output_state(self) -> None:
+        self._process_line_buffer = ""
+        self._process_progress_phase = None
+        self._process_progress_total_steps = PYOCD_DEFAULT_PROGRESS_STEPS
+
     def _finish_action(self, action: str, success: bool, exit_code: int) -> None:
         self._busy = False
         self._post_event(StateEvent(busy=False, action=action))
@@ -379,8 +395,10 @@ class DaplinkPyocdSession(QObject):
 
         self._busy = True
         self._last_progress_value = -1.0
+        self._reset_process_output_state()
         self._process_action = "download"
         self._post_event(StateEvent(busy=True, action="download"))
+        self._post_event(ProgressEvent("download", 0.0))
 
         try:
             target_info = self._target_by_name(payload.connect.target_name)
@@ -452,12 +470,103 @@ class DaplinkPyocdSession(QObject):
         if self._process is None:
             return
         data = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
-        for line in data.replace("\r\n", "\n").replace("\r", "\n").splitlines():
-            if line.strip():
-                self._post_event(LogEvent(line.strip()))
+        self._consume_process_output_chunk(data)
+
+    def _consume_process_output_chunk(self, data: str) -> None:
+        if not data:
+            return
+
+        clean_data = self._strip_ansi(data)
+        if not clean_data:
+            return
+
+        for char in clean_data:
+            if char in "\r\n":
+                self._flush_process_line_buffer()
+                continue
+            self._process_line_buffer += char
+
+        self._consume_live_progress_fragment(self._process_line_buffer)
+
+    def _flush_process_line_buffer(self) -> None:
+        line = self._process_line_buffer.strip()
+        self._process_line_buffer = ""
+        if not line:
+            return
+        if self._consume_process_output_line(line):
+            return
+        self._post_event(LogEvent(line))
+
+    def _consume_process_output_line(self, line: str) -> bool:
+        text = self._strip_ansi(line).strip()
+        if not text:
+            return True
+
+        lowered = text.lower()
+        if "erasing..." in lowered:
+            self._process_progress_phase = "erase"
+            self._report_progress("download", PYOCD_PROGRESS_PHASE_RANGES["erase"][0])
+            return False
+        if "programming..." in lowered:
+            self._process_progress_phase = "program"
+            self._report_progress("download", PYOCD_PROGRESS_PHASE_RANGES["program"][0])
+            return False
+
+        if self._update_progress_template(text):
+            return True
+        if self._update_progress_from_fragment(text):
+            return True
+        return False
+
+    def _consume_live_progress_fragment(self, line: str) -> None:
+        text = self._strip_ansi(line).strip()
+        if not text:
+            return
+        self._update_progress_template(text)
+        self._update_progress_from_fragment(text)
+
+    def _update_progress_template(self, text: str) -> bool:
+        if not self._looks_like_progress_fragment(text):
+            return False
+        if "-" not in text:
+            return False
+
+        slots = self._count_progress_slots(text)
+        if slots > 0:
+            self._process_progress_total_steps = slots
+        return True
+
+    def _update_progress_from_fragment(self, text: str) -> bool:
+        if not self._looks_like_progress_fragment(text):
+            return False
+        if self._process_progress_phase not in PYOCD_PROGRESS_PHASE_RANGES:
+            return True
+
+        filled_steps = text.count("=")
+        total_steps = max(self._process_progress_total_steps, filled_steps, 1)
+        if "]" in text:
+            filled_steps = total_steps
+
+        start, end = PYOCD_PROGRESS_PHASE_RANGES[self._process_progress_phase]
+        ratio = min(1.0, filled_steps / total_steps)
+        self._report_progress("download", start + (end - start) * ratio)
+        return True
+
+    @staticmethod
+    def _count_progress_slots(text: str) -> int:
+        return sum(1 for char in text if char in "-=")
+
+    @staticmethod
+    def _looks_like_progress_fragment(text: str) -> bool:
+        return bool(PYOCD_PROGRESS_FRAGMENT_RE.fullmatch(text))
+
+    @staticmethod
+    def _strip_ansi(text: str) -> str:
+        return ANSI_ESCAPE_RE.sub("", text)
 
     def _handle_process_finished(self, exit_code: int, exit_status) -> None:
         self._process_timeout_timer.stop()
+        self._flush_process_line_buffer()
         success = exit_code == 0
         message = "固件下载完成。" if success else f"pyOCD 下载失败，退出码: {exit_code}"
         self._finish_process_action(success, exit_code, message)
