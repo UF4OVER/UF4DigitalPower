@@ -36,9 +36,9 @@ from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
-POWER_POLL_INTERVAL_MS = 500
-PLOT_Y_MIN = -10
-PLOT_Y_MAX = 60
+POWER_POLL_INTERVAL_MS = 200
+PLOT_Y_MIN = 0
+PLOT_Y_MAX = 45
 
 
 def _readPortIdentity() -> tuple[int, int]:

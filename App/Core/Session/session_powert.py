@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, replace
 from enum import IntEnum
-from typing import Iterable
+from typing import Callable, Iterable
 
 from PyQt5.QtCore import QCoreApplication, QEventLoop, QIODevice, QObject, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtSerialPort import QSerialPort
@@ -151,6 +151,9 @@ CC_CV_NAMES = {
 }
 
 SOF = b"\xAA\x55"
+WRITE_IDLE_RETRY_MS = 25
+WRITE_IDLE_WAIT_TIMEOUT_MS = 1500
+WRITE_POLL_RESUME_DELAY_MS = 500
 
 POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Input Voltage"),
@@ -239,25 +242,7 @@ STATUS_TYPES = (
     PowerDataType.FAN_SET_VALUE,
 )
 
-REPORT_STATUS_TYPES = (
-    PowerDataType.INPUT_VOLTAGE,
-    PowerDataType.INPUT_CURRENT,
-    PowerDataType.OUTPUT_VOLTAGE,
-    PowerDataType.OUTPUT_CURRENT,
-    PowerDataType.CORE_TEMPERATURE,
-    PowerDataType.BOARD_TEMPERATURE,
-    PowerDataType.SET_VOLTAGE_LIMIT,
-    PowerDataType.SET_CURRENT_LIMIT,
-    PowerDataType.CC_CV_MODE,
-    PowerDataType.POWER_STATE,
-    PowerDataType.FAULT_STATE,
-    PowerDataType.STATE_MACHINE_FLAG_BITS,
-    PowerDataType.STATE_MACHINE_STATE,
-    PowerDataType.OTP_SET_VALUE,
-    PowerDataType.OVP_SET_VALUE,
-    PowerDataType.OCP_SET_VALUE,
-    PowerDataType.FAN_SPEED,
-)
+REPORT_STATUS_TYPES = STATUS_TYPES
 
 
 def crc16_modbus(data: bytes) -> int:
@@ -521,6 +506,7 @@ class DebugSnapshot:
 class _PendingRequest:
     seq: int
     loop: QEventLoop
+    expected_cmd: PowerCommand = PowerCommand.ACK
     response: dict[PowerDataType, int] | None = None
     error: Exception | None = None
 
@@ -546,6 +532,10 @@ class F4CPPowerClient(QObject):
         self._shutting_down = False
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_once)
+        self._poll_resume_timer = QTimer(self)
+        self._poll_resume_timer.setSingleShot(True)
+        self._poll_resume_timer.timeout.connect(self._resume_polling_if_ready)
+        self._poll_resume_interval_ms: int | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -592,6 +582,8 @@ class F4CPPowerClient(QObject):
     @pyqtSlot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
         interval = max(200, int(interval_ms))
+        self._poll_resume_timer.stop()
+        self._poll_resume_interval_ms = None
         was_active = self._poll_timer.isActive()
         previous_interval = self._poll_timer.interval()
         self._poll_timer.start(interval)
@@ -603,6 +595,8 @@ class F4CPPowerClient(QObject):
     @pyqtSlot()
     def stop_polling(self) -> None:
         self._poll_timer.stop()
+        self._poll_resume_timer.stop()
+        self._poll_resume_interval_ms = None
 
     @pyqtSlot()
     def request_read_status(self) -> None:
@@ -625,13 +619,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(int, int, bool)
     def request_set_output_limits(self, voltage_mv: int, current_ma: int, enabled: bool) -> None:
-        if not self.is_connected:
-            self.error.emit("Serial session is not connected")
-            return
-        if self.is_busy:
-            self.error.emit("Another request is still pending; output write was not sent")
-            return
-        try:
+        def _write() -> None:
             self.write_values(
                 {
                     PowerDataType.SET_VOLTAGE_LIMIT: _u32(voltage_mv),
@@ -642,18 +630,12 @@ class F4CPPowerClient(QObject):
             )
             self.outputLimitsWritten.emit()
             self._refresh_status_after_write(timeout_ms=1000)
-        except Exception as exc:
-            self.error.emit(str(exc))
+
+        self._run_write_transaction("output write", _write)
 
     @pyqtSlot(int, int, int, int)
     def request_set_protection_values(self, ovp_mv: int, ocp_ma: int, otp_mc: int, fan_value: int) -> None:
-        if not self.is_connected:
-            self.error.emit("Serial session is not connected")
-            return
-        if self.is_busy:
-            self.error.emit("Another request is still pending; protection write was not sent")
-            return
-        try:
+        def _write() -> None:
             self.write_values(
                 {
                     PowerDataType.OVP_SET_VALUE: _u32(ovp_mv),
@@ -665,23 +647,17 @@ class F4CPPowerClient(QObject):
             )
             self.protectionValuesWritten.emit()
             self._refresh_status_after_write(timeout_ms=1000)
-        except Exception as exc:
-            self.error.emit(str(exc))
+
+        self._run_write_transaction("protection write", _write)
 
     @pyqtSlot(bool)
     def request_set_power_state(self, enabled: bool) -> None:
-        if not self.is_connected:
-            self.error.emit("Serial session is not connected")
-            return
-        if self.is_busy:
-            self.error.emit("Another request is still pending; power state write was not sent")
-            return
-        try:
+        def _write() -> None:
             self.set_power_state(enabled, timeout_ms=1000)
             self.powerStateWritten.emit(enabled)
             self._refresh_status_after_write(timeout_ms=1000)
-        except Exception as exc:
-            self.error.emit(str(exc))
+
+        self._run_write_transaction("power state write", _write)
 
     def event(self, event):
         event_type = event.type()
@@ -719,6 +695,19 @@ class F4CPPowerClient(QObject):
         self._last_values.update(response)
         return response
 
+    def read_report_values(self, timeout_ms: int = 1000) -> dict[PowerDataType, int]:
+        response = self._request(
+            PowerCommand.REPORT,
+            b"",
+            timeout_ms=timeout_ms,
+            expected_cmd=PowerCommand.REPORT,
+        )
+        missing = [type_id.name for type_id in REPORT_STATUS_TYPES if type_id not in response]
+        if missing:
+            raise PowerClientProtocolError(f"Missing report types: {', '.join(missing)}")
+        self._last_values.update(response)
+        return response
+
     def write_values(self, values: dict[PowerDataType, bytes], timeout_ms: int = 1000) -> None:
         for type_id, raw_value in values.items():
             _ensure_writable(type_id, raw_value)
@@ -732,7 +721,7 @@ class F4CPPowerClient(QObject):
         )
 
     def read_status(self, timeout_ms: int = 1000) -> PowerStatus:
-        result = self.read_values(*STATUS_TYPES, timeout_ms=timeout_ms)
+        result = self.read_report_values(timeout_ms=timeout_ms)
         status = build_status(result)
         self._last_status = status
         self.statusUpdated.emit(status)
@@ -832,6 +821,72 @@ class F4CPPowerClient(QObject):
     def decode_cc_cv(value: int) -> str:
         return CC_CV_NAMES.get(value, f"UNKNOWN({value})")
 
+    def _run_write_transaction(self, description: str, write_action: Callable[[], None]) -> None:
+        if not self.is_connected:
+            self.error.emit("Serial session is not connected")
+            return
+
+        self._pause_polling_for_write()
+        self._run_write_when_idle(description, write_action, time.monotonic())
+
+    def _run_write_when_idle(
+        self,
+        description: str,
+        write_action: Callable[[], None],
+        started_at: float,
+    ) -> None:
+        if self._shutting_down or not self.is_connected:
+            self._schedule_polling_resume()
+            return
+
+        if self.is_busy:
+            waited_ms = int((time.monotonic() - started_at) * 1000)
+            if waited_ms >= WRITE_IDLE_WAIT_TIMEOUT_MS:
+                self.error.emit(f"Timed out waiting for polling to finish; {description} was not sent")
+                self._schedule_polling_resume()
+                return
+
+            QTimer.singleShot(
+                WRITE_IDLE_RETRY_MS,
+                lambda: self._run_write_when_idle(description, write_action, started_at),
+            )
+            return
+
+        try:
+            write_action()
+        except Exception as exc:
+            self.error.emit(str(exc))
+        finally:
+            self._schedule_polling_resume()
+
+    def _pause_polling_for_write(self) -> None:
+        self._poll_resume_timer.stop()
+        if self._poll_timer.isActive():
+            self._poll_resume_interval_ms = self._poll_timer.interval()
+            self._poll_timer.stop()
+            self.log.emit("Host polling paused for write")
+
+    def _schedule_polling_resume(self) -> None:
+        if self._poll_resume_interval_ms is None or self._shutting_down:
+            return
+        self._poll_resume_timer.start(WRITE_POLL_RESUME_DELAY_MS)
+
+    def _resume_polling_if_ready(self) -> None:
+        interval = self._poll_resume_interval_ms
+        if interval is None:
+            return
+        if self._shutting_down or not self.is_connected:
+            self._poll_resume_interval_ms = None
+            return
+        if self.is_busy:
+            self._poll_resume_timer.start(WRITE_IDLE_RETRY_MS)
+            return
+
+        self._poll_resume_interval_ms = None
+        self._poll_timer.start(interval)
+        self.log.emit(f"Host polling resumed ({interval} ms)")
+        QTimer.singleShot(0, self._poll_once)
+
     def _poll_once(self) -> None:
         if self._shutting_down or not self.is_connected or self.is_busy:
             return
@@ -848,7 +903,13 @@ class F4CPPowerClient(QObject):
         except Exception as exc:
             self.error.emit(f"WRITE ACK received, but status refresh failed: {exc}")
 
-    def _request(self, cmd: PowerCommand, payload: bytes, timeout_ms: int = 1000) -> dict[PowerDataType, int]:
+    def _request(
+        self,
+        cmd: PowerCommand,
+        payload: bytes,
+        timeout_ms: int = 1000,
+        expected_cmd: PowerCommand = PowerCommand.ACK,
+    ) -> dict[PowerDataType, int]:
         if not self.is_connected or self._session is None:
             raise PowerClientError("Serial session is not connected")
         if self._pending is not None:
@@ -858,7 +919,7 @@ class F4CPPowerClient(QObject):
         seq = self._seq
         frame = build_frame(cmd, seq, payload)
         loop = QEventLoop(self)
-        pending = _PendingRequest(seq=seq, loop=loop)
+        pending = _PendingRequest(seq=seq, loop=loop, expected_cmd=expected_cmd)
         self._pending = pending
 
         timer = QTimer(self)
@@ -903,6 +964,8 @@ class F4CPPowerClient(QObject):
                 break
 
             if int(frame["cmd"]) == int(PowerCommand.REPORT):
+                if self._complete_pending_report(frame):
+                    continue
                 self._handle_report(frame)
                 continue
 
@@ -927,6 +990,27 @@ class F4CPPowerClient(QObject):
 
             self._pending.response = response
             self._pending.loop.quit()
+
+    def _complete_pending_report(self, frame: dict[str, int | bytes]) -> bool:
+        if self._pending is None or self._pending.expected_cmd != PowerCommand.REPORT:
+            return False
+        if int(frame["seq"]) != self._pending.seq:
+            if int(frame["seq"]) == 0:
+                return False
+            self._fail_pending(
+                PowerClientProtocolError(
+                    f"REPORT seq mismatch: expected {self._pending.seq}, got {frame['seq']}"
+                )
+            )
+            return True
+        try:
+            self._pending.response = decode_tlvs(bytes(frame["payload"]), strict=False)
+        except Exception as exc:
+            self._fail_pending(exc)
+            self.error.emit(str(exc))
+            return True
+        self._pending.loop.quit()
+        return True
 
     def _handle_report(self, frame: dict[str, int | bytes]) -> None:
         if int(frame["seq"]) != 0:
@@ -1044,7 +1128,7 @@ def pack_read_request(types: Iterable[PowerDataType]) -> bytes:
 class TVLHost:
     """Reusable QSerialPort host for the F4CP power protocol."""
 
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
+    def __init__(self, port: str, baudrate: int = 921600, timeout: float = 1.0):
         self._serial = QSerialPort()
         self._serial.setPortName(port)
         self._serial.setBaudRate(baudrate)
@@ -1107,6 +1191,19 @@ class TVLHost:
         self._last_values.update(values)
         return values
 
+    def read_report_values(self, timeout: float | None = None) -> dict[PowerDataType, int]:
+        values = self._request(
+            PowerCommand.REPORT,
+            b"",
+            timeout=timeout,
+            expected_cmd=PowerCommand.REPORT,
+        )
+        missing = [type_id.name for type_id in REPORT_STATUS_TYPES if type_id not in values]
+        if missing:
+            raise PowerClientProtocolError(f"Missing report types: {', '.join(missing)}")
+        self._last_values.update(values)
+        return values
+
     def write_values(
         self,
         values: dict[PowerDataType, bytes],
@@ -1124,7 +1221,7 @@ class TVLHost:
         )
 
     def read_status(self, timeout: float | None = None) -> PowerStatus:
-        return build_status(self.read_values(*STATUS_TYPES, timeout=timeout))
+        return build_status(self.read_report_values(timeout=timeout))
 
     def set_voltage_limit_mv(self, value_mv: int) -> None:
         self.write_values({PowerDataType.SET_VOLTAGE_LIMIT: _u32(value_mv)})
@@ -1163,6 +1260,7 @@ class TVLHost:
         cmd: PowerCommand,
         payload: bytes,
         timeout: float | None = None,
+        expected_cmd: PowerCommand = PowerCommand.ACK,
     ) -> dict[PowerDataType, int]:
         self._seq = (self._seq + 1) & 0xFF
         seq = self._seq
@@ -1178,11 +1276,20 @@ class TVLHost:
             frame_cmd = int(frame["cmd"])
 
             if frame_cmd == int(PowerCommand.REPORT):
+                if expected_cmd == PowerCommand.REPORT:
+                    if int(frame["seq"]) != seq:
+                        if int(frame["seq"]) == 0:
+                            self._handle_report(frame)
+                            continue
+                        raise PowerClientProtocolError(
+                            f"REPORT seq mismatch: expected {seq}, got {frame['seq']}"
+                        )
+                    return decode_tlvs(bytes(frame["payload"]), strict=False)
                 self._handle_report(frame)
                 continue
             if frame_cmd == int(PowerCommand.NACK):
                 raise PowerClientNackError(f"Device returned NACK for seq={frame['seq']}")
-            if frame_cmd != int(PowerCommand.ACK):
+            if frame_cmd != int(expected_cmd):
                 raise PowerClientProtocolError(f"Unexpected response cmd=0x{frame_cmd:02X}")
             if int(frame["seq"]) != seq:
                 raise PowerClientProtocolError(

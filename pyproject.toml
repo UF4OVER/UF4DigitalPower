@@ -11,11 +11,12 @@ authors = [
 ]
 
 dependencies = [
-    "pyqt-fluent-widgets >=1.11.0",
     "cx-freeze>=8.5.3",
+    "PyQt5>=5.15.2",
     "pyqtgraph >=0.14.0",
     "pyocd>=0.44.0",
     "numpy>=2.2.6",
+    "pyqt-fluent-widgets>=1.11.2",
 ]
 
 [tool.uv]
@@ -29,7 +30,7 @@ executables = [
 
 [tool.cxfreeze.build_exe]
 
-build_exe = "Build/exe_for_{{target_platform}}-{{python_version}}"
+build_exe = "Build/exe"
 
 includes = [
     "PyQt5.QtCore",
@@ -41,8 +42,9 @@ includes = [
 ]
 
 packages = [
-    "app",
+    "App",
     "Config",
+    "numpy",
 ]
 
 include_files = [
@@ -55,6 +57,7 @@ zip_include_packages = ["*"]
 zip_exclude_packages = [
    "PyQt5",
    "lark",
+   "numpy",
    "pyocd",
    "cmsis_pack_manager",
    "qfluentwidgets",
