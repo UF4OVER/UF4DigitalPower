@@ -180,7 +180,7 @@ static tvlcom_status_t user_tvlcom_append_type(uint8_t *payload,
     case USER_TVL_STATE_MACHINE_FLAG_BITS:
         return tvlcom_payload_add_u8(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, user_tvlcom_state_bits(status->state));
     case USER_TVL_STATE_MACHINE_STATE:
-        return tvlcom_payload_add_u8(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint8_t)status->state);
+        return tvlcom_payload_add_u8(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, (uint8_t)status->topology);
     case USER_TVL_INPUT_VOLTAGE_RAW:
         return tvlcom_payload_add_u32(payload, TVLCOM_MAX_PAYLOAD_SIZE, payload_len, type, status->raw_adc[0]);
     case USER_TVL_INPUT_CURRENT_RAW:
@@ -225,11 +225,24 @@ static tvlcom_status_t user_tvlcom_append_report_payload(uint8_t *payload, uint1
         USER_TVL_OUTPUT_CURRENT,
         USER_TVL_CORE_TEMPERATURE,
         USER_TVL_BOARD_TEMPERATURE,
+        USER_TVL_SET_VOLTAGE_LIMIT,
+        USER_TVL_SET_CURRENT_LIMIT,
         USER_TVL_CC_CV_MODE,
+        USER_TVL_POWER_STATE,
         USER_TVL_FAULT_STATE,
         USER_TVL_STATE_MACHINE_FLAG_BITS,
         USER_TVL_STATE_MACHINE_STATE,
-        USER_TVL_FAN_SPEED};
+        USER_TVL_OTP_VALUE,
+        USER_TVL_OTP_SET_VALUE,
+        USER_TVL_OVP_VALUE,
+        USER_TVL_OVP_SET_VALUE,
+        USER_TVL_OCP_VALUE,
+        USER_TVL_OCP_SET_VALUE,
+        USER_TVL_DUTY_CMD,
+        USER_TVL_PWM_A_COMPARE,
+        USER_TVL_PWM_D_COMPARE,
+        USER_TVL_FAN_SPEED,
+        USER_TVL_FAN_SET_VALUE};
     user_power_status_t status;
     user_power_config_t config;
     uint8_t index;
@@ -248,6 +261,33 @@ static tvlcom_status_t user_tvlcom_append_report_payload(uint8_t *payload, uint1
     }
 
     return TVLCOM_OK;
+}
+
+static uint8_t user_tvlcom_queue_report(uint8_t seq)
+{
+    uint8_t payload[TVLCOM_MAX_PAYLOAD_SIZE];
+    uint16_t payload_len = 0U;
+
+    if (user_tvlcom_append_report_payload(payload, &payload_len) != TVLCOM_OK)
+    {
+        return 0U;
+    }
+
+    if (tvlcom_frame_build(USER_TVL_CMD_REPORT,
+                           seq,
+                           payload,
+                           payload_len,
+                           g_report_frame,
+                           sizeof(g_report_frame),
+                           &g_report_frame_len) != TVLCOM_OK)
+    {
+        g_report_frame_len = 0U;
+        return 0U;
+    }
+
+    g_report_frame_pending = 1U;
+    UserTvlcom_TxPump();
+    return 1U;
 }
 
 static void user_tvlcom_handle_read(uint8_t seq, const uint8_t *payload, uint16_t payload_len)
@@ -365,13 +405,17 @@ void UserTvlcom_1msTask(void)
 
 void UserTvlcom_RequestReport(void)
 {
-    /* Keep API for compatibility; ignored in passive mode. */
-    g_report_pending = 0U;
+    g_report_pending = 1U;
 }
 
 void UserTvlcom_BackgroundTask(void)
 {
-    /* Passive mode: only pump queued TX if any synchronous path queued data. */
+    if (g_report_pending != 0U)
+    {
+        g_report_pending = 0U;
+        (void)user_tvlcom_queue_report(0U);
+    }
+
     UserTvlcom_TxPump();
 }
 
@@ -411,6 +455,13 @@ void UserTvlcom_OnBytes(const uint8_t *data, uint16_t length)
         else if (frames[index].cmd == USER_TVL_CMD_WRITE)
         {
             user_tvlcom_handle_write(frames[index].seq, frames[index].payload, frames[index].payload_len);
+        }
+        else if ((frames[index].cmd == USER_TVL_CMD_REPORT) && (frames[index].payload_len == 0U))
+        {
+            if (user_tvlcom_queue_report(frames[index].seq) == 0U)
+            {
+                user_tvlcom_send_nack(frames[index].seq);
+            }
         }
         else
         {

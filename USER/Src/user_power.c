@@ -19,6 +19,7 @@ static uint8_t g_save_pending = 0U;
 static uint16_t g_softstart_tick = 0U;
 static uint16_t g_voltage_loop_divider = 0U;
 static uint16_t g_fast_state_divider = 0U;
+static uint16_t g_input_uvp_fault_ticks = 0U;
 static uint8_t g_measurement_ready = 0U;
 static uint8_t g_aux_measurement_ready = 0U;
 static uint32_t g_aux_sample_tick = 0U;
@@ -26,6 +27,7 @@ static uint32_t g_background_1ms_tick = 0U;
 static float g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
 static float g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
 static float g_control_duty = USER_PWR_DUTY_MIN;
+static float g_voltage_ref_v = 0.0f;
 
 static float user_pwr_clamp(float value, float min_value, float max_value)
 {
@@ -51,9 +53,45 @@ static void user_pwr_control_reset(void)
 {
     g_control_duty = USER_PWR_DUTY_MIN;
     g_voltage_loop_divider = 0U;
+    g_input_uvp_fault_ticks = 0U;
     user_pwr_pid_reset(&g_user_config.voltage_pid);
     user_pwr_pid_reset(&g_user_config.current_pid);
     g_user_status.current_ref_a = 0.0f;
+}
+
+static void user_pwr_seed_voltage_ref(float start_v)
+{
+    g_voltage_ref_v = user_pwr_clamp(start_v, 0.0f, 33.0f);
+}
+
+static void user_pwr_slew_voltage_ref(void)
+{
+    float target = g_user_config.target_voltage_v;
+
+    if (g_voltage_ref_v < target)
+    {
+        g_voltage_ref_v += USER_PWR_SOFTSTART_STEP_V;
+        if (g_voltage_ref_v > target)
+        {
+            g_voltage_ref_v = target;
+        }
+    }
+    else if (g_voltage_ref_v > target)
+    {
+        g_voltage_ref_v -= USER_PWR_SOFTSTART_STEP_V;
+        if (g_voltage_ref_v < target)
+        {
+            g_voltage_ref_v = target;
+        }
+    }
+}
+
+static uint8_t user_pwr_voltage_ref_at_target(void)
+{
+    float error = g_voltage_ref_v - g_user_config.target_voltage_v;
+
+    return (error < USER_PWR_SOFTSTART_STEP_V) &&
+           (error > -USER_PWR_SOFTSTART_STEP_V);
 }
 
 static void user_pwr_set_defaults(void)
@@ -297,28 +335,69 @@ static void user_pwr_update_aux_measurements(void)
     g_user_status.core_temp_c = user_pwr_lpf(g_user_status.core_temp_c, mcu_temp_c);
 }
 
-static void user_pwr_select_topology(void)
+static void user_pwr_select_topology(float vref)
 {
     float vin = g_user_status.vin_v;
-    float vref = g_user_config.target_voltage_v;
+    user_power_topology_t previous = g_user_status.topology;
 
-    if (g_user_status.state == USER_POWER_STATE_RISE)
+    if (vin < 0.5f)
     {
-        g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
+        g_user_status.topology = USER_POWER_TOPOLOGY_NA;
         return;
     }
 
-    if (vref < (vin - 1.0f))
+    switch (g_user_status.topology)
     {
-        g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
+    case USER_POWER_TOPOLOGY_BUCK:
+        if (vref > (vin * 1.2f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_BOOST;
+        }
+        else if (vref > (vin * 0.85f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_MIX;
+        }
+        break;
+    case USER_POWER_TOPOLOGY_BOOST:
+        if (vref < (vin * 0.8f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
+        }
+        else if (vref < (vin * 1.15f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_MIX;
+        }
+        break;
+    case USER_POWER_TOPOLOGY_MIX:
+        if (vref < (vin * 0.8f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
+        }
+        else if (vref > (vin * 1.2f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_BOOST;
+        }
+        break;
+    default:
+        if (vref < (vin * 0.8f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_BUCK;
+        }
+        else if (vref > (vin * 1.2f))
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_BOOST;
+        }
+        else
+        {
+            g_user_status.topology = USER_POWER_TOPOLOGY_MIX;
+        }
+        break;
     }
-    else if (vref > (vin + 1.0f))
+
+    if (previous != g_user_status.topology)
     {
-        g_user_status.topology = USER_POWER_TOPOLOGY_BOOST;
-    }
-    else
-    {
-        g_user_status.topology = USER_POWER_TOPOLOGY_MIX;
+        g_user_config.voltage_pid.integral *= 0.5f;
+        g_user_config.voltage_pid.prev_error = 0.0f;
     }
 }
 
@@ -333,13 +412,25 @@ static void user_pwr_protection_fast_check(void)
 {
     if ((g_user_status.state != USER_POWER_STATE_RISE) && (g_user_status.state != USER_POWER_STATE_RUN))
     {
+        g_input_uvp_fault_ticks = 0U;
         return;
     }
 
     if (g_user_status.vin_v < g_user_config.input_uvp_v)
     {
-        user_pwr_set_fault(USER_POWER_FAULT_INPUT_UNDER_VOLTAGE);
-        return;
+        if (g_input_uvp_fault_ticks < USER_PWR_INPUT_UVP_FAULT_TICKS)
+        {
+            g_input_uvp_fault_ticks++;
+        }
+        if (g_input_uvp_fault_ticks >= USER_PWR_INPUT_UVP_FAULT_TICKS)
+        {
+            user_pwr_set_fault(USER_POWER_FAULT_INPUT_UNDER_VOLTAGE);
+            return;
+        }
+    }
+    else if (g_user_status.vin_v > (g_user_config.input_uvp_v + USER_PWR_INPUT_UVP_RECOVER_MARGIN_V))
+    {
+        g_input_uvp_fault_ticks = 0U;
     }
 
     if (g_user_status.vin_v > g_user_config.input_ovp_v)
@@ -405,17 +496,10 @@ static void user_pwr_fast_control_loop(void)
         return;
     }
 
-    user_pwr_select_topology();
+    vref = g_voltage_ref_v;
+    user_pwr_select_topology(vref);
 
-    vref = g_user_config.target_voltage_v;
-    if (g_user_status.state == USER_POWER_STATE_RISE)
-    {
-        float soft_v = (float)g_softstart_tick * USER_PWR_SOFTSTART_STEP_V;
-        if (soft_v < vref)
-        {
-            vref = soft_v;
-        }
-    }
+    vref = user_pwr_clamp(vref, 0.0f, g_user_config.target_voltage_v > 0.0f ? 33.0f : 0.0f);
 
     if (g_user_status.state == USER_POWER_STATE_RISE)
     {
@@ -423,7 +507,18 @@ static void user_pwr_fast_control_loop(void)
 
         if (g_user_status.vin_v > 0.5f)
         {
-            target_duty_need = (g_user_config.target_voltage_v / g_user_status.vin_v) + USER_PWR_RISE_DUTY_MARGIN;
+            if (g_user_status.topology == USER_POWER_TOPOLOGY_BUCK)
+            {
+                target_duty_need = (vref / g_user_status.vin_v) + USER_PWR_RISE_DUTY_MARGIN;
+            }
+            else if (vref > g_user_status.vin_v)
+            {
+                target_duty_need = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f)) + USER_PWR_RISE_DUTY_MARGIN;
+            }
+            else
+            {
+                target_duty_need = USER_PWR_RISE_DUTY_START;
+            }
         }
 
         duty_max = USER_PWR_RISE_DUTY_START + ((float)g_softstart_tick * USER_PWR_RISE_DUTY_STEP);
@@ -452,7 +547,14 @@ static void user_pwr_fast_control_loop(void)
     }
     else
     {
-        duty_ff = 0.5f;
+        if (vref > g_user_status.vin_v)
+        {
+            duty_ff = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f));
+        }
+        else
+        {
+            duty_ff = USER_PWR_DUTY_MIN;
+        }
     }
 
     if (++g_voltage_loop_divider >= USER_PWR_CONTROL_DIVIDER_TICKS)
@@ -498,6 +600,7 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     g_background_1ms_tick = 0U;
     g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
     g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
+    g_voltage_ref_v = 0.0f;
 
     user_pwr_set_defaults();
 
@@ -568,6 +671,7 @@ void UserPower_5msTask(void)
         g_user_status.fault_mask = 0U;
         g_softstart_tick = 0U;
         user_pwr_control_reset();
+        user_pwr_seed_voltage_ref(g_user_status.vout_v);
     }
 
     if (g_user_config.power_enabled == 0U)
@@ -577,6 +681,7 @@ void UserPower_5msTask(void)
             g_user_status.state = USER_POWER_STATE_WAIT;
             g_user_status.topology = USER_POWER_TOPOLOGY_NA;
             g_softstart_tick = 0U;
+            user_pwr_seed_voltage_ref(0.0f);
             UserPowerPwm_Stop(&g_user_status);
         }
         return;
@@ -594,27 +699,25 @@ void UserPower_5msTask(void)
         g_softstart_tick = 0U;
         g_user_status.fault_mask = 0U;
         user_pwr_control_reset();
+        user_pwr_seed_voltage_ref(g_user_status.vout_v);
         UserPowerPwm_Start();
         return;
     }
 
     if (g_user_status.state == USER_POWER_STATE_RISE)
     {
-        if (g_user_status.vin_v < USER_PWR_INPUT_DROOP_FOLDBACK_V)
-        {
-            g_user_status.state = USER_POWER_STATE_WAIT;
-            g_user_status.topology = USER_POWER_TOPOLOGY_NA;
-            g_softstart_tick = 0U;
-            user_pwr_control_reset();
-            UserPowerPwm_Stop(&g_user_status);
-            return;
-        }
-
+        user_pwr_slew_voltage_ref();
         g_softstart_tick++;
-        if (((float)g_softstart_tick * USER_PWR_SOFTSTART_STEP_V) >= g_user_config.target_voltage_v)
+        if (user_pwr_voltage_ref_at_target() != 0U)
         {
             g_user_status.state = USER_POWER_STATE_RUN;
         }
+        return;
+    }
+
+    if (g_user_status.state == USER_POWER_STATE_RUN)
+    {
+        user_pwr_slew_voltage_ref();
     }
 }
 
@@ -662,6 +765,11 @@ void UserPower_GetConfig(user_power_config_t *out_config)
 void UserPower_SetVoltageLimitMv(uint32_t value_mv)
 {
     g_user_config.target_voltage_v = user_pwr_clamp((float)value_mv / 1000.0f, 0.0f, 33.0f);
+    if ((g_user_status.state == USER_POWER_STATE_RISE) ||
+        (g_user_status.state == USER_POWER_STATE_RUN))
+    {
+        user_pwr_seed_voltage_ref(g_user_status.vout_v);
+    }
     g_user_config.voltage_pid.prev_error = 0.0f;
     g_voltage_loop_divider = USER_PWR_CONTROL_DIVIDER_TICKS;
 }
@@ -702,6 +810,7 @@ void UserPower_SetPowerState(uint8_t enabled)
         g_user_status.fault_mask = 0U;
         g_softstart_tick = 0U;
         user_pwr_control_reset();
+        user_pwr_seed_voltage_ref(0.0f);
         UserPowerPwm_Stop(&g_user_status);
     }
     else if (was_enabled == 0U)
@@ -710,6 +819,7 @@ void UserPower_SetPowerState(uint8_t enabled)
         g_user_status.fault_mask = 0U;
         g_softstart_tick = 0U;
         user_pwr_control_reset();
+        user_pwr_seed_voltage_ref(g_user_status.vout_v);
     }
 }
 

@@ -26,8 +26,10 @@
 /* The MCU may stay powered while the power input is hot-plugged.
  * Do not start conversion until VIN is safely above this threshold. */
 #define USER_PWR_INPUT_START_MIN_V         7.0f
-#define USER_PWR_INPUT_CURRENT_LIMIT_A     0.35f
+#define USER_PWR_INPUT_CURRENT_LIMIT_A     3.0f
 #define USER_PWR_INPUT_DROOP_FOLDBACK_V    8.0f
+#define USER_PWR_INPUT_UVP_FAULT_TICKS     2000U
+#define USER_PWR_INPUT_UVP_RECOVER_MARGIN_V 0.3f
 
 /* Board temperature NTC divider on ADC_TEMP(PA4):
  * 3.3V -> 10K B3380 NTC -> PA4 -> 10K resistor -> GND. */
@@ -46,10 +48,10 @@
 #define USER_PWR_DUTY_MAX                  0.95f
 #define USER_PWR_DUTY_BOOTSTRAP            0.05f
 #define USER_PWR_RISE_DUTY_START           0.01f
-#define USER_PWR_RISE_DUTY_STEP            0.001f
+#define USER_PWR_RISE_DUTY_STEP            0.005f
 #define USER_PWR_RISE_DUTY_MAX             0.85f
 #define USER_PWR_RISE_DUTY_MARGIN          0.08f
-#define USER_PWR_SOFTSTART_STEP_V          0.01f
+#define USER_PWR_SOFTSTART_STEP_V          0.05f
 
 #define USER_PWR_SHORT_VOUT_V              0.5f
 #define USER_PWR_SHORT_DETECT_DELAY_TICKS  2000U
