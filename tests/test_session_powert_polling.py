@@ -114,6 +114,51 @@ class PowerClientPollingTests(unittest.TestCase):
         self.assertEqual(client.read_status_calls, [1000])
         self.assertEqual(errors, [])
 
+    def test_output_write_pauses_and_resumes_active_polling(self):
+        client = _TestPowerClient()
+        client.attach_session(cast(SerialSession, _FakeSerialSession()))
+
+        logs = []
+        client.log.connect(logs.append)
+
+        client.start_polling(250)
+        self._process_events()
+        client.read_status_calls.clear()
+
+        client.request_set_output_limits(12000, 3500, True)
+
+        self.assertFalse(client._poll_timer.isActive())
+        self.assertTrue(client._poll_resume_timer.isActive())
+        self.assertEqual(len(client.write_calls), 1)
+        self.assertEqual(client.read_status_calls, [1000])
+        self.assertIn("Host polling paused for write", logs)
+
+        self._process_events(0.65)
+
+        self.assertTrue(client._poll_timer.isActive())
+        self.assertEqual(client._poll_timer.interval(), 250)
+        self.assertIn("Host polling resumed (250 ms)", logs)
+        self.assertIn(800, client.read_status_calls)
+
+    def test_output_write_resumes_when_poll_timer_was_temporarily_inactive(self):
+        client = _TestPowerClient()
+        client.attach_session(cast(SerialSession, _FakeSerialSession()))
+
+        client.start_polling(250)
+        self._process_events()
+        client._poll_timer.stop()
+        client.read_status_calls.clear()
+
+        client.request_set_output_limits(12000, 3500, True)
+
+        self.assertTrue(client._poll_resume_timer.isActive())
+
+        self._process_events(0.65)
+
+        self.assertTrue(client._poll_timer.isActive())
+        self.assertEqual(client._poll_timer.interval(), 250)
+        self.assertIn(800, client.read_status_calls)
+
     def test_protection_write_and_power_state_write_both_trigger_readback(self):
         client = _TestPowerClient()
         client.attach_session(cast(SerialSession, _FakeSerialSession()))

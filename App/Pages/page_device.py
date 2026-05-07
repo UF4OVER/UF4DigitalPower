@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 from PyQt5.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
-from PyQt5.QtSerialPort import QSerialPort
 from PyQt5.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
@@ -137,7 +136,7 @@ class DevicePage(ScrollArea):
         self.baudCombo = ComboBox(connBar)
         self.baudCombo.setMinimumWidth(140)
         self.baudCombo.addItems(list(SESSION_PAGE_BAUD_RATES))
-        self.baudCombo.setCurrentText("115200")
+        self.baudCombo.setCurrentText("921600")
         connLayout.addWidget(self.baudCombo)
 
         self.refreshButton = PushButton("", connBar)
@@ -632,16 +631,7 @@ class DevicePage(ScrollArea):
             )
             return
 
-        baudMap = {
-            9600: QSerialPort.BaudRate.Baud9600,
-            19200: QSerialPort.BaudRate.Baud19200,
-            38400: QSerialPort.BaudRate.Baud38400,
-            57600: QSerialPort.BaudRate.Baud57600,
-            115200: QSerialPort.BaudRate.Baud115200,
-        }
-        baud = baudMap.get(
-            int(self.baudCombo.currentText().strip()), QSerialPort.BaudRate.Baud9600
-        )
+        baud = int(self.baudCombo.currentText().strip())
         self._session = SerialSession(
             SerialConfig(port=port, baudrate=baud), _event_receiver=self
         )

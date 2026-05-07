@@ -36,9 +36,10 @@ from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
-POWER_POLL_INTERVAL_MS = 500
-PLOT_Y_MIN = -10
-PLOT_Y_MAX = 60
+POWER_POLL_INTERVAL_MS = 200
+WRITE_POLL_RESTART_DELAY_MS = 600
+PLOT_Y_MIN = 0
+PLOT_Y_MAX = 45
 
 
 def _readPortIdentity() -> tuple[int, int]:
@@ -181,26 +182,22 @@ class TrendPlotCard(CardWidget):
         self.saveButton = PushButton(FIF.SAVE, "", self)
         self.plotPanel = QFrame(self)
         self.plotPanel.setObjectName("trendPlotPanel")
+        self._viewInitialized = False
 
         self.plotWidget = pg.PlotWidget(self)
         self.plotWidget.setObjectName("trendPlotWidget")
         self.plotWidget.setFrameShape(QFrame.NoFrame)
         self.plotWidget.setStyleSheet("background: transparent; border: none;")
-        self.plotWidget.setMouseEnabled(x=True, y=False)
+        self.plotWidget.setMouseEnabled(x=True, y=True)
         self.plotWidget.showGrid(x=True, y=True, alpha=0.16)
         self.plotWidget.setAntialiasing(True)
         self.plotWidget.setMenuEnabled(False)
         self.plotWidget.setMinimumHeight(360)
         self.plotWidget.getPlotItem().hideButtons()
-        self.plotWidget.getViewBox().setMouseEnabled(x=True, y=False)
+        self.plotWidget.getViewBox().setMouseEnabled(x=True, y=True)
         self.plotWidget.getViewBox().setMenuEnabled(False)
-        self.plotWidget.getViewBox().setLimits(
-            yMin=PLOT_Y_MIN,
-            yMax=PLOT_Y_MAX,
-            minYRange=PLOT_Y_MAX - PLOT_Y_MIN,
-            maxYRange=PLOT_Y_MAX - PLOT_Y_MIN,
-        )
         self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
+        self.plotWidget.enableAutoRange(x=False, y=False)
         self.legend = self.plotWidget.addLegend(offset=(12, 12))
 
         self.voltageInCurve = self.plotWidget.plot(name="VIN", pen=pg.mkPen(width=2))
@@ -242,7 +239,7 @@ class TrendPlotCard(CardWidget):
 
     def applyTexts(self) -> None:
         self.titleLabel.setText(self.tr("Voltage / Current Trend"))
-        self.tipLabel.setText(self.tr("Y range fixed: -10 to 60; drag or zoom horizontally"))
+        self.tipLabel.setText(self.tr("Drag to pan, wheel to zoom; live updates keep the current view"))
         self.saveButton.setText(self.tr("Save Image"))
 
     def saveImage(self) -> None:
@@ -310,7 +307,6 @@ class TrendPlotCard(CardWidget):
         plotItem.getAxis("bottom").setPen(pg.mkPen(axis))
         plotItem.getAxis("left").setLabel(self.tr("Voltage / Current"), color=axis, units="V / A")
         plotItem.getAxis("bottom").setLabel(self.tr("Samples"), color=axis)
-        self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
         plotItem.getViewBox().setBorder(pg.mkPen(borderPenColor))
         plotItem.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
 
@@ -348,13 +344,15 @@ class TrendPlotCard(CardWidget):
         self.voltageOutCurve.setData(xValues, vout)
         self.currentInCurve.setData(xValues, iin)
         self.currentOutCurve.setData(xValues, iout)
-        if xValues:
+        if xValues and not self._viewInitialized:
             x_min = xValues[0]
             x_max = xValues[-1]
             if x_max <= x_min:
                 x_max = x_min + 1
             self.plotWidget.setXRange(x_min, x_max, padding=0.02)
-        self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
+            self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
+            self.plotWidget.enableAutoRange(x=False, y=False)
+            self._viewInitialized = True
 
 
 class PowerPage(ScrollArea):
@@ -382,6 +380,7 @@ class PowerPage(ScrollArea):
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
         self._lastStatus: PowerStatus | None = None
         self._lastVerboseLogTs = 0.0
+        self._writePollingRestartPending = False
         self._historyDirty = False
         self._plotRefreshTimer = QTimer(self)
         self._plotRefreshTimer.setInterval(200)
@@ -717,6 +716,7 @@ class PowerPage(ScrollArea):
         currentMa = int(
             round(float(self.writeParams["set_current"].text() or "0") * 1000)
         )
+        self._writePollingRestartPending = True
         self.outputLimitsRequested.emit(voltageMv, currentMa, self.outputSwitch.isChecked())
 
     def _applyProtectionValues(self) -> None:
@@ -727,6 +727,7 @@ class PowerPage(ScrollArea):
         ocpMa = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
         otpMc = int(round(float(self.writeParams["otp"].text() or "0") * 1000))
         fanValue = int(float(self.writeParams["fan_set"].text() or "0"))
+        self._writePollingRestartPending = True
         self.protectionValuesRequested.emit(ovpMv, ocpMa, otpMc, fanValue)
 
     def _onAutoPollChanged(self, checked: bool) -> None:
@@ -864,6 +865,8 @@ class PowerPage(ScrollArea):
     def _onClientError(self, message: str) -> None:
         self._appendLog(f"ERR: {message}")
         showMessage(self, self.tr("Communication Error"), message, level="error")
+        if self._writePollingRestartPending:
+            self._scheduleAutoPollingRestartAfterWrite()
 
     def _handleDebugSnapshotReady(self, snapshot: DebugSnapshot) -> None:
         self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
@@ -876,6 +879,7 @@ class PowerPage(ScrollArea):
             self.tr("Voltage/current/output state have been written."),
             level="success",
         )
+        self._scheduleAutoPollingRestartAfterWrite()
 
     def _onProtectionValuesWritten(self) -> None:
         showMessage(
@@ -884,9 +888,25 @@ class PowerPage(ScrollArea):
             self.tr("OVP/OCP/OTP/Fan parameters have been written."),
             level="success",
         )
+        self._scheduleAutoPollingRestartAfterWrite()
 
     def _onPowerStateWritten(self, enabled: bool) -> None:
         self._appendLog(f"Output set to {'ON' if enabled else 'OFF'}")
+        self._scheduleAutoPollingRestartAfterWrite()
+
+    def _scheduleAutoPollingRestartAfterWrite(self) -> None:
+        self._writePollingRestartPending = False
+        QTimer.singleShot(WRITE_POLL_RESTART_DELAY_MS, self._restartAutoPollingAfterWrite)
+
+    def _restartAutoPollingAfterWrite(self) -> None:
+        if self._shutdownDone:
+            return
+        if not self.autoPollSwitch.isChecked():
+            return
+        if not self._client.is_connected:
+            return
+        self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
+        self._appendLog("Host polling restart requested after write")
 
     def _applyTexts(self) -> None:
         self.titleLabel.setText(self.tr("Power Dashboard"))
