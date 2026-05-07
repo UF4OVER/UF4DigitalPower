@@ -18,16 +18,19 @@ static volatile uint16_t *g_adc_result = NULL;
 static uint8_t g_save_pending = 0U;
 static uint16_t g_softstart_tick = 0U;
 static uint16_t g_voltage_loop_divider = 0U;
+static uint16_t g_current_loop_divider = 0U;
 static uint16_t g_fast_state_divider = 0U;
 static uint16_t g_input_uvp_fault_ticks = 0U;
 static uint8_t g_measurement_ready = 0U;
 static uint8_t g_aux_measurement_ready = 0U;
 static uint32_t g_aux_sample_tick = 0U;
 static uint32_t g_background_1ms_tick = 0U;
-static float g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
-static float g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
+static float g_iin_zero_v = USER_PWR_IIN_ZERO_V;
+static float g_iout_zero_v = USER_PWR_IOUT_ZERO_V;
 static float g_control_duty = USER_PWR_DUTY_MIN;
 static float g_voltage_ref_v = 0.0f;
+static float g_current_limited_vref_v = 0.0f;
+static uint8_t g_current_limit_active = 0U;
 
 static float user_pwr_clamp(float value, float min_value, float max_value)
 {
@@ -53,10 +56,13 @@ static void user_pwr_control_reset(void)
 {
     g_control_duty = USER_PWR_DUTY_MIN;
     g_voltage_loop_divider = 0U;
+    g_current_loop_divider = 0U;
     g_input_uvp_fault_ticks = 0U;
     user_pwr_pid_reset(&g_user_config.voltage_pid);
     user_pwr_pid_reset(&g_user_config.current_pid);
     g_user_status.current_ref_a = 0.0f;
+    g_current_limited_vref_v = 0.0f;
+    g_current_limit_active = 0U;
 }
 
 static void user_pwr_seed_voltage_ref(float start_v)
@@ -118,8 +124,8 @@ static void user_pwr_set_defaults(void)
     g_user_config.current_pid.kp = USER_PWR_CURRENT_KP;
     g_user_config.current_pid.ki = USER_PWR_CURRENT_KI;
     g_user_config.current_pid.kd = 0.0f;
-    g_user_config.current_pid.out_min = USER_PWR_DUTY_MIN;
-    g_user_config.current_pid.out_max = USER_PWR_DUTY_MAX;
+    g_user_config.current_pid.out_min = -USER_PWR_CC_VREF_FALL_STEP_V;
+    g_user_config.current_pid.out_max = USER_PWR_CC_VREF_RISE_STEP_V;
 
     user_pwr_control_reset();
 
@@ -141,7 +147,15 @@ static float user_pwr_adc_to_sensor_voltage(uint16_t adc)
 
 static float user_pwr_sensor_voltage_to_current(float sensor_v, float zero_v)
 {
-    return (sensor_v - zero_v) / USER_PWR_CURRENT_SCALE;
+    float delta_v = sensor_v - zero_v;
+
+    if ((delta_v < USER_PWR_CURRENT_DEADBAND_V) &&
+        (delta_v > -USER_PWR_CURRENT_DEADBAND_V))
+    {
+        return 0.0f;
+    }
+
+    return fabsf(delta_v) / USER_PWR_CURRENT_SCALE;
 }
 
 static float user_pwr_lpf(float prev, float input)
@@ -176,32 +190,23 @@ static void user_pwr_update_measurements(void)
     iin_sensor_v = user_pwr_adc_to_sensor_voltage(g_adc_result[1]);
     iout_sensor_v = user_pwr_adc_to_sensor_voltage(g_adc_result[3]);
 
-    /* Track current-sense zero whenever PWM is not delivering power. */
-    if ((g_user_config.power_enabled == 0U) ||
-        ((g_user_status.state != USER_POWER_STATE_RISE) &&
-         (g_user_status.state != USER_POWER_STATE_RUN)))
-    {
-        g_iin_zero_v = g_iin_zero_v + 0.02f * (iin_sensor_v - g_iin_zero_v);
-        g_iout_zero_v = g_iout_zero_v + 0.02f * (iout_sensor_v - g_iout_zero_v);
-    }
-
-    iin = user_pwr_sensor_voltage_to_current(iin_sensor_v, g_iin_zero_v);
-    iout = user_pwr_sensor_voltage_to_current(iout_sensor_v, g_iout_zero_v);
+    iin = user_pwr_sensor_voltage_to_current(iin_sensor_v, g_iin_zero_v) * USER_PWR_IIN_CAL_GAIN;
+    iout = user_pwr_sensor_voltage_to_current(iout_sensor_v, g_iout_zero_v) * USER_PWR_IOUT_CAL_GAIN;
 
     if (g_measurement_ready == 0U)
     {
         g_user_status.vin_v = vin_v;
         g_user_status.vout_v = vout_v;
-        g_user_status.iin_a = user_pwr_clamp(iin, -12.0f, 12.0f);
-        g_user_status.iout_a = user_pwr_clamp(iout, -12.0f, 12.0f);
+        g_user_status.iin_a = user_pwr_clamp(iin, 0.0f, 12.0f);
+        g_user_status.iout_a = user_pwr_clamp(iout, 0.0f, 12.0f);
         g_measurement_ready = 1U;
         return;
     }
 
     g_user_status.vin_v = user_pwr_lpf(g_user_status.vin_v, vin_v);
     g_user_status.vout_v = user_pwr_lpf(g_user_status.vout_v, vout_v);
-    g_user_status.iin_a = user_pwr_lpf(g_user_status.iin_a, user_pwr_clamp(iin, -12.0f, 12.0f));
-    g_user_status.iout_a = user_pwr_lpf(g_user_status.iout_a, user_pwr_clamp(iout, -12.0f, 12.0f));
+    g_user_status.iin_a = user_pwr_lpf(g_user_status.iin_a, user_pwr_clamp(iin, 0.0f, 12.0f));
+    g_user_status.iout_a = user_pwr_lpf(g_user_status.iout_a, user_pwr_clamp(iout, 0.0f, 12.0f));
 }
 
 static uint8_t user_pwr_input_ready(void)
@@ -266,29 +271,21 @@ static uint8_t user_pwr_adc_read_blocking(ADC_HandleTypeDef *hadc, uint32_t *val
         return 0U;
     }
 
-    if (HAL_ADC_Start(hadc) != HAL_OK)
-    {
-        return 0U;
-    }
-
-    if (HAL_ADC_PollForConversion(hadc, 2U) != HAL_OK)
-    {
-        (void)HAL_ADC_Stop(hadc);
-        return 0U;
-    }
-
     *value = HAL_ADC_GetValue(hadc);
-    (void)HAL_ADC_Stop(hadc);
-    return 1U;
+    (void)HAL_ADC_Start(hadc);
+    return (*value != 0U) ? 1U : 0U;
 }
 
 static void user_pwr_apply_fan_value(uint32_t value)
 {
     uint32_t clamped = value > 1000U ? 1000U : value;
+    uint32_t compare = clamped > 999U ? 999U : clamped;
 
     g_user_config.fan_set_value = clamped;
     g_user_status.fan_speed = clamped;
-    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, clamped);
+    (void)HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
+    __HAL_TIM_MOE_ENABLE(&htim8);
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, compare);
 }
 
 static void user_pwr_update_aux_measurements(void)
@@ -480,9 +477,89 @@ static float user_pwr_pi_step(user_power_pid_t *pid, float setpoint, float measu
     return out;
 }
 
+static float user_pwr_apply_current_limit_to_vref(float target_vref)
+{
+    float current_ref = user_pwr_clamp(g_user_config.target_current_a, 0.0f, g_user_config.ocp_a);
+    float measured_iout = g_user_status.iout_a;
+    float current_error;
+    float delta_v;
+
+    target_vref = user_pwr_clamp(target_vref, 0.0f, 33.0f);
+
+    if (target_vref <= 0.0f)
+    {
+        g_current_limited_vref_v = 0.0f;
+        g_current_limit_active = 0U;
+        user_pwr_pid_reset(&g_user_config.current_pid);
+        return 0.0f;
+    }
+
+    if (current_ref <= 0.001f)
+    {
+        g_current_limited_vref_v = user_pwr_clamp(g_current_limited_vref_v - USER_PWR_CC_VREF_FALL_STEP_V,
+                                                  0.0f,
+                                                  target_vref);
+        g_current_limit_active = 1U;
+        return g_current_limited_vref_v;
+    }
+
+    if (measured_iout < 0.0f)
+    {
+        measured_iout = 0.0f;
+    }
+
+    if ((g_current_limited_vref_v <= 0.0f) || (g_current_limited_vref_v > target_vref))
+    {
+        g_current_limited_vref_v = target_vref;
+    }
+
+    if (measured_iout > (current_ref + USER_PWR_CC_ENTER_MARGIN_A))
+    {
+        g_current_limit_active = 1U;
+    }
+
+    if (++g_current_loop_divider >= USER_PWR_CONTROL_DIVIDER_TICKS)
+    {
+        g_current_loop_divider = 0U;
+
+        if ((g_current_limit_active != 0U) || (g_current_limited_vref_v < target_vref))
+        {
+            current_error = current_ref - measured_iout;
+            g_user_config.current_pid.integral += g_user_config.current_pid.ki * current_error;
+            g_user_config.current_pid.integral = user_pwr_clamp(g_user_config.current_pid.integral,
+                                                                -USER_PWR_CC_VREF_FALL_STEP_V,
+                                                                USER_PWR_CC_VREF_RISE_STEP_V);
+
+            delta_v = (g_user_config.current_pid.kp * current_error) + g_user_config.current_pid.integral;
+            delta_v = user_pwr_clamp(delta_v,
+                                     -USER_PWR_CC_VREF_FALL_STEP_V,
+                                     USER_PWR_CC_VREF_RISE_STEP_V);
+
+            g_current_limited_vref_v = user_pwr_clamp(g_current_limited_vref_v + delta_v,
+                                                      0.0f,
+                                                      target_vref);
+
+            if ((measured_iout < (current_ref - USER_PWR_CC_EXIT_MARGIN_A)) &&
+                (g_current_limited_vref_v >= (target_vref - USER_PWR_CC_MODE_VREF_MARGIN_V)))
+            {
+                g_current_limited_vref_v = target_vref;
+                g_current_limit_active = 0U;
+                user_pwr_pid_reset(&g_user_config.current_pid);
+            }
+        }
+        else
+        {
+            user_pwr_pid_reset(&g_user_config.current_pid);
+        }
+    }
+
+    return user_pwr_clamp(g_current_limited_vref_v, 0.0f, target_vref);
+}
+
 static void user_pwr_fast_control_loop(void)
 {
     float vref;
+    float target_vref;
     float error;
     float duty_ff;
     float duty;
@@ -496,7 +573,8 @@ static void user_pwr_fast_control_loop(void)
         return;
     }
 
-    vref = g_voltage_ref_v;
+    target_vref = g_voltage_ref_v;
+    vref = user_pwr_apply_current_limit_to_vref(target_vref);
     user_pwr_select_topology(vref);
 
     vref = user_pwr_clamp(vref, 0.0f, g_user_config.target_voltage_v > 0.0f ? 33.0f : 0.0f);
@@ -567,7 +645,7 @@ static void user_pwr_fast_control_loop(void)
 
     duty = duty_ff + (g_user_config.voltage_pid.kp * error) + g_user_config.voltage_pid.integral;
 
-    if ((g_user_status.iin_a > input_limit_a) || (g_user_status.iout_a > g_user_config.target_current_a))
+    if (g_user_status.iin_a > input_limit_a)
     {
         duty -= 0.02f;
         g_user_config.voltage_pid.integral *= 0.95f;
@@ -583,7 +661,9 @@ static void user_pwr_fast_control_loop(void)
 
     g_user_status.current_ref_a = g_user_config.target_current_a;
     g_user_status.duty_cmd = g_control_duty;
-    g_user_status.regulation_mode = USER_POWER_MODE_CV;
+    g_user_status.regulation_mode =
+        ((g_current_limit_active != 0U) ||
+         (vref < (target_vref - USER_PWR_CC_MODE_VREF_MARGIN_V))) ? USER_POWER_MODE_CC : USER_POWER_MODE_CV;
     UserPowerPwm_ApplyDuty(g_user_status.topology, g_control_duty, &g_user_status);
 }
 
@@ -593,22 +673,28 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     g_save_pending = 0U;
     g_softstart_tick = 0U;
     g_voltage_loop_divider = 0U;
+    g_current_loop_divider = 0U;
     g_fast_state_divider = 0U;
     g_measurement_ready = 0U;
     g_aux_measurement_ready = 0U;
     g_aux_sample_tick = 0U;
     g_background_1ms_tick = 0U;
-    g_iin_zero_v = USER_PWR_CURRENT_ZERO_V;
-    g_iout_zero_v = USER_PWR_CURRENT_ZERO_V;
+    g_iin_zero_v = USER_PWR_IIN_ZERO_V;
+    g_iout_zero_v = USER_PWR_IOUT_ZERO_V;
     g_voltage_ref_v = 0.0f;
+    g_current_limited_vref_v = 0.0f;
+    g_current_limit_active = 0U;
 
     user_pwr_set_defaults();
 
+    HAL_Delay(200U);
     (void)HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
     (void)HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
     (void)HAL_ADCEx_Calibration_Start(&hadc5, ADC_SINGLE_ENDED);
 
     (void)HAL_ADC_Start_DMA(&hadc1, (uint32_t *)g_adc_result, USER_POWER_ADC_CHANNEL_COUNT);
+    (void)HAL_ADC_Start(&hadc2);
+    (void)HAL_ADC_Start(&hadc5);
     (void)HAL_HRTIM_WaveformCountStart_IT(&hhrtim1, HRTIM_TIMERID_TIMER_A);
     (void)HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D);
     (void)HAL_TIM_Base_Start_IT(&htim2);
@@ -624,6 +710,8 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     g_user_config.voltage_pid.ki = USER_PWR_VOLTAGE_KI;
     g_user_config.current_pid.kp = USER_PWR_CURRENT_KP;
     g_user_config.current_pid.ki = USER_PWR_CURRENT_KI;
+    g_user_config.current_pid.out_min = -USER_PWR_CC_VREF_FALL_STEP_V;
+    g_user_config.current_pid.out_max = USER_PWR_CC_VREF_RISE_STEP_V;
     user_pwr_control_reset();
 
     UserPowerPwm_Init(&g_user_status);
@@ -777,6 +865,8 @@ void UserPower_SetVoltageLimitMv(uint32_t value_mv)
 void UserPower_SetCurrentLimitMa(uint32_t value_ma)
 {
     g_user_config.target_current_a = user_pwr_clamp((float)value_ma / 1000.0f, 0.0f, 10.0f);
+    user_pwr_pid_reset(&g_user_config.current_pid);
+    g_current_loop_divider = USER_PWR_CONTROL_DIVIDER_TICKS;
 }
 
 void UserPower_SetOvpMv(uint32_t value_mv)
@@ -827,4 +917,3 @@ void UserPower_RequestSave(void)
 {
     g_save_pending = 1U;
 }
-
