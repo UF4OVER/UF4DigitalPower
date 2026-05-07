@@ -535,6 +535,7 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer = QTimer(self)
         self._poll_resume_timer.setSingleShot(True)
         self._poll_resume_timer.timeout.connect(self._resume_polling_if_ready)
+        self._poll_requested_interval_ms: int | None = None
         self._poll_resume_interval_ms: int | None = None
 
     @property
@@ -584,6 +585,7 @@ class F4CPPowerClient(QObject):
         interval = max(200, int(interval_ms))
         self._poll_resume_timer.stop()
         self._poll_resume_interval_ms = None
+        self._poll_requested_interval_ms = interval
         was_active = self._poll_timer.isActive()
         previous_interval = self._poll_timer.interval()
         self._poll_timer.start(interval)
@@ -596,6 +598,7 @@ class F4CPPowerClient(QObject):
     def stop_polling(self) -> None:
         self._poll_timer.stop()
         self._poll_resume_timer.stop()
+        self._poll_requested_interval_ms = None
         self._poll_resume_interval_ms = None
 
     @pyqtSlot()
@@ -861,8 +864,8 @@ class F4CPPowerClient(QObject):
 
     def _pause_polling_for_write(self) -> None:
         self._poll_resume_timer.stop()
-        if self._poll_timer.isActive():
-            self._poll_resume_interval_ms = self._poll_timer.interval()
+        if self._poll_requested_interval_ms is not None:
+            self._poll_resume_interval_ms = self._poll_requested_interval_ms
             self._poll_timer.stop()
             self.log.emit("Host polling paused for write")
 
@@ -883,6 +886,7 @@ class F4CPPowerClient(QObject):
             return
 
         self._poll_resume_interval_ms = None
+        self._poll_requested_interval_ms = interval
         self._poll_timer.start(interval)
         self.log.emit(f"Host polling resumed ({interval} ms)")
         QTimer.singleShot(0, self._poll_once)

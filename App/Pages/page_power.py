@@ -37,6 +37,7 @@ from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
 POWER_POLL_INTERVAL_MS = 200
+WRITE_POLL_RESTART_DELAY_MS = 600
 PLOT_Y_MIN = 0
 PLOT_Y_MAX = 45
 
@@ -382,6 +383,7 @@ class PowerPage(ScrollArea):
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
         self._lastStatus: PowerStatus | None = None
         self._lastVerboseLogTs = 0.0
+        self._writePollingRestartPending = False
         self._historyDirty = False
         self._plotRefreshTimer = QTimer(self)
         self._plotRefreshTimer.setInterval(200)
@@ -717,6 +719,7 @@ class PowerPage(ScrollArea):
         currentMa = int(
             round(float(self.writeParams["set_current"].text() or "0") * 1000)
         )
+        self._writePollingRestartPending = True
         self.outputLimitsRequested.emit(voltageMv, currentMa, self.outputSwitch.isChecked())
 
     def _applyProtectionValues(self) -> None:
@@ -727,6 +730,7 @@ class PowerPage(ScrollArea):
         ocpMa = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
         otpMc = int(round(float(self.writeParams["otp"].text() or "0") * 1000))
         fanValue = int(float(self.writeParams["fan_set"].text() or "0"))
+        self._writePollingRestartPending = True
         self.protectionValuesRequested.emit(ovpMv, ocpMa, otpMc, fanValue)
 
     def _onAutoPollChanged(self, checked: bool) -> None:
@@ -864,6 +868,8 @@ class PowerPage(ScrollArea):
     def _onClientError(self, message: str) -> None:
         self._appendLog(f"ERR: {message}")
         showMessage(self, self.tr("Communication Error"), message, level="error")
+        if self._writePollingRestartPending:
+            self._scheduleAutoPollingRestartAfterWrite()
 
     def _handleDebugSnapshotReady(self, snapshot: DebugSnapshot) -> None:
         self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
@@ -876,6 +882,7 @@ class PowerPage(ScrollArea):
             self.tr("Voltage/current/output state have been written."),
             level="success",
         )
+        self._scheduleAutoPollingRestartAfterWrite()
 
     def _onProtectionValuesWritten(self) -> None:
         showMessage(
@@ -884,9 +891,25 @@ class PowerPage(ScrollArea):
             self.tr("OVP/OCP/OTP/Fan parameters have been written."),
             level="success",
         )
+        self._scheduleAutoPollingRestartAfterWrite()
 
     def _onPowerStateWritten(self, enabled: bool) -> None:
         self._appendLog(f"Output set to {'ON' if enabled else 'OFF'}")
+        self._scheduleAutoPollingRestartAfterWrite()
+
+    def _scheduleAutoPollingRestartAfterWrite(self) -> None:
+        self._writePollingRestartPending = False
+        QTimer.singleShot(WRITE_POLL_RESTART_DELAY_MS, self._restartAutoPollingAfterWrite)
+
+    def _restartAutoPollingAfterWrite(self) -> None:
+        if self._shutdownDone:
+            return
+        if not self.autoPollSwitch.isChecked():
+            return
+        if not self._client.is_connected:
+            return
+        self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
+        self._appendLog("Host polling restart requested after write")
 
     def _applyTexts(self) -> None:
         self.titleLabel.setText(self.tr("Power Dashboard"))
