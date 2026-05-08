@@ -217,7 +217,7 @@ typedef struct
   */
 #define OPTIONBYTE_WRP            0x01U                    /*!< WRP option byte configuration */
 #define OPTIONBYTE_RDP            0x02U                    /*!< RDP option byte configuration */
-#define OPTIONBYTE_USER           0x04U                    /*!< USER_Code option byte configuration */
+#define OPTIONBYTE_USER           0x04U                    /*!< USER option byte configuration */
 #define OPTIONBYTE_PCROP          0x08U                    /*!< PCROP option byte configuration */
 #define OPTIONBYTE_BOOT_LOCK      0x10U                    /*!< Boot lock option byte configuration */
 #define OPTIONBYTE_SEC            0x20U                    /*!< Securable memory option byte configuration */

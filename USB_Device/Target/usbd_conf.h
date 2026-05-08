@@ -1,4 +1,4 @@
-/* USER_Code CODE BEGIN Header */
+/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : usbd_conf.h
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER_Code CODE END Header */
+/* USER CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __USBD_CONF__H__
@@ -33,9 +33,9 @@
 #include "stm32g4xx.h"
 #include "stm32g4xx_hal.h"
 
-/* USER_Code CODE BEGIN INCLUDE */
+/* USER CODE BEGIN INCLUDE */
 
-/* USER_Code CODE END INCLUDE */
+/* USER CODE END INCLUDE */
 
 /** @addtogroup USBD_OTG_DRIVER
   * @brief Driver for Usb device.
@@ -53,8 +53,8 @@
   */
 
 /* Private variables ---------------------------------------------------------*/
-/* USER_Code CODE BEGIN PV */
-/* USER_Code CODE END PV */
+/* USER CODE BEGIN PV */
+/* USER CODE END PV */
 /**
   * @}
   */

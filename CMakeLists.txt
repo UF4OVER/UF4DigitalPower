@@ -60,12 +60,12 @@ include_directories(
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
         APP/Inc
-        BSP/Inc
-        USER_Code/Inc
+#        DSP/Include
+#        DSP/Include/dsp
         Middlewares/TVLCOM_V2_FULL/Inc
 )
 
-add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32G474xx -DTVLCOM_USE_STM32_HAL)
+add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32G474xx)
 
 file(GLOB_RECURSE SOURCES
         "USB_Device/*.*"
@@ -73,14 +73,8 @@ file(GLOB_RECURSE SOURCES
         "Middlewares/*.*"
         "Drivers/*.*"
         "APP/*.*"
-        "BSP/*.*"
+#        "DSP/*.*"
         "USER_Code/*.*")
-
-list(FILTER SOURCES EXCLUDE REGEX ".*/Middlewares/TVLCOM_V2_FULL/tests/.*")
-list(FILTER SOURCES EXCLUDE REGEX ".*/Middlewares/TVLCOM_V2_FULL/Src/tvlcom_stm32_hal_example\\.c$")
-
-list(APPEND SOURCES
-        Middlewares/TVLCOM_V2_FULL/Src/tvlcom.c)
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)
 

@@ -1,4 +1,4 @@
-/* USER_Code CODE BEGIN Header */
+/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : App/usbd_desc.c
@@ -16,25 +16,25 @@
   *
   ******************************************************************************
   */
-/* USER_Code CODE END Header */
+/* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_core.h"
 #include "usbd_desc.h"
 #include "usbd_conf.h"
 
-/* USER_Code CODE BEGIN INCLUDE */
+/* USER CODE BEGIN INCLUDE */
 
-/* USER_Code CODE END INCLUDE */
+/* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 
-/* USER_Code CODE BEGIN PV */
+/* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
-/* USER_Code CODE END PV */
+/* USER CODE END PV */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
   * @{
@@ -49,9 +49,9 @@
   * @{
   */
 
-/* USER_Code CODE BEGIN PRIVATE_TYPES */
+/* USER CODE BEGIN PRIVATE_TYPES */
 
-/* USER_Code CODE END PRIVATE_TYPES */
+/* USER CODE END PRIVATE_TYPES */
 
 /**
   * @}
@@ -70,26 +70,26 @@
 #define USBD_CONFIGURATION_STRING     "Power Config"
 #define USBD_INTERFACE_STRING     "Power Interface"
 
-/* USER_Code CODE BEGIN PRIVATE_DEFINES */
+/* USER CODE BEGIN PRIVATE_DEFINES */
 
-/* USER_Code CODE END PRIVATE_DEFINES */
+/* USER CODE END PRIVATE_DEFINES */
 
 /**
   * @}
   */
 
-/* USER_Code CODE BEGIN 0 */
+/* USER CODE BEGIN 0 */
 
-/* USER_Code CODE END 0 */
+/* USER CODE END 0 */
 
 /** @defgroup USBD_DESC_Private_Macros USBD_DESC_Private_Macros
   * @brief Private macros.
   * @{
   */
 
-/* USER_Code CODE BEGIN PRIVATE_MACRO */
+/* USER CODE BEGIN PRIVATE_MACRO */
 
-/* USER_Code CODE END PRIVATE_MACRO */
+/* USER CODE END PRIVATE_MACRO */
 
 /**
   * @}
@@ -286,9 +286,9 @@ uint8_t * USBD_CDC_SerialStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length
    * ID */
   Get_SerialNum();
 
-  /* USER_Code CODE BEGIN USBD_CDC_SerialStrDescriptor */
+  /* USER CODE BEGIN USBD_CDC_SerialStrDescriptor */
 
-  /* USER_Code CODE END USBD_CDC_SerialStrDescriptor */
+  /* USER CODE END USBD_CDC_SerialStrDescriptor */
 
   return (uint8_t *) USBD_StringSerial;
 }

@@ -1,4 +1,4 @@
-/* USER_Code CODE BEGIN Header */
+/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : usbd_desc.c
@@ -16,7 +16,7 @@
   *
   ******************************************************************************
   */
-/* USER_Code CODE END Header */
+/* USER CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __USBD_DESC__C__
@@ -29,9 +29,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_def.h"
 
-/* USER_Code CODE BEGIN INCLUDE */
+/* USER CODE BEGIN INCLUDE */
 
-/* USER_Code CODE END INCLUDE */
+/* USER CODE END INCLUDE */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
   * @{
@@ -52,9 +52,9 @@
 
 #define         USB_SIZ_STRING_SERIAL       0x1A
 
-/* USER_Code CODE BEGIN EXPORTED_CONSTANTS */
+/* USER CODE BEGIN EXPORTED_CONSTANTS */
 
-/* USER_Code CODE END EXPORTED_CONSTANTS */
+/* USER CODE END EXPORTED_CONSTANTS */
 
 /**
   * @}
@@ -65,9 +65,9 @@
   * @{
   */
 
-/* USER_Code CODE BEGIN EXPORTED_DEFINES */
+/* USER CODE BEGIN EXPORTED_DEFINES */
 
-/* USER_Code CODE END EXPORTED_DEFINES */
+/* USER CODE END EXPORTED_DEFINES */
 
 /**
   * @}
@@ -78,9 +78,9 @@
   * @{
   */
 
-/* USER_Code CODE BEGIN EXPORTED_TYPES */
+/* USER CODE BEGIN EXPORTED_TYPES */
 
-/* USER_Code CODE END EXPORTED_TYPES */
+/* USER CODE END EXPORTED_TYPES */
 
 /**
   * @}
@@ -91,9 +91,9 @@
   * @{
   */
 
-/* USER_Code CODE BEGIN EXPORTED_MACRO */
+/* USER CODE BEGIN EXPORTED_MACRO */
 
-/* USER_Code CODE END EXPORTED_MACRO */
+/* USER CODE END EXPORTED_MACRO */
 
 /**
   * @}
@@ -106,9 +106,9 @@
 
 extern USBD_DescriptorsTypeDef     CDC_Desc;
 
-/* USER_Code CODE BEGIN EXPORTED_VARIABLES */
+/* USER CODE BEGIN EXPORTED_VARIABLES */
 
-/* USER_Code CODE END EXPORTED_VARIABLES */
+/* USER CODE END EXPORTED_VARIABLES */
 
 /**
   * @}
@@ -119,9 +119,9 @@ extern USBD_DescriptorsTypeDef     CDC_Desc;
   * @{
   */
 
-/* USER_Code CODE BEGIN EXPORTED_FUNCTIONS */
+/* USER CODE BEGIN EXPORTED_FUNCTIONS */
 
-/* USER_Code CODE END EXPORTED_FUNCTIONS */
+/* USER CODE END EXPORTED_FUNCTIONS */
 
 /**
   * @}
