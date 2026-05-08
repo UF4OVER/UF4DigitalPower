@@ -119,6 +119,7 @@ class DaplinkRequestPayload:
     smart_flash: bool = True
     trust_crc: bool = False
     reset_after_download: bool = True
+    silent: bool = False
 
 
 class DaplinkRequestEvent(DaplinkProgrammerEvent):
@@ -342,7 +343,11 @@ class DaplinkPyocdSession(QObject):
             return
 
         if action == "load_targets":
-            self._start_action("load_targets", self._load_targets_worker)
+            self._start_action(
+                "load_targets",
+                lambda: self._load_targets_worker(payload.silent),
+                silent=payload.silent,
+            )
             return
 
         if action == "connect":
@@ -355,19 +360,26 @@ class DaplinkPyocdSession(QObject):
 
         self._post_event(MessageEvent("不支持的操作", f"未知操作: {payload.action}", "error"))
 
-    def _start_action(self, action: str, worker) -> None:
+    def _start_action(self, action: str, worker, silent: bool = False) -> None:
         if self._busy:
             self._post_event(MessageEvent("忙碌中", "当前已有操作在执行，请稍候。", "warning"))
             return
 
         self._busy = True
         self._last_progress_value = -1.0
-        self._post_event(StateEvent(busy=True, action=action))
+        if not silent:
+            self._post_event(StateEvent(busy=True, action=action))
 
         self._worker = DaplinkActionThread(action, self, worker)
-        self._worker.resultReady.connect(self._finish_action)
+        if silent:
+            self._worker.resultReady.connect(self._finish_action_silent)
+        else:
+            self._worker.resultReady.connect(self._finish_action)
         self._worker.finished.connect(self._cleanup_worker)
         self._worker.start()
+
+    def _finish_action_silent(self, _action: str, _success: bool, _exit_code: int) -> None:
+        self._busy = False
 
     def _reset_process_output_state(self) -> None:
         self._process_line_buffer = ""
@@ -403,6 +415,8 @@ class DaplinkPyocdSession(QObject):
         try:
             target_info = self._target_by_name(payload.connect.target_name)
             args = self._build_pyocd_flash_args(payload, target_info)
+            program, prefix_args = self._pyocd_command()
+            process_args = [*prefix_args, *args]
         except Exception as exc:
             self._busy = False
             self._process_action = None
@@ -412,15 +426,15 @@ class DaplinkPyocdSession(QObject):
             return
 
         self._process = QProcess(self)
-        self._process.setProgram(self._pyocd_executable())
-        self._process.setArguments(args)
+        self._process.setProgram(program)
+        self._process.setArguments(process_args)
         self._process.setWorkingDirectory(str(DirPathsInstance.BaseDir))
         self._process.setProcessChannelMode(QProcess.MergedChannels)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
         self._process.finished.connect(self._handle_process_finished)
         self._process.errorOccurred.connect(self._handle_process_error)
 
-        command_text = " ".join([self._process.program(), *args])
+        command_text = " ".join([self._process.program(), *process_args])
         self._post_event(LogEvent(f"pyOCD: {command_text}", "command"))
         self._process_timeout_timer.start(DAPLINK_FLASH_TIMEOUT_MS)
         self._process.start()
@@ -598,11 +612,15 @@ class DaplinkPyocdSession(QObject):
         self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
 
     @staticmethod
-    def _pyocd_executable() -> str:
+    def _pyocd_command() -> tuple[str, list[str]]:
+        python_executable = Path(sys.executable)
+        if python_executable.name.lower() in {"python.exe", "pythonw.exe", "python"}:
+            return str(python_executable), ["-m", "pyocd"]
+
         executable = Path(sys.executable).with_name("pyocd.exe")
         if executable.exists():
-            return str(executable)
-        return "pyocd"
+            return str(executable), []
+        return "pyocd", []
 
     def _scan_probes_worker(self) -> None:
         probes = self.scan_daplink_probes()
@@ -612,11 +630,14 @@ class DaplinkPyocdSession(QObject):
         else:
             self._post_event(LogEvent("未扫描到 DAPLink/CMSIS-DAP 调试器。", "error"))
 
-    def _load_targets_worker(self) -> None:
+    def _load_targets_worker(self, silent: bool = False) -> None:
         pack_paths, targets = self.discover_pack_targets()
         self._pack_paths = pack_paths
         self._target_items = targets
         self._post_event(TargetsEvent(targets, [str(path) for path in pack_paths]))
+
+        if silent:
+            return
 
         if not pack_paths:
             self._post_event(LogEvent(f"Pack 目录为空: {self.pack_dir()}", "error"))

@@ -64,7 +64,7 @@ class DaplinkFlashPage(ScrollArea):
         self._resetDeviceInfo()
         self._applyTexts()
 
-        QTimer.singleShot(0, self.reloadPackTargets)
+        QTimer.singleShot(0, self.preloadPackTargets)
         QTimer.singleShot(0, self.scanProbe)
 
     def event(self, e):
@@ -575,6 +575,11 @@ class DaplinkFlashPage(ScrollArea):
 
     def reloadPackTargets(self):
         self._postRequest(daplink_pyocd.DaplinkRequestPayload(action="load_targets"))
+
+    def preloadPackTargets(self):
+        self._postRequest(
+            daplink_pyocd.DaplinkRequestPayload(action="load_targets", silent=True)
+        )
 
     def scanProbe(self):
         self._postRequest(daplink_pyocd.DaplinkRequestPayload(action="scan_probes"))

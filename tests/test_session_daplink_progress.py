@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from PyQt5.QtCore import QCoreApplication
 
@@ -100,6 +101,13 @@ class DaplinkProcessOutputTests(unittest.TestCase):
             logs,
             ["0000858 W Board ID UF40 is not recognized [mbed_board]"],
         )
+
+    def test_pyocd_command_uses_python_module_in_venv(self):
+        with patch("App.Core.Session.session_daplink.sys.executable", r"E:\PROJECT_DPOWER\F4CP\.venv\Scripts\python.exe"):
+            program, args = DaplinkPyocdSession._pyocd_command()
+
+        self.assertEqual(program, r"E:\PROJECT_DPOWER\F4CP\.venv\Scripts\python.exe")
+        self.assertEqual(args, ["-m", "pyocd"])
 
 
 if __name__ == "__main__":
