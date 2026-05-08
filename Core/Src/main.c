@@ -31,6 +31,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "user_power.h"
+#include "user_tvlcom.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,10 +41,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
-/* Set to 0 to run normal USER power-control flow. */
-#define HRTIM_AD_PIN_DEMO          0U
-#define DEMO_SELF_CHECK_TIMEOUT_MS 200U
 
 /* USER CODE END PD */
 
@@ -55,12 +52,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#if !HRTIM_AD_PIN_DEMO
-static volatile uint32_t g_tick_1ms = 0U;
-#else
-static volatile uint32_t g_demo_hrtim_rep_count = 0U;
-#endif
 static volatile uint16_t g_user_adc_result[USER_POWER_ADC_CHANNEL_COUNT] = {0U};
+
+// 毫秒计时变量
+volatile uint16_t ms_cnt_1 = 0; // 1ms通信维护计时
+volatile uint16_t ms_cnt_2 = 0; // 100ms温度/风扇上报计时
+volatile uint16_t ms_cnt_3 = 0; // 500ms状态灯计时
+volatile uint16_t ms_cnt_4 = 0; // 预留慢任务计时
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,7 +105,6 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_ADC5_Init();
-  MX_IWDG_Init();
   MX_SPI3_Init();
   MX_TIM4_Init();
   MX_USB_Device_Init();
@@ -120,6 +118,8 @@ int main(void)
   HAL_GPIO_WritePin(DIV_SW_GPIO_Port, DIV_SW_Pin, GPIO_PIN_SET);
 
   UserPower_Init(g_user_adc_result);
+  MX_IWDG_Init();
+  HAL_IWDG_Refresh(&hiwdg);
 
   /* USER CODE END 2 */
 
@@ -130,9 +130,28 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_IWDG_Refresh(&hiwdg);
-    UserPower_BackgroundTask();
-    HAL_Delay(1);
+    UserPower_CommTask(); // 持续处理USB TVLCOM收发
+    UserPower_SaveTask(); // 有配置保存请求时写入Flash
+
+    if (ms_cnt_1 >= 1U) // 1ms任务
+    {
+      ms_cnt_1 = 0U;
+      UserTvlcom_1msTask();
+    }
+
+    if (ms_cnt_2 >= 100U) // 100ms任务：板温、芯片温度、风扇状态更新
+    {
+      ms_cnt_2 = 0U;
+      UserPower_AuxTask();
+    }
+
+    if (ms_cnt_3 >= 500U) // 500ms任务：运行指示灯
+    {
+      ms_cnt_3 = 0U;
+      HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+    }
+
+    HAL_IWDG_Refresh(&hiwdg); // 喂狗
   }
   /* USER CODE END 3 */
 }
@@ -198,12 +217,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM2)
   {
-    HAL_IWDG_Refresh(&hiwdg);
-    g_tick_1ms++;
-    if ((g_tick_1ms % 500U) == 0U)
-    {
-      HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-    }
+    ms_cnt_1++;
+    ms_cnt_2++;
+    ms_cnt_3++;
+    ms_cnt_4++;
   }
   else if (htim->Instance == TIM3)
   {

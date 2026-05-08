@@ -18,6 +18,7 @@
 #define USER_PWR_IOUT_CAL_GAIN             1.00f
 
 #define USER_PWR_CURRENT_DEADBAND_V        0.0065f
+#define USER_PWR_MEAS_FILTER_ALPHA         0.15f
 
 /* Control and protection defaults (single-direction first). */
 #define USER_PWR_DEFAULT_VOUT_V            5.0f

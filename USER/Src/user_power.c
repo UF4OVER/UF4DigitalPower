@@ -9,6 +9,8 @@
 #include "hrtim.h"
 #include "tim.h"
 
+#include "arm_math.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -32,7 +34,35 @@ static float g_voltage_ref_v = 0.0f;
 static float g_current_limited_vref_v = 0.0f;
 static uint8_t g_current_limit_active = 0U;
 
-static float user_pwr_clamp(float value, float min_value, float max_value)
+static const float k_adc_to_voltage_gain =
+    (USER_PWR_ADC_VREF_V * USER_PWR_VOLTAGE_SCALE) / USER_PWR_ADC_MAX_COUNT;
+static const float k_adc_to_sensor_voltage_gain =
+    USER_PWR_ADC_VREF_V / USER_PWR_ADC_MAX_COUNT;
+static const float k_current_inv_scale = 1.0f / USER_PWR_CURRENT_SCALE;
+static const float k_board_adc_inv_full_scale = 1.0f / 4095.0f;
+static const float k_board_ntc_inv_t0 = 1.0f / USER_PWR_BOARD_NTC_T0_K;
+static const float k_board_ntc_inv_beta = 1.0f / USER_PWR_BOARD_NTC_BETA;
+static const float k_core_temp_cal_vref_gain =
+    3300.0f / (float)TEMPSENSOR_CAL_VREFANALOG;
+static const float k_meas_filter_keep = 1.0f - USER_PWR_MEAS_FILTER_ALPHA;
+static const float g_meas_filter_coeffs[5] = {
+    USER_PWR_MEAS_FILTER_ALPHA,
+    0.0f,
+    0.0f,
+    1.0f - USER_PWR_MEAS_FILTER_ALPHA,
+    0.0f,
+};
+
+static arm_biquad_cascade_df2T_instance_f32 g_vin_filter;
+static arm_biquad_cascade_df2T_instance_f32 g_iin_filter;
+static arm_biquad_cascade_df2T_instance_f32 g_vout_filter;
+static arm_biquad_cascade_df2T_instance_f32 g_iout_filter;
+static float g_vin_filter_state[2];
+static float g_iin_filter_state[2];
+static float g_vout_filter_state[2];
+static float g_iout_filter_state[2];
+
+static inline float user_pwr_clamp(float value, float min_value, float max_value)
 {
     if (value < min_value)
     {
@@ -134,18 +164,17 @@ static void user_pwr_set_defaults(void)
     g_user_status.regulation_mode = USER_POWER_MODE_CV;
 }
 
-static float user_pwr_adc_to_voltage(uint16_t adc)
+static inline float user_pwr_adc_to_voltage(uint16_t adc)
 {
-    float vadc = ((float)adc * USER_PWR_ADC_VREF_V) / USER_PWR_ADC_MAX_COUNT;
-    return vadc * USER_PWR_VOLTAGE_SCALE;
+    return (float)adc * k_adc_to_voltage_gain;
 }
 
-static float user_pwr_adc_to_sensor_voltage(uint16_t adc)
+static inline float user_pwr_adc_to_sensor_voltage(uint16_t adc)
 {
-    return ((float)adc * USER_PWR_ADC_VREF_V) / USER_PWR_ADC_MAX_COUNT;
+    return (float)adc * k_adc_to_sensor_voltage_gain;
 }
 
-static float user_pwr_sensor_voltage_to_current(float sensor_v, float zero_v)
+static inline float user_pwr_sensor_voltage_to_current(float sensor_v, float zero_v)
 {
     float delta_v = sensor_v - zero_v;
 
@@ -155,13 +184,34 @@ static float user_pwr_sensor_voltage_to_current(float sensor_v, float zero_v)
         return 0.0f;
     }
 
-    return fabsf(delta_v) / USER_PWR_CURRENT_SCALE;
+    return fabsf(delta_v) * k_current_inv_scale;
 }
 
-static float user_pwr_lpf(float prev, float input)
+static inline float user_pwr_lpf(float prev, float input)
 {
     const float alpha = 0.15f;
     return prev + alpha * (input - prev);
+}
+
+static void user_pwr_measure_filters_init(void)
+{
+    arm_biquad_cascade_df2T_init_f32(&g_vin_filter, 1U, g_meas_filter_coeffs, g_vin_filter_state);
+    arm_biquad_cascade_df2T_init_f32(&g_iin_filter, 1U, g_meas_filter_coeffs, g_iin_filter_state);
+    arm_biquad_cascade_df2T_init_f32(&g_vout_filter, 1U, g_meas_filter_coeffs, g_vout_filter_state);
+    arm_biquad_cascade_df2T_init_f32(&g_iout_filter, 1U, g_meas_filter_coeffs, g_iout_filter_state);
+}
+
+static inline void user_pwr_measure_filter_seed(arm_biquad_cascade_df2T_instance_f32 *filter, float value)
+{
+    filter->pState[0] = k_meas_filter_keep * value;
+    filter->pState[1] = 0.0f;
+}
+
+static inline float user_pwr_measure_filter_step(const arm_biquad_cascade_df2T_instance_f32 *filter, float value)
+{
+    float filtered;
+    arm_biquad_cascade_df2T_f32(filter, &value, &filtered, 1U);
+    return filtered;
 }
 
 static void user_pwr_update_measurements(void)
@@ -199,14 +249,18 @@ static void user_pwr_update_measurements(void)
         g_user_status.vout_v = vout_v;
         g_user_status.iin_a = user_pwr_clamp(iin, 0.0f, 12.0f);
         g_user_status.iout_a = user_pwr_clamp(iout, 0.0f, 12.0f);
+        user_pwr_measure_filter_seed(&g_vin_filter, g_user_status.vin_v);
+        user_pwr_measure_filter_seed(&g_iin_filter, g_user_status.iin_a);
+        user_pwr_measure_filter_seed(&g_vout_filter, g_user_status.vout_v);
+        user_pwr_measure_filter_seed(&g_iout_filter, g_user_status.iout_a);
         g_measurement_ready = 1U;
         return;
     }
 
-    g_user_status.vin_v = user_pwr_lpf(g_user_status.vin_v, vin_v);
-    g_user_status.vout_v = user_pwr_lpf(g_user_status.vout_v, vout_v);
-    g_user_status.iin_a = user_pwr_lpf(g_user_status.iin_a, user_pwr_clamp(iin, 0.0f, 12.0f));
-    g_user_status.iout_a = user_pwr_lpf(g_user_status.iout_a, user_pwr_clamp(iout, 0.0f, 12.0f));
+    g_user_status.vin_v = user_pwr_measure_filter_step(&g_vin_filter, vin_v);
+    g_user_status.vout_v = user_pwr_measure_filter_step(&g_vout_filter, vout_v);
+    g_user_status.iin_a = user_pwr_measure_filter_step(&g_iin_filter, user_pwr_clamp(iin, 0.0f, 12.0f));
+    g_user_status.iout_a = user_pwr_measure_filter_step(&g_iout_filter, user_pwr_clamp(iout, 0.0f, 12.0f));
 }
 
 static uint8_t user_pwr_input_ready(void)
@@ -244,12 +298,31 @@ static float user_pwr_board_temp_from_adc(uint16_t adc)
         return 150.0f;
     }
 
-    ratio = (float)adc / 4095.0f;
+    ratio = (float)adc * k_board_adc_inv_full_scale;
     ntc_ohm = USER_PWR_BOARD_PULLDOWN_OHM * ((1.0f / ratio) - 1.0f);
-    temp_k = 1.0f / ((1.0f / USER_PWR_BOARD_NTC_T0_K) +
-                     (logf(ntc_ohm / USER_PWR_BOARD_NTC_R0_OHM) / USER_PWR_BOARD_NTC_BETA));
+    temp_k = 1.0f / (k_board_ntc_inv_t0 +
+                     (logf(ntc_ohm / USER_PWR_BOARD_NTC_R0_OHM) * k_board_ntc_inv_beta));
 
     return temp_k - 273.15f;
+}
+
+static float user_pwr_core_temp_from_adc(float adc_12bit)
+{
+    float cal1 = (float)(*TEMPSENSOR_CAL1_ADDR);
+    float cal2 = (float)(*TEMPSENSOR_CAL2_ADDR);
+    float adc_at_3v;
+
+    if (cal2 <= cal1)
+    {
+        return 0.0f;
+    }
+
+    adc_at_3v = adc_12bit * k_core_temp_cal_vref_gain;
+
+    return (((adc_at_3v - cal1) *
+             (float)(TEMPSENSOR_CAL2_TEMP - TEMPSENSOR_CAL1_TEMP)) /
+            (cal2 - cal1)) +
+           (float)TEMPSENSOR_CAL1_TEMP;
 }
 
 static uint16_t user_pwr_adc2_oversampled_to_12bit(uint32_t raw)
@@ -310,7 +383,7 @@ static void user_pwr_update_aux_measurements(void)
         core_temp_c = __HAL_ADC_CALC_TEMPERATURE(3300UL, raw_12bit, ADC_RESOLUTION_12B);
         if (core_temp_c != LL_ADC_TEMPERATURE_CALC_ERROR)
         {
-            mcu_temp_c = (float)core_temp_c;
+            mcu_temp_c = user_pwr_core_temp_from_adc((float)raw / 8.0f);
             updated = 1U;
         }
     }
@@ -565,6 +638,7 @@ static void user_pwr_fast_control_loop(void)
     float duty;
     float duty_max = USER_PWR_DUTY_MAX;
     float input_limit_a = USER_PWR_INPUT_CURRENT_LIMIT_A;
+    float inv_vin = 0.0f;
 
     if ((g_user_status.state != USER_POWER_STATE_RISE) && (g_user_status.state != USER_POWER_STATE_RUN))
     {
@@ -585,13 +659,15 @@ static void user_pwr_fast_control_loop(void)
 
         if (g_user_status.vin_v > 0.5f)
         {
+            inv_vin = 1.0f / g_user_status.vin_v;
             if (g_user_status.topology == USER_POWER_TOPOLOGY_BUCK)
             {
-                target_duty_need = (vref / g_user_status.vin_v) + USER_PWR_RISE_DUTY_MARGIN;
+                target_duty_need = (vref * inv_vin) + USER_PWR_RISE_DUTY_MARGIN;
             }
             else if (vref > g_user_status.vin_v)
             {
-                target_duty_need = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f)) + USER_PWR_RISE_DUTY_MARGIN;
+                float safe_vref = user_pwr_clamp(vref, 1.0f, 60.0f);
+                target_duty_need = 1.0f - (g_user_status.vin_v * (1.0f / safe_vref)) + USER_PWR_RISE_DUTY_MARGIN;
             }
             else
             {
@@ -615,19 +691,26 @@ static void user_pwr_fast_control_loop(void)
         return;
     }
 
+    if (inv_vin <= 0.0f)
+    {
+        inv_vin = 1.0f / g_user_status.vin_v;
+    }
+
     if (g_user_status.topology == USER_POWER_TOPOLOGY_BUCK)
     {
-        duty_ff = vref / g_user_status.vin_v;
+        duty_ff = vref * inv_vin;
     }
     else if (g_user_status.topology == USER_POWER_TOPOLOGY_BOOST)
     {
-        duty_ff = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f));
+        float safe_vref = user_pwr_clamp(vref, 1.0f, 60.0f);
+        duty_ff = 1.0f - (g_user_status.vin_v * (1.0f / safe_vref));
     }
     else
     {
         if (vref > g_user_status.vin_v)
         {
-            duty_ff = 1.0f - (g_user_status.vin_v / user_pwr_clamp(vref, 1.0f, 60.0f));
+            float safe_vref = user_pwr_clamp(vref, 1.0f, 60.0f);
+            duty_ff = 1.0f - (g_user_status.vin_v * (1.0f / safe_vref));
         }
         else
         {
@@ -686,6 +769,7 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     g_current_limit_active = 0U;
 
     user_pwr_set_defaults();
+    user_pwr_measure_filters_init();
 
     HAL_Delay(200U);
     (void)HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
@@ -695,14 +779,18 @@ void UserPower_Init(volatile uint16_t *adc_dma_buffer)
     (void)HAL_ADC_Start_DMA(&hadc1, (uint32_t *)g_adc_result, USER_POWER_ADC_CHANNEL_COUNT);
     (void)HAL_ADC_Start(&hadc2);
     (void)HAL_ADC_Start(&hadc5);
+
     (void)HAL_HRTIM_WaveformCountStart_IT(&hhrtim1, HRTIM_TIMERID_TIMER_A);
     (void)HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D);
+
     (void)HAL_TIM_Base_Start_IT(&htim2);
     (void)HAL_TIM_Base_Start_IT(&htim3);
     (void)HAL_TIM_Base_Start_IT(&htim4);
+
     (void)HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
 
     (void)UserPowerStore_Init();
+
     UserPowerStore_Load(&g_user_config);
     user_pwr_apply_fan_value(g_user_config.fan_set_value);
 
@@ -736,11 +824,6 @@ void UserPower_FastLoop(void)
     }
 
     user_pwr_fast_control_loop();
-}
-
-void UserPower_1msTask(void)
-{
-    UserTvlcom_1msTask();
 }
 
 void UserPower_5msTask(void)
@@ -809,29 +892,44 @@ void UserPower_5msTask(void)
     }
 }
 
-void UserPower_BackgroundTask(void)
+void UserPower_CommTask(void)
 {
-    uint32_t now = HAL_GetTick();
-
     UserTvlcom_BackgroundTask();
+}
 
-    if ((now - g_background_1ms_tick) >= 1U)
-    {
-        g_background_1ms_tick = now;
-        UserPower_1msTask();
-    }
+void UserPower_AuxTask(void)
+{
+    user_pwr_update_aux_measurements();
+}
 
-    if ((now - g_aux_sample_tick) >= 100U)
-    {
-        g_aux_sample_tick = now;
-        user_pwr_update_aux_measurements();
-    }
-
+void UserPower_SaveTask(void)
+{
     if (g_save_pending != 0U)
     {
         g_save_pending = 0U;
         UserPowerStore_Save(&g_user_config);
     }
+}
+
+void UserPower_BackgroundTask(void)
+{
+    uint32_t now = HAL_GetTick();
+
+    UserPower_CommTask();
+
+    if ((now - g_background_1ms_tick) >= 1U)
+    {
+        g_background_1ms_tick = now;
+        UserTvlcom_1msTask();
+    }
+
+    if ((now - g_aux_sample_tick) >= 100U)
+    {
+        g_aux_sample_tick = now;
+        UserPower_AuxTask();
+    }
+
+    UserPower_SaveTask();
 }
 
 void UserPower_GetStatus(user_power_status_t *out_status)

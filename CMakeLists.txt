@@ -59,6 +59,8 @@ include_directories(
         Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
+        DSP/Include
+        DSP/PrivateInclude
         USER/Inc
         TVLCOM_V2_FULL/Inc
 )
@@ -73,6 +75,8 @@ file(GLOB_RECURSE SOURCES
         "USER/*.*")
 
 list(APPEND SOURCES
+        DSP/Source/FilteringFunctions/arm_biquad_cascade_df2T_f32.c
+        DSP/Source/FilteringFunctions/arm_biquad_cascade_df2T_init_f32.c
         TVLCOM_V2_FULL/Src/tvlcom.c)
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)

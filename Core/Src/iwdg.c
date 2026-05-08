@@ -38,9 +38,9 @@ void MX_IWDG_Init(void)
 
   /* USER CODE END IWDG_Init 1 */
   hiwdg.Instance = IWDG;
-  hiwdg.Init.Prescaler = IWDG_PRESCALER_32;
-  hiwdg.Init.Window = 1000;
-  hiwdg.Init.Reload = 1000;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+  hiwdg.Init.Window = 2000;
+  hiwdg.Init.Reload = 2000;
   if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
   {
     Error_Handler();

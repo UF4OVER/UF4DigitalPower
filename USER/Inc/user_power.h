@@ -5,8 +5,10 @@
 
 void UserPower_Init(volatile uint16_t *adc_dma_buffer);
 void UserPower_FastLoop(void);
-void UserPower_1msTask(void);
 void UserPower_5msTask(void);
+void UserPower_CommTask(void);
+void UserPower_AuxTask(void);
+void UserPower_SaveTask(void);
 void UserPower_BackgroundTask(void);
 
 void UserPower_GetStatus(user_power_status_t *out_status);

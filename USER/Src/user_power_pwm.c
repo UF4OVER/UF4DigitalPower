@@ -82,12 +82,16 @@ void UserPowerPwm_ApplyDuty(user_power_topology_t topology, float duty, user_pow
     case USER_POWER_TOPOLOGY_BOOST:
         compare_a = (uint16_t)(USER_PWR_PWM_PERIOD - USER_PWR_BUCK_FIXED_BOOST);
         compare_d = (uint16_t)(USER_PWR_PWM_PERIOD * duty);
-        compare_d = (uint16_t)user_pwr_clamp((float)compare_d, (float)USER_PWR_BOOST_MIN_COMPARE, USER_PWR_PWM_PERIOD * 0.94f);
+        compare_d = (uint16_t)user_pwr_clamp((float)compare_d,
+                                             (float)USER_PWR_BOOST_MIN_COMPARE,
+                                             USER_PWR_PWM_PERIOD * 0.94f);
         break;
     case USER_POWER_TOPOLOGY_MIX:
         compare_a = (uint16_t)(USER_PWR_PWM_PERIOD - USER_PWR_BUCK_FIXED_MIX);
         compare_d = (uint16_t)(USER_PWR_PWM_PERIOD * duty);
-        compare_d = (uint16_t)user_pwr_clamp((float)compare_d, (float)USER_PWR_BOOST_MIN_COMPARE, USER_PWR_PWM_PERIOD * 0.94f);
+        compare_d = (uint16_t)user_pwr_clamp((float)compare_d,
+                                             (float)USER_PWR_BOOST_MIN_COMPARE,
+                                             USER_PWR_PWM_PERIOD * 0.94f);
         break;
     default:
         compare_a = USER_PWR_PWM_PERIOD;
@@ -105,4 +109,3 @@ void UserPowerPwm_ApplyDuty(user_power_topology_t topology, float duty, user_pow
         status->pwm_d_compare = compare_d;
     }
 }
-
