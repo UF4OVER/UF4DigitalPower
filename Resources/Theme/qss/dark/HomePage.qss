@@ -1,0 +1,5 @@
+QScrollArea#HomePage,
+QWidget#homeScrollWidget {
+    background-color: transparent;
+    border: none;
+}

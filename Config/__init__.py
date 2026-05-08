@@ -9,7 +9,5 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-from .config import _dirPaths as DirPathsInstance
-from .config import SettingMangerInstance
-from .config import AppIconPath
+
 from .config import *

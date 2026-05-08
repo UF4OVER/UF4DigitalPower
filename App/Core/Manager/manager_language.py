@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QLocale, QObject, QTranslator
+from PyQt5.QtCore import QLocale, QTranslator
 
 from Config import DirPathsInstance, SettingMangerInstance, logger
 
@@ -18,22 +18,20 @@ class DictTranslator(QTranslator):
         super().__init__()
         self._translations = translations
 
-    def set_translations(self, translations: dict[str, str]) -> None:
-        self._translations = translations
-
     def translate(self, context: str, sourceText: str, disambiguation: str | None = None, n: int = -1) -> str:
         return self._translations.get(sourceText, sourceText)
 
 
-class LanguageManager(QObject):
+class LanguageManager:
+    """Load a translation resource once during application startup."""
+
     def __init__(self):
-        super().__init__()
         self._translator: DictTranslator | None = None
         self._current_language = LANGUAGE_EN_US
         self._translations_cache: dict[str, dict[str, str]] = {}
 
     def language_file(self, language: str) -> Path:
-        return DirPathsInstance.BaseDir / "Resources" / "Language" / f"{language}.json"
+        return DirPathsInstance.LanguageDir / f"{language}.json"
 
     def load_translations(self, language: str) -> dict[str, str]:
         if language in self._translations_cache:
@@ -71,9 +69,6 @@ class LanguageManager(QObject):
     def system_language(self) -> str:
         return LANGUAGE_ZH_CN if QLocale.system().name().startswith("zh") else LANGUAGE_EN_US
 
-    def current_language(self) -> str:
-        return self._current_language
-
     def apply_language(self, app, language: str | None = None) -> str:
         language = language or self.get_saved_language()
         self._current_language = language
@@ -85,15 +80,7 @@ class LanguageManager(QObject):
         self._translator = DictTranslator(translations)
         app.installTranslator(self._translator)
 
-        self._dispatch_language_change(app)
-
         return self._current_language
-
-    @staticmethod
-    def _dispatch_language_change(app) -> None:
-        event = QEvent(QEvent.Type.LanguageChange)
-        for widget in app.topLevelWidgets():
-            QCoreApplication.sendEvent(widget, event)
 
 
 language_manager = LanguageManager()

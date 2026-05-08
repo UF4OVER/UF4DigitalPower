@@ -13,7 +13,8 @@
 from __future__ import annotations
 
 import os
-import threading
+import re
+import sys
 import zipfile
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -23,9 +24,18 @@ from types import SimpleNamespace
 from typing import Optional
 from xml.etree import ElementTree as ET
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject
+from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, QTimer, pyqtSignal
 
 from Config import DirPathsInstance, logger
+
+DAPLINK_FLASH_TIMEOUT_MS = 5 * 60 * 1000
+PYOCD_PROGRESS_PHASE_RANGES = {
+    "erase": (0.0, 20.0),
+    "program": (20.0, 100.0),
+}
+PYOCD_DEFAULT_PROGRESS_STEPS = 40
+ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+PYOCD_PROGRESS_FRAGMENT_RE = re.compile(r"^[\[\]=\-|\s]+$")
 
 
 def _install_pyocd_probe_filter() -> None:
@@ -109,6 +119,7 @@ class DaplinkRequestPayload:
     smart_flash: bool = True
     trust_crc: bool = False
     reset_after_download: bool = True
+    silent: bool = False
 
 
 class DaplinkRequestEvent(DaplinkProgrammerEvent):
@@ -262,15 +273,47 @@ class ActionFinishedEvent(DaplinkProgrammerEvent):
         )
 
 
+class DaplinkActionThread(QThread):
+    resultReady = pyqtSignal(str, bool, int)
+
+    def __init__(self, action: str, session: "DaplinkPyocdSession", worker, parent: QObject | None = None):
+        super().__init__(parent)
+        self.action = action
+        self.session = session
+        self.worker = worker
+
+    def run(self) -> None:
+        success = False
+        exit_code = 1
+        try:
+            self.worker()
+            success = True
+            exit_code = 0
+        except Exception as exc:  # NOQA broad-except
+            logger.exception(exc)
+            message = self.session._format_worker_error(exc)
+            self.session._post_event(LogEvent(message, "error"))
+            self.session._post_event(MessageEvent("执行失败", message, "error"))
+        self.resultReady.emit(self.action, success, exit_code)
+
+
 class DaplinkPyocdSession(QObject):
     def __init__(self, _event_receiver: Optional[QObject] = None, parent: QObject | None = None):
         super().__init__(parent)
         self._event_receiver = _event_receiver
         self._busy = False
-        self._worker: threading.Thread | None = None
+        self._worker: DaplinkActionThread | None = None
+        self._process: QProcess | None = None
+        self._process_action: str | None = None
+        self._process_timeout_timer = QTimer(self)
+        self._process_timeout_timer.setSingleShot(True)
+        self._process_timeout_timer.timeout.connect(self._kill_process_on_timeout)
         self._pack_paths: list[Path] = []
         self._target_items: list[DaplinkTargetInfo] = []
         self._last_progress_value = -1.0
+        self._process_line_buffer = ""
+        self._process_progress_phase: str | None = None
+        self._process_progress_total_steps = PYOCD_DEFAULT_PROGRESS_STEPS
 
     def set_event_receiver(self, receiver: Optional[QObject]) -> None:
         if receiver is not None and not isinstance(receiver, QObject):
@@ -300,7 +343,11 @@ class DaplinkPyocdSession(QObject):
             return
 
         if action == "load_targets":
-            self._start_action("load_targets", self._load_targets_worker)
+            self._start_action(
+                "load_targets",
+                lambda: self._load_targets_worker(payload.silent),
+                silent=payload.silent,
+            )
             return
 
         if action == "connect":
@@ -308,38 +355,272 @@ class DaplinkPyocdSession(QObject):
             return
 
         if action == "download":
-            self._start_action("download", lambda: self._download_worker(payload))
+            self._start_download_process(payload)
             return
 
         self._post_event(MessageEvent("不支持的操作", f"未知操作: {payload.action}", "error"))
 
-    def _start_action(self, action: str, worker) -> None:
+    def _start_action(self, action: str, worker, silent: bool = False) -> None:
         if self._busy:
             self._post_event(MessageEvent("忙碌中", "当前已有操作在执行，请稍候。", "warning"))
             return
 
         self._busy = True
         self._last_progress_value = -1.0
-        self._post_event(StateEvent(busy=True, action=action))
+        if not silent:
+            self._post_event(StateEvent(busy=True, action=action))
 
-        def _runner():
-            success = False
-            exit_code = 1
-            try:
-                worker()
-                success = True
-                exit_code = 0
-            except Exception as exc:  # NOQA broad-except
-                logger.exception(exc)
-                self._post_event(LogEvent(str(exc), "error"))
-                self._post_event(MessageEvent("执行失败", str(exc), "error"))
-            finally:
-                self._busy = False
-                self._post_event(StateEvent(busy=False, action=action))
-                self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
-
-        self._worker = threading.Thread(target=_runner, name=f"daplink-pyocd-{action}", daemon=True)
+        self._worker = DaplinkActionThread(action, self, worker)
+        if silent:
+            self._worker.resultReady.connect(self._finish_action_silent)
+        else:
+            self._worker.resultReady.connect(self._finish_action)
+        self._worker.finished.connect(self._cleanup_worker)
         self._worker.start()
+
+    def _finish_action_silent(self, _action: str, _success: bool, _exit_code: int) -> None:
+        self._busy = False
+
+    def _reset_process_output_state(self) -> None:
+        self._process_line_buffer = ""
+        self._process_progress_phase = None
+        self._process_progress_total_steps = PYOCD_DEFAULT_PROGRESS_STEPS
+
+    def _finish_action(self, action: str, success: bool, exit_code: int) -> None:
+        self._busy = False
+        self._post_event(StateEvent(busy=False, action=action))
+        self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
+
+    def _cleanup_worker(self) -> None:
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
+
+    def _start_download_process(self, payload: DaplinkRequestPayload) -> None:
+        if self._busy:
+            self._post_event(MessageEvent("忙碌中", "当前已有操作在执行，请稍候。", "warning"))
+            return
+
+        if not payload.file_path or not os.path.isfile(payload.file_path):
+            self._post_event(MessageEvent("固件无效", "请先选择有效的固件文件。", "warning"))
+            return
+
+        self._busy = True
+        self._last_progress_value = -1.0
+        self._reset_process_output_state()
+        self._process_action = "download"
+        self._post_event(StateEvent(busy=True, action="download"))
+        self._post_event(ProgressEvent("download", 0.0))
+
+        try:
+            target_info = self._target_by_name(payload.connect.target_name)
+            args = self._build_pyocd_flash_args(payload, target_info)
+            program, prefix_args = self._pyocd_command()
+            process_args = [*prefix_args, *args]
+        except Exception as exc:
+            self._busy = False
+            self._process_action = None
+            self._post_event(StateEvent(busy=False, action="download"))
+            self._post_event(MessageEvent("执行失败", str(exc), "error"))
+            self._post_event(ActionFinishedEvent(action="download", success=False, exit_code=1, exit_status=None))
+            return
+
+        self._process = QProcess(self)
+        self._process.setProgram(program)
+        self._process.setArguments(process_args)
+        self._process.setWorkingDirectory(str(DirPathsInstance.BaseDir))
+        self._process.setProcessChannelMode(QProcess.MergedChannels)
+        self._process.readyReadStandardOutput.connect(self._read_process_output)
+        self._process.finished.connect(self._handle_process_finished)
+        self._process.errorOccurred.connect(self._handle_process_error)
+
+        command_text = " ".join([self._process.program(), *process_args])
+        self._post_event(LogEvent(f"pyOCD: {command_text}", "command"))
+        self._process_timeout_timer.start(DAPLINK_FLASH_TIMEOUT_MS)
+        self._process.start()
+
+        if not self._process.waitForStarted(3000):
+            error_text = self._process.errorString()
+            self._process_timeout_timer.stop()
+            self._finish_process_action(False, 1, f"pyOCD 启动失败: {error_text}")
+
+    def _build_pyocd_flash_args(self, payload: DaplinkRequestPayload, target_info: DaplinkTargetInfo) -> list[str]:
+        file_path = str(Path(payload.file_path or "").resolve())
+        file_ext = Path(file_path).suffix.lower().lstrip(".")
+        base_address = self._resolve_download_address(payload.base_address, f".{file_ext}", target_info)
+        connect_mode = (payload.connect.connect_mode or "under-reset").strip().lower()
+        if connect_mode == "attach":
+            connect_mode = "under-reset"
+        frequency = str(self._parse_frequency(payload.connect.frequency))
+
+        args = [
+            "flash",
+            "--no-config",
+            "--pack",
+            target_info.pack_path,
+            "-t",
+            target_info.target_name,
+            "-f",
+            frequency,
+            "-M",
+            connect_mode,
+            "-e",
+            payload.erase_mode or "sector",
+            "--format",
+            file_ext or "hex",
+        ]
+        if payload.connect.probe_uid:
+            args.extend(["-u", payload.connect.probe_uid])
+        if base_address is not None:
+            args.extend(["-a", f"0x{base_address:08X}"])
+        if payload.trust_crc:
+            args.append("--trust-crc")
+        if not payload.reset_after_download:
+            args.append("--no-reset")
+        args.append(file_path)
+        return args
+
+    def _read_process_output(self) -> None:
+        if self._process is None:
+            return
+        data = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        self._consume_process_output_chunk(data)
+
+    def _consume_process_output_chunk(self, data: str) -> None:
+        if not data:
+            return
+
+        clean_data = self._strip_ansi(data)
+        if not clean_data:
+            return
+
+        for char in clean_data:
+            if char in "\r\n":
+                self._flush_process_line_buffer()
+                continue
+            self._process_line_buffer += char
+
+        self._consume_live_progress_fragment(self._process_line_buffer)
+
+    def _flush_process_line_buffer(self) -> None:
+        line = self._process_line_buffer.strip()
+        self._process_line_buffer = ""
+        if not line:
+            return
+        if self._consume_process_output_line(line):
+            return
+        self._post_event(LogEvent(line))
+
+    def _consume_process_output_line(self, line: str) -> bool:
+        text = self._strip_ansi(line).strip()
+        if not text:
+            return True
+
+        lowered = text.lower()
+        if "erasing..." in lowered:
+            self._process_progress_phase = "erase"
+            self._report_progress("download", PYOCD_PROGRESS_PHASE_RANGES["erase"][0])
+            return False
+        if "programming..." in lowered:
+            self._process_progress_phase = "program"
+            self._report_progress("download", PYOCD_PROGRESS_PHASE_RANGES["program"][0])
+            return False
+
+        if self._update_progress_template(text):
+            return True
+        if self._update_progress_from_fragment(text):
+            return True
+        return False
+
+    def _consume_live_progress_fragment(self, line: str) -> None:
+        text = self._strip_ansi(line).strip()
+        if not text:
+            return
+        self._update_progress_template(text)
+        self._update_progress_from_fragment(text)
+
+    def _update_progress_template(self, text: str) -> bool:
+        if not self._looks_like_progress_fragment(text):
+            return False
+        if "-" not in text:
+            return False
+
+        slots = self._count_progress_slots(text)
+        if slots > 0:
+            self._process_progress_total_steps = slots
+        return True
+
+    def _update_progress_from_fragment(self, text: str) -> bool:
+        if not self._looks_like_progress_fragment(text):
+            return False
+        if self._process_progress_phase not in PYOCD_PROGRESS_PHASE_RANGES:
+            return True
+
+        filled_steps = text.count("=")
+        total_steps = max(self._process_progress_total_steps, filled_steps, 1)
+        if "]" in text:
+            filled_steps = total_steps
+
+        start, end = PYOCD_PROGRESS_PHASE_RANGES[self._process_progress_phase]
+        ratio = min(1.0, filled_steps / total_steps)
+        self._report_progress("download", start + (end - start) * ratio)
+        return True
+
+    @staticmethod
+    def _count_progress_slots(text: str) -> int:
+        return sum(1 for char in text if char in "-=")
+
+    @staticmethod
+    def _looks_like_progress_fragment(text: str) -> bool:
+        return bool(PYOCD_PROGRESS_FRAGMENT_RE.fullmatch(text))
+
+    @staticmethod
+    def _strip_ansi(text: str) -> str:
+        return ANSI_ESCAPE_RE.sub("", text)
+
+    def _handle_process_finished(self, exit_code: int, exit_status) -> None:
+        self._process_timeout_timer.stop()
+        self._flush_process_line_buffer()
+        success = exit_code == 0
+        message = "固件下载完成。" if success else f"pyOCD 下载失败，退出码: {exit_code}"
+        self._finish_process_action(success, exit_code, message)
+
+    def _handle_process_error(self, error) -> None:
+        if self._process is None:
+            return
+        self._post_event(LogEvent(f"pyOCD process error: {self._process.errorString()}", "error"))
+
+    def _kill_process_on_timeout(self) -> None:
+        if self._process is None:
+            return
+        self._post_event(LogEvent("pyOCD 下载超时，正在终止进程。", "error"))
+        self._process.kill()
+
+    def _finish_process_action(self, success: bool, exit_code: int, message: str) -> None:
+        action = self._process_action or "download"
+        if self._process is not None:
+            self._process.deleteLater()
+            self._process = None
+        self._process_action = None
+        self._busy = False
+        self._post_event(LogEvent(message, None if success else "error"))
+        if success:
+            self._post_event(ProgressEvent(action, 100.0))
+        else:
+            self._post_event(MessageEvent("执行失败", message, "error"))
+        self._post_event(StateEvent(busy=False, action=action))
+        self._post_event(ActionFinishedEvent(action=action, success=success, exit_code=exit_code, exit_status=None))
+
+    @staticmethod
+    def _pyocd_command() -> tuple[str, list[str]]:
+        python_executable = Path(sys.executable)
+        if python_executable.name.lower() in {"python.exe", "pythonw.exe", "python"}:
+            return str(python_executable), ["-m", "pyocd"]
+
+        executable = Path(sys.executable).with_name("pyocd.exe")
+        if executable.exists():
+            return str(executable), []
+        return "pyocd", []
 
     def _scan_probes_worker(self) -> None:
         probes = self.scan_daplink_probes()
@@ -349,11 +630,14 @@ class DaplinkPyocdSession(QObject):
         else:
             self._post_event(LogEvent("未扫描到 DAPLink/CMSIS-DAP 调试器。", "error"))
 
-    def _load_targets_worker(self) -> None:
+    def _load_targets_worker(self, silent: bool = False) -> None:
         pack_paths, targets = self.discover_pack_targets()
         self._pack_paths = pack_paths
         self._target_items = targets
         self._post_event(TargetsEvent(targets, [str(path) for path in pack_paths]))
+
+        if silent:
+            return
 
         if not pack_paths:
             self._post_event(LogEvent(f"Pack 目录为空: {self.pack_dir()}", "error"))
@@ -495,9 +779,20 @@ class DaplinkPyocdSession(QObject):
         if self._event_receiver is not None:
             QCoreApplication.postEvent(self._event_receiver, evt)
 
+    @staticmethod
+    def _format_worker_error(exc: Exception) -> str:
+        text = str(exc) or exc.__class__.__name__
+        lowered = text.lower()
+        if "read error" in lowered or "i/o" in lowered or "hid" in lowered:
+            return (
+                "DAPLink I/O read error. Close the serial session for this device, "
+                "replug DAPLink, lower SWD frequency, then try again."
+            )
+        return text
+
     @classmethod
     def pack_dir(cls) -> Path:
-        return Path(DirPathsInstance.McuPack)
+        return Path(DirPathsInstance.McuPackDir)
 
     @classmethod
     def discover_pack_targets(cls) -> tuple[list[Path], list[DaplinkTargetInfo]]:
