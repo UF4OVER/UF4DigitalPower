@@ -385,6 +385,11 @@ class PowerPage(ScrollArea):
         self._plotRefreshTimer = QTimer(self)
         self._plotRefreshTimer.setInterval(200)
         self._plotRefreshTimer.timeout.connect(self._flushPlotUpdate)
+        self._writePollRestartTimer = QTimer(self)
+        self._writePollRestartTimer.setSingleShot(True)
+        self._writePollRestartTimer.timeout.connect(
+            self._restartAutoPollingAfterWrite
+        )
         self._history = {
             "t": collections.deque(maxlen=240),
             "vin": collections.deque(maxlen=240),
@@ -658,6 +663,7 @@ class PowerPage(ScrollArea):
 
         self._shutdownDone = True
         self._plotRefreshTimer.stop()
+        self._writePollRestartTimer.stop()
 
         try:
             self._scanner.stop()
@@ -845,6 +851,8 @@ class PowerPage(ScrollArea):
         return "DEBUG_JUDGEMENT: type27 is reasonable, if UI is still wrong check host parsing/binding."
 
     def _applyDisconnectedState(self) -> None:
+        self._writePollingRestartPending = False
+        self._writePollRestartTimer.stop()
         self.deviceLabel.setText(self.tr("Disconnected"))
         self.stateBadge.setText(self.tr("OFFLINE"))
         self.stateBadge.setProperty("onlineState", "offline")
@@ -896,7 +904,9 @@ class PowerPage(ScrollArea):
 
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:
         self._writePollingRestartPending = False
-        QTimer.singleShot(WRITE_POLL_RESTART_DELAY_MS, self._restartAutoPollingAfterWrite)
+        # Debounce clustered write/error callbacks so polling restart is requested once.
+        self._writePollRestartTimer.stop()
+        self._writePollRestartTimer.start(WRITE_POLL_RESTART_DELAY_MS)
 
     def _restartAutoPollingAfterWrite(self) -> None:
         if self._shutdownDone:

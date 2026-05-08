@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QLabel, QWidget
+from PyQt5.QtWidgets import QLabel, QWidget, QApplication
 
 from Config import AUTHOR, FEEDBACK_URL, HELP_URL, VERSION, YEAR, cfg
 from App.Core import (
@@ -211,7 +211,7 @@ class SettingsPage(ScrollArea):
     def __showRestartTooltip(self):
         InfoBar.success(
             self.tr("Saved"),
-            self.tr("Restart the App to fully apply the change"),
+            self.tr("Restart the app to fully apply the change"),
             duration=1500,
             parent=self,
         )
@@ -251,7 +251,7 @@ class SettingsPage(ScrollArea):
         language_manager.save_language(selectedKey)
         InfoBar.success(
             self.tr("Settings saved"),
-            self.tr("Restart the App to fully apply the change"),
+            self.tr("Restart the app to fully apply the change"),
             duration=2000,
             parent=self,
         )
