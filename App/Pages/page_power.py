@@ -5,11 +5,26 @@ import collections
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pyqtgraph as pg
-from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, QIODevice, QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QFileDialog, QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+try:
+    from PyQt5.QtBluetooth import (
+        QBluetoothAddress,
+        QBluetoothDeviceDiscoveryAgent,
+        QBluetoothLocalDevice,
+        QBluetoothSocket,
+        QBluetoothUuid,
+    )
+except Exception:
+    QBluetoothAddress = None
+    QBluetoothDeviceDiscoveryAgent = None
+    QBluetoothLocalDevice = None
+    QBluetoothSocket = None
+    QBluetoothUuid = None
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -31,7 +46,21 @@ from qfluentwidgets import (
 )
 
 from Config import SettingMangerInstance, cfg, logger
-from App.Core import DeviceScanner, StyleSheet, showMessage
+from App.Core import (
+    DeviceScanner,
+    ErrorEvent,
+    RxEvent,
+    SendEvent,
+    SerialConfig,
+    SerialEventType,
+    SerialSession,
+    SerialState,
+    StateEvent,
+    StyleSheet,
+    TxEvent,
+    listSerialPorts,
+    showMessage,
+)
 from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
@@ -40,6 +69,28 @@ POWER_POLL_INTERVAL_MS = 200
 WRITE_POLL_RESTART_DELAY_MS = 600
 PLOT_Y_MIN = 0
 PLOT_Y_MAX = 45
+
+POWER_TEXT = {
+    "Core Temperature": "核心温度",
+    "Board Temperature": "板载温度",
+    "CC/CV Mode": "CC/CV 模式",
+    "Topology": "拓扑",
+    "State Machine": "状态机",
+    "Fault Flags": "故障标志",
+    "Fan PWM": "风扇 PWM",
+    "Output Voltage Setpoint": "输出电压设定",
+    "Output Current Setpoint": "输出电流设定",
+    "OVP Threshold": "过压保护阈值",
+    "OCP Threshold": "过流保护阈值",
+    "OTP Threshold": "过温保护阈值",
+    "Fan Set Value": "风扇设定值",
+    "Input Voltage": "输入电压",
+    "Input Current": "输入电流",
+    "Input Power": "输入功率",
+    "Output Voltage": "输出电压",
+    "Output Current": "输出电流",
+    "Output Power": "输出功率",
+}
 
 
 def _readPortIdentity() -> tuple[int, int]:
@@ -168,7 +219,7 @@ class ParameterRow(QWidget):
         )
 
     def applyTexts(self) -> None:
-        self.nameLabel.setText(self.tr(self._name))
+        self.nameLabel.setText(POWER_TEXT.get(self._name, self._name))
         if self._editable:
             self.editor.setPlaceholderText(self._unit or "value")
 
@@ -238,14 +289,14 @@ class TrendPlotCard(CardWidget):
         self.refreshTheme()
 
     def applyTexts(self) -> None:
-        self.titleLabel.setText(self.tr("Voltage / Current Trend"))
-        self.tipLabel.setText(self.tr("Drag to pan, wheel to zoom; live updates keep the current view"))
-        self.saveButton.setText(self.tr("Save Image"))
+        self.titleLabel.setText('电压 / 电流趋势')
+        self.tipLabel.setText('拖动平移，滚轮缩放；实时刷新会保持当前视图')
+        self.saveButton.setText('保存图片')
 
     def saveImage(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            self.tr("Select save folder"),
+            '选择保存文件夹',
             str(Path.home()),
         )
         if not folder:
@@ -255,16 +306,16 @@ class TrendPlotCard(CardWidget):
         if not self.plotWidget.grab().save(str(path), "PNG"):
             showMessage(
                 self,
-                self.tr("Action failed"),
-                self.tr("Failed to save chart image."),
+                '操作失败',
+                '图表图片保存失败。',
                 level="error",
             )
             return
 
         showMessage(
             self,
-            self.tr("Chart saved"),
-            self.tr("Saved to {path}").format(path=str(path)),
+            '图表已保存',
+            '已保存到 {path}'.format(path=str(path)),
             level="success",
         )
 
@@ -305,8 +356,8 @@ class TrendPlotCard(CardWidget):
         plotItem.getAxis("bottom").setTextPen(axis)
         plotItem.getAxis("left").setPen(pg.mkPen(axis))
         plotItem.getAxis("bottom").setPen(pg.mkPen(axis))
-        plotItem.getAxis("left").setLabel(self.tr("Voltage / Current"), color=axis, units="V / A")
-        plotItem.getAxis("bottom").setLabel(self.tr("Samples"), color=axis)
+        plotItem.getAxis("left").setLabel('电压 / 电流', color=axis, units="V / A")
+        plotItem.getAxis("bottom").setLabel('采样点', color=axis)
         plotItem.getViewBox().setBorder(pg.mkPen(borderPenColor))
         plotItem.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
 
@@ -355,6 +406,84 @@ class TrendPlotCard(CardWidget):
             self._viewInitialized = True
 
 
+class PowerBluetoothSession(QObject):
+    def __init__(self, name: str, address: str, parent=None):
+        super().__init__(parent)
+        self.name = name
+        self.address = address
+        self.cfg = SimpleNamespace(port=name)
+        self._eventReceiver = None
+        self._socket = None
+
+    def set_event_receiver(self, receiver) -> None:
+        self._eventReceiver = receiver
+
+    @property
+    def is_open(self) -> bool:
+        return bool(self._socket) and self._socket.isOpen()
+
+    def open(self) -> None:
+        if self.is_open:
+            return
+        if QBluetoothSocket is None or QBluetoothAddress is None or QBluetoothUuid is None:
+            raise RuntimeError("当前环境不支持 Qt Bluetooth")
+
+        self._postEvent(StateEvent(SerialState.OPENING))
+        self._socket = QBluetoothSocket(QBluetoothSocket.RfcommProtocol)
+        self._socket.readyRead.connect(self._onReadyRead)
+        self._socket.error.connect(self._onError)
+        self._socket.connected.connect(lambda: self._postEvent(StateEvent(SerialState.OPEN)))
+        self._socket.disconnected.connect(lambda: self._postEvent(StateEvent(SerialState.CLOSED)))
+        self._socket.connectToService(
+            QBluetoothAddress(self.address),
+            QBluetoothUuid(QBluetoothUuid.SerialPort),
+            QIODevice.OpenModeFlag.ReadWrite,
+        )
+
+    def close(self) -> None:
+        if self._socket:
+            self._socket.close()
+            self._socket.deleteLater()
+            self._socket = None
+        self._postEvent(StateEvent(SerialState.CLOSED))
+
+    def write(self, data: bytes) -> int:
+        if not self.is_open:
+            raise RuntimeError("Bluetooth device is not connected")
+        written = int(self._socket.write(data))
+        self._postEvent(TxEvent(data))
+        return written
+
+    def event(self, event) -> bool:
+        if event.type() == int(SerialEventType.SEND):
+            payload = getattr(event, "payload", None)
+            data = getattr(payload, "data", b"") if payload is not None else b""
+            if data:
+                try:
+                    self.write(data)
+                except Exception as exc:
+                    self._postEvent(ErrorEvent(code=-1, message=str(exc), fatal=False))
+            return True
+        return super().event(event)
+
+    def _postEvent(self, event) -> None:
+        if self._eventReceiver is not None:
+            QCoreApplication.postEvent(self._eventReceiver, event)
+
+    def _onReadyRead(self) -> None:
+        if not self._socket:
+            return
+        raw = self._socket.readAll()
+        data = raw.data() if hasattr(raw, "data") else bytes(raw)
+        if data:
+            self._postEvent(RxEvent(data))
+
+    def _onError(self, error) -> None:
+        message = self._socket.errorString() if self._socket else str(error)
+        self._postEvent(ErrorEvent(code=int(error), message=message, fatal=True))
+        self._postEvent(StateEvent(SerialState.ERROR, info=message))
+
+
 class PowerPage(ScrollArea):
     attachSessionRequested = pyqtSignal(object)
     detachSessionRequested = pyqtSignal()
@@ -378,6 +507,9 @@ class PowerPage(ScrollArea):
         self._clientThread.finished.connect(self._client.deleteLater)
         self._clientThread.start()
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
+        self._manualSession = None
+        self._bluetoothDevices: dict[str, str] = {}
+        self._bluetoothDiscoveryAgent = None
         self._lastStatus: PowerStatus | None = None
         self._stagedOutputEnabled: bool | None = None
         self._lastVerboseLogTs = 0.0
@@ -425,7 +557,7 @@ class PowerPage(ScrollArea):
         self._refreshThemeBundle()
         self._applyTexts()
 
-        self._scanner.start()
+        self.refreshSerialPorts()
 
     def _initSummaryCard(self) -> None:
         self.summaryCard = CardWidget(self.scrollWidget)
@@ -434,7 +566,23 @@ class PowerPage(ScrollArea):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
 
-        self.deviceLabel = StrongBodyLabel(self.summaryCard)
+        self.connectionTypeLabel = BodyLabel(self.summaryCard)
+        self.connectionTypeCombo = ComboBox(self.summaryCard)
+        self.connectionTypeCombo.addItems(["串口", "蓝牙"])
+        self.connectionTypeCombo.setMinimumWidth(92)
+        self.portLabel = BodyLabel(self.summaryCard)
+        self.portCombo = ComboBox(self.summaryCard)
+        self.portCombo.setMinimumWidth(132)
+        self.baudLabel = BodyLabel(self.summaryCard)
+        self.baudCombo = ComboBox(self.summaryCard)
+        self.baudCombo.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"])
+        self.baudCombo.setCurrentText("921600")
+        self.baudCombo.setMinimumWidth(116)
+        self.bluetoothLabel = BodyLabel(self.summaryCard)
+        self.bluetoothCombo = ComboBox(self.summaryCard)
+        self.bluetoothCombo.setMinimumWidth(160)
+        self.refreshTargetButton = PushButton(FIF.SYNC, "", self.summaryCard)
+        self.connectButton = PrimaryPushButton(FIF.LINK, "", self.summaryCard)
         self.stateBadge = PillPushButton(self.summaryCard)
         self.stateBadge.setProperty("statusBadge", True)
         self.stateBadge.setProperty("onlineState", "offline")
@@ -448,10 +596,17 @@ class PowerPage(ScrollArea):
         self.refreshButton = PrimaryPushButton(FIF.SYNC, "", self.summaryCard)
         self.debugButton = PushButton(FIF.SEARCH, "", self.summaryCard)
 
-        self.deviceCaptionLabel = BodyLabel(self.summaryCard)
-        layout.addWidget(self.deviceCaptionLabel)
-        layout.addWidget(self.deviceLabel)
-        layout.addSpacing(18)
+        layout.addWidget(self.connectionTypeLabel)
+        layout.addWidget(self.connectionTypeCombo)
+        layout.addWidget(self.portLabel)
+        layout.addWidget(self.portCombo)
+        layout.addWidget(self.baudLabel)
+        layout.addWidget(self.baudCombo)
+        layout.addWidget(self.bluetoothLabel)
+        layout.addWidget(self.bluetoothCombo)
+        layout.addWidget(self.refreshTargetButton)
+        layout.addWidget(self.connectButton)
+        layout.addSpacing(10)
         self.stateCaptionLabel = BodyLabel(self.summaryCard)
         layout.addWidget(self.stateCaptionLabel)
         layout.addWidget(self.stateBadge)
@@ -617,6 +772,9 @@ class PowerPage(ScrollArea):
         self.startPollingRequested.connect(self._client.start_polling)
         self.stopPollingRequested.connect(self._client.stop_polling)
 
+        self.connectionTypeCombo.currentTextChanged.connect(self._onConnectionTypeChanged)
+        self.refreshTargetButton.clicked.connect(self.refreshCurrentConnectionTargets)
+        self.connectButton.clicked.connect(self.toggleConnection)
         self.refreshButton.clicked.connect(self._readStatusOnce)
         self.debugButton.clicked.connect(self._runDebugSnapshot)
         self.autoPollSwitch.checkedChanged.connect(self._onAutoPollChanged)
@@ -626,16 +784,155 @@ class PowerPage(ScrollArea):
         self.clearLogButton.clicked.connect(self.logEdit.clear)
         cfg.themeChanged.connect(self._onThemeChanged)
 
+    def refreshSerialPorts(self) -> None:
+        ports = [p.strip() for p in (listSerialPorts() or []) if p and p.strip()]
+        current = self.portCombo.currentText().strip()
+        self.portCombo.clear()
+        if ports:
+            self.portCombo.addItems(ports)
+            if current in ports:
+                self.portCombo.setCurrentText(current)
+        self._appendLog(f"Ports: {ports}")
+
+    def refreshBluetoothDevices(self) -> None:
+        current = self.bluetoothCombo.currentText().strip()
+        self._bluetoothDevices.clear()
+        self.bluetoothCombo.clear()
+
+        if QBluetoothLocalDevice is None:
+            self._appendLog("ERR: 当前环境不支持 Qt Bluetooth")
+            return
+
+        try:
+            for localInfo in QBluetoothLocalDevice.allDevices():
+                localDevice = QBluetoothLocalDevice(localInfo.address())
+                for address in localDevice.connectedDevices():
+                    self._addBluetoothTarget(address.toString(), address.toString())
+        except Exception as exc:
+            self._appendLog(f"ERR: 蓝牙设备列表读取失败: {exc}")
+
+        if current in self._bluetoothDevices:
+            self.bluetoothCombo.setCurrentText(current)
+
+        self._appendLog(f"Bluetooth devices: {list(self._bluetoothDevices)}")
+        self._startBluetoothDiscovery()
+
+    def refreshCurrentConnectionTargets(self) -> None:
+        if self._isBluetoothMode():
+            self.refreshBluetoothDevices()
+        else:
+            self.refreshSerialPorts()
+
+    def toggleConnection(self) -> None:
+        if self._client.is_connected:
+            self._disconnectManualSession()
+        else:
+            self._connectSelectedTarget()
+
+    def _connectSelectedTarget(self) -> None:
+        if self._isBluetoothMode():
+            self._connectBluetoothTarget()
+        else:
+            self._connectSerialTarget()
+
+    def _connectSerialTarget(self) -> None:
+        port = self.portCombo.currentText().strip()
+        if not port:
+            self._appendLog("ERR: No serial port selected. Refresh first and select a port.")
+            return
+
+        baud = int(self.baudCombo.currentText().strip())
+        session = SerialSession(SerialConfig(port=port, baudrate=baud))
+        try:
+            session.open()
+        except Exception as exc:
+            self._appendLog(f"ERR: {exc}")
+            return
+
+        self._manualSession = session
+        self.onDeviceConnected(session)
+
+    def _connectBluetoothTarget(self) -> None:
+        target = self.bluetoothCombo.currentText().strip()
+        address = self._bluetoothDevices.get(target, "")
+        if not target or not address:
+            self._appendLog("ERR: No Bluetooth device selected. Refresh first and select a device.")
+            return
+
+        session = PowerBluetoothSession(target.rsplit(" (", 1)[0], address, self)
+        try:
+            session.open()
+        except Exception as exc:
+            self._appendLog(f"ERR: {exc}")
+            return
+
+        self._manualSession = session
+        self.onDeviceConnected(session)
+
+    def _disconnectManualSession(self) -> None:
+        self.stopPollingRequested.emit()
+        self.detachSessionRequested.emit()
+        try:
+            if self._manualSession:
+                self._manualSession.close()
+        except Exception as exc:
+            logger.error(f"PowerPage manual session close failed: {exc}")
+        self._manualSession = None
+        self._applyDisconnectedState()
+        self._appendLog("Device disconnected")
+
+    def _isBluetoothMode(self) -> bool:
+        return self.connectionTypeCombo.currentText().strip() == "蓝牙"
+
+    def _onConnectionTypeChanged(self, text: str) -> None:
+        isBluetooth = text.strip() == "蓝牙"
+        self.portLabel.setVisible(not isBluetooth)
+        self.portCombo.setVisible(not isBluetooth)
+        self.baudLabel.setVisible(not isBluetooth)
+        self.baudCombo.setVisible(not isBluetooth)
+        self.bluetoothLabel.setVisible(isBluetooth)
+        self.bluetoothCombo.setVisible(isBluetooth)
+
+    def _startBluetoothDiscovery(self) -> None:
+        if QBluetoothDeviceDiscoveryAgent is None:
+            return
+        try:
+            if self._bluetoothDiscoveryAgent:
+                self._bluetoothDiscoveryAgent.stop()
+                self._bluetoothDiscoveryAgent.deleteLater()
+            self._bluetoothDiscoveryAgent = QBluetoothDeviceDiscoveryAgent(self)
+            self._bluetoothDiscoveryAgent.deviceDiscovered.connect(self._onBluetoothDeviceDiscovered)
+            self._bluetoothDiscoveryAgent.start()
+        except Exception as exc:
+            self._appendLog(f"ERR: 蓝牙扫描启动失败: {exc}")
+
+    def _onBluetoothDeviceDiscovered(self, deviceInfo) -> None:
+        try:
+            name = deviceInfo.name().strip() or deviceInfo.address().toString()
+            address = deviceInfo.address().toString()
+        except Exception:
+            return
+        self._addBluetoothTarget(name, address)
+
+    def _addBluetoothTarget(self, name: str, address: str) -> None:
+        label = f"{name} ({address})" if name != address else address
+        if label in self._bluetoothDevices:
+            return
+        self._bluetoothDevices[label] = address
+        existing = [self.bluetoothCombo.itemText(i) for i in range(self.bluetoothCombo.count())]
+        if label not in existing:
+            self.bluetoothCombo.addItem(label)
+
     def onDeviceConnected(self, session) -> None:
         self.attachSessionRequested.emit(session)
-        self.deviceLabel.setText(session.cfg.port or self.tr("Unknown"))
-        self.stateBadge.setText(self.tr("ONLINE"))
+        self.stateBadge.setText('在线')
         self.stateBadge.setProperty("onlineState", "online")
-        self._appendLog(f"Connected on {session.cfg.port}")
+        self.connectButton.setText('断开')
+        self._appendLog(f"Connected on {getattr(session.cfg, 'port', '未知')}")
         showMessage(
             self,
-            self.tr("Device Connected"),
-            self.tr("Power device session attached."),
+            '设备已连接',
+            '电源设备会话已连接。',
             level="success",
         )
         if self.autoPollSwitch.isChecked():
@@ -649,8 +946,8 @@ class PowerPage(ScrollArea):
         self._appendLog("Device disconnected")
         showMessage(
             self,
-            self.tr("Device Disconnected"),
-            self.tr("Power device session closed."),
+            '设备已断开',
+            '电源设备会话已关闭。',
             level="error",
         )
 
@@ -670,6 +967,13 @@ class PowerPage(ScrollArea):
             self._scanner.stop()
         except Exception as exc:
             logger.error(f"PowerPage scanner shutdown failed: {exc}")
+
+        try:
+            if self._manualSession:
+                self._manualSession.close()
+        except Exception as exc:
+            logger.error(f"PowerPage manual session shutdown failed: {exc}")
+        self._manualSession = None
 
         try:
             if self._clientThread.isRunning():
@@ -756,8 +1060,9 @@ class PowerPage(ScrollArea):
         self._appendLog(f"Output switch staged as {'ON' if checked else 'OFF'}")
 
     def _onConnectionChanged(self, connected: bool) -> None:
-        self.stateBadge.setText(self.tr("ONLINE") if connected else self.tr("OFFLINE"))
+        self.stateBadge.setText('在线' if connected else '离线')
         self.stateBadge.setProperty("onlineState", "online" if connected else "offline")
+        self.connectButton.setText('断开' if connected else '连接')
         self._refreshStateBadgeStyle()
         if not connected:
             self._applyDisconnectedState()
@@ -767,27 +1072,27 @@ class PowerPage(ScrollArea):
         self._lastStatus = status
 
         self.metricCards["vin"].setMetric(
-            _MetricValue(self.tr("Input Voltage"), f"{status.vin_v:.3f}", "V"),
+            _MetricValue('输入电压', f"{status.vin_v:.3f}", "V"),
             f"raw source active | pin={status.pin_w:.2f} W",
         )
         self.metricCards["iin"].setMetric(
-            _MetricValue(self.tr("Input Current"), f"{status.iin_a:.3f}", "A"),
+            _MetricValue('输入电流', f"{status.iin_a:.3f}", "A"),
             f"efficiency basis | cc/cv={status.mode_name}",
         )
         self.metricCards["pin"].setMetric(
-            _MetricValue(self.tr("Input Power"), f"{status.pin_w:.3f}", "W"),
+            _MetricValue('输入功率', f"{status.pin_w:.3f}", "W"),
             f"fault mask 0x{status.fault_state:04X}",
         )
         self.metricCards["vout"].setMetric(
-            _MetricValue(self.tr("Output Voltage"), f"{status.vout_v:.3f}", "V"),
+            _MetricValue('输出电压', f"{status.vout_v:.3f}", "V"),
             f"ovp={status.ovp_set_value_v:.3f} V",
         )
         self.metricCards["iout"].setMetric(
-            _MetricValue(self.tr("Output Current"), f"{status.iout_a:.3f}", "A"),
+            _MetricValue('输出电流', f"{status.iout_a:.3f}", "A"),
             f"ocp={status.ocp_set_value_a:.3f} A",
         )
         self.metricCards["pout"].setMetric(
-            _MetricValue(self.tr("Output Power"), f"{status.pout_w:.3f}", "W"),
+            _MetricValue('输出功率', f"{status.pout_w:.3f}", "W"),
             f"efficiency={status.efficiency:.2f} %",
         )
 
@@ -797,7 +1102,7 @@ class PowerPage(ScrollArea):
         self.readParams["topology"].setDisplayValue(status.topology_name)
         self.readParams["state_flag"].setDisplayValue(status.state_flag_name)
         self.readParams["fault"].setDisplayValue(
-            pretty_faults(status.fault_state) or self.tr("None")
+            pretty_faults(status.fault_state) or '无'
         )
         self.readParams["fan_speed"].setDisplayValue(str(status.fan_speed))
 
@@ -885,9 +1190,10 @@ class PowerPage(ScrollArea):
         self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
         self._writePollRestartTimer.stop()
-        self.deviceLabel.setText(self.tr("Disconnected"))
-        self.stateBadge.setText(self.tr("OFFLINE"))
+        self.stateBadge.setText('离线')
         self.stateBadge.setProperty("onlineState", "offline")
+        if hasattr(self, "connectButton"):
+            self.connectButton.setText('连接')
         self._refreshStateBadgeStyle()
         self.outputSwitch.blockSignals(True)
         self.outputSwitch.setChecked(False)
@@ -904,7 +1210,7 @@ class PowerPage(ScrollArea):
 
     def _onClientError(self, message: str) -> None:
         self._appendLog(f"ERR: {message}")
-        showMessage(self, self.tr("Communication Error"), message, level="error")
+        showMessage(self, '通信错误', message, level="error")
         if self._writePollingRestartPending:
             self._scheduleAutoPollingRestartAfterWrite()
 
@@ -915,8 +1221,8 @@ class PowerPage(ScrollArea):
     def _onOutputLimitsWritten(self) -> None:
         showMessage(
             self,
-            self.tr("Output Updated"),
-            self.tr("Voltage/current/output state have been written."),
+            '输出参数已更新',
+            '电压、电流和输出状态已写入。',
             level="success",
         )
         self._scheduleAutoPollingRestartAfterWrite()
@@ -924,8 +1230,8 @@ class PowerPage(ScrollArea):
     def _onProtectionValuesWritten(self) -> None:
         showMessage(
             self,
-            self.tr("Protection Updated"),
-            self.tr("OVP/OCP/OTP/Fan parameters have been written."),
+            '保护参数已更新',
+            'OVP/OCP/OTP/风扇参数已写入。',
             level="success",
         )
         self._scheduleAutoPollingRestartAfterWrite()
@@ -951,13 +1257,18 @@ class PowerPage(ScrollArea):
         self._appendLog("Host polling restart requested after write")
 
     def _applyTexts(self) -> None:
-        self.titleLabel.setText(self.tr("Power Dashboard"))
-        self.deviceCaptionLabel.setText(self.tr("Device"))
-        self.stateCaptionLabel.setText(self.tr("State"))
-        self.autoPollSwitch.setOnText(self.tr("Auto Poll"))
-        self.autoPollSwitch.setOffText(self.tr("Auto Poll"))
-        self.refreshButton.setText(self.tr("Refresh Now"))
-        self.debugButton.setText(self.tr("Debug Snapshot"))
+        self.titleLabel.setText('电源面板')
+        self.connectionTypeLabel.setText('连接方式')
+        self.portLabel.setText('串口')
+        self.baudLabel.setText('波特率')
+        self.bluetoothLabel.setText('蓝牙')
+        self.refreshTargetButton.setText('刷新设备')
+        self.connectButton.setText('断开' if self._client.is_connected else '连接')
+        self.stateCaptionLabel.setText('状态')
+        self.autoPollSwitch.setOnText('自动轮询')
+        self.autoPollSwitch.setOffText('自动轮询')
+        self.refreshButton.setText('立即刷新')
+        self.debugButton.setText('调试快照')
 
         metricTitles = {
             "vin": "Input Voltage",
@@ -968,29 +1279,30 @@ class PowerPage(ScrollArea):
             "pout": "Output Power",
         }
         for key, text in metricTitles.items():
-            self.metricCards[key].titleLabel.setText(self.tr(text))
+            self.metricCards[key].titleLabel.setText(POWER_TEXT.get(text, text))
 
-        self.readCardTitle.setText(self.tr("Live Read Parameters"))
-        self.writeCardTitle.setText(self.tr("Output and Protection Settings"))
+        self.readCardTitle.setText('实时只读参数')
+        self.writeCardTitle.setText('输出设定与保护阈值')
         for row in list(self.readParams.values()) + list(self.writeParams.values()):
             row.applyTexts()
 
-        self.outputSwitch.setOnText(self.tr("Output ON"))
-        self.outputSwitch.setOffText(self.tr("Output OFF"))
-        self.applySetButton.setText(self.tr("Apply Output"))
-        self.applyProtectButton.setText(self.tr("Apply Protect"))
+        self.outputSwitch.setOnText('输出开启')
+        self.outputSwitch.setOffText('输出关闭')
+        self.applySetButton.setText('应用输出参数')
+        self.applyProtectButton.setText('应用保护参数')
 
-        self.logCardTitle.setText(self.tr("Protocol / Status Log"))
+        self.logCardTitle.setText('协议 / 状态日志')
         currentLevel = self.logLevelCombo.currentData()
         self.logLevelCombo.blockSignals(True)
         self.logLevelCombo.clear()
-        self.logLevelCombo.addItem(self.tr("Normal"), userData="normal")
-        self.logLevelCombo.addItem(self.tr("Verbose"), userData="verbose")
+        self.logLevelCombo.addItem('普通', userData="normal")
+        self.logLevelCombo.addItem('详细', userData="verbose")
         self.logLevelCombo.setCurrentIndex(1 if currentLevel == "verbose" else 0)
         self.logLevelCombo.blockSignals(False)
-        self.clearLogButton.setText(self.tr("Clear"))
+        self.clearLogButton.setText('清空')
 
         self.plotCard.applyTexts()
+        self._onConnectionTypeChanged(self.connectionTypeCombo.currentText())
         self._applyDisconnectedState() if not self._client.is_connected else None
 
     def _onThemeChanged(self, *_):

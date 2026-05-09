@@ -21,8 +21,8 @@ from qfluentwidgets import setTheme
 
 from Config import AppIconPath, cfg
 
-from App.Core import StyleSheet, language_manager, logger, load_saved_font
-from App.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
+from App.Core import StyleSheet, logger, load_saved_font
+from App.Pages import BatteryPage, DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 
 class Window(MSFluentWindow):
@@ -35,6 +35,7 @@ class Window(MSFluentWindow):
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
+        self.batteryInterface = BatteryPage(self)
         self.daplinkInterface = DaplinkFlashPage(self)
         self.settingInterface = SettingsPage(self)
 
@@ -45,6 +46,7 @@ class Window(MSFluentWindow):
         self._onThemeChanged()
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
+        StyleSheet.BATTERY_PAGE.apply(self.batteryInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
         StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
         self._applyTexts()
@@ -57,28 +59,31 @@ class Window(MSFluentWindow):
 
     def __initNavigation(self):
         self.homeNavItem = self.addSubInterface(
-            self.homeInterface, FIF.HOME, self.tr("Home"), FIF.HOME_FILL
+            self.homeInterface, FIF.HOME, '主页', FIF.HOME_FILL
         )
         self.deviceNavItem = self.addSubInterface(
-            self.deviceInterface, FIF.DEVELOPER_TOOLS, self.tr("Serial")
+            self.deviceInterface, FIF.DEVELOPER_TOOLS, '串口'
         )
         self.powerNavItem = self.addSubInterface(
-            self.powerInterface, FIF.POWER_BUTTON, self.tr("Device")
+            self.powerInterface, FIF.POWER_BUTTON, '设备'
+        )
+        self.batteryNavItem = self.addSubInterface(
+            self.batteryInterface, FIF.POWER_BUTTON, '电池'
         )
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface, FIF.IOT, self.tr("DAPLink")
+            self.daplinkInterface, FIF.IOT, 'DAPLink'
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
             FIF.SETTING,
-            self.tr("Settings"),
+            '设置',
             FIF.SETTING,
             NavigationItemPosition.BOTTOM,
         )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
-        self.resize(1200, 800)
+        self.resize(1400, 1100)
         # self.setTitleBar(FluentWidgetTitleBar(self))
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("Fluor4CellPower")
@@ -115,11 +120,12 @@ class Window(MSFluentWindow):
             self.homeInterface.requestUpdateCheck(manual=False)
 
     def _applyTexts(self):
-        self.homeNavItem.setText(self.tr("Home"))
-        self.deviceNavItem.setText(self.tr("Serial"))
-        self.powerNavItem.setText(self.tr("Device"))
+        self.homeNavItem.setText('主页')
+        self.deviceNavItem.setText('串口')
+        self.powerNavItem.setText('设备')
+        self.batteryNavItem.setText('电池')
         self.daplinkNavItem.setText("DAPLink")
-        self.settingNavItem.setText(self.tr("Settings"))
+        self.settingNavItem.setText('设置')
         self.setWindowTitle("Fluor4CellPower")
 
 
@@ -137,7 +143,6 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
 
         # setTheme(cfg.themeMode.value)
-        language_manager.apply_language(app)
         load_saved_font(app)
 
         w = Window()

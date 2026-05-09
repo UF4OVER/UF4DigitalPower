@@ -194,18 +194,18 @@ class DaplinkFlashPage(ScrollArea):
         self.infoTitleLabels: dict[str, BodyLabel] = {}
 
         fields = [
-            ("probe_uid", "Probe UID"),
-            ("probe_description", "Probe"),
-            ("vendor", "Vendor"),
-            ("product", "Product"),
-            ("target_name", "Target"),
-            ("part_number", "Part Number"),
-            ("family", "Family"),
-            ("flash_start", "Flash Start"),
-            ("flash_size", "Flash Size"),
-            ("ram_size", "RAM Size"),
-            ("pack_name", "Pack Name"),
-            ("pack_version", "Pack Version"),
+            ("probe_uid", "探针 UID"),
+            ("probe_description", "探针"),
+            ("vendor", "厂商"),
+            ("product", "产品"),
+            ("target_name", "目标"),
+            ("part_number", "料号"),
+            ("family", "系列"),
+            ("flash_start", "Flash 起始地址"),
+            ("flash_size", "Flash 大小"),
+            ("ram_size", "RAM 大小"),
+            ("pack_name", "Pack 名称"),
+            ("pack_version", "Pack 版本"),
         ]
 
         for index, (key, titleText) in enumerate(fields):
@@ -336,60 +336,60 @@ class DaplinkFlashPage(ScrollArea):
         self.vBoxLayout.addWidget(self.logCard, 1)
 
     def _applyTexts(self):
-        self.titleLabel.setText(self.tr("DAPLink Download"))
-        self.connectionCardTitle.setText(self.tr("DAPLink connection"))
-        self.probeCombo.setPlaceholderText(self.tr("Scan and select DAPLink"))
-        self.scanProbeBtn.setText(self.tr("Scan DAPLink"))
-        self.connectBtn.setText(self.tr("Connect"))
+        self.titleLabel.setText('DAPLink 下载')
+        self.connectionCardTitle.setText('DAPLink 连接')
+        self.probeCombo.setPlaceholderText('扫描并选择 DAPLink')
+        self.scanProbeBtn.setText('扫描 DAPLink')
+        self.connectBtn.setText('连接')
 
-        self.targetLabel.setText(self.tr("Local pack target"))
+        self.targetLabel.setText('本地 Pack Target')
         self.targetCombo.setPlaceholderText(
-            self.tr("Load targets from Resources/Tools/Pack")
+            '从 Resources/Tools/Pack 加载 target'
         )
-        self.reloadPackBtn.setText(self.tr("Reload pack"))
-        self.targetFilterLabel.setText(self.tr("Target filter"))
+        self.reloadPackBtn.setText('重载 Pack')
+        self.targetFilterLabel.setText('目标过滤')
         self.targetFilterInput.setPlaceholderText(
-            self.tr("Enter STM32G474 / G474 / RETx or other keywords")
+            '输入 STM32G474 / G474 / RETx 等关键字'
         )
-        self.frequencyLabel.setText(self.tr("SWD frequency"))
+        self.frequencyLabel.setText('SWD 频率')
         self.frequencyInput.setPlaceholderText(
-            self.tr("For example 1000000 / 4M / 4000K")
+            '例如 1000000 / 4M / 4000K'
         )
-        self.connectModeLabel.setText(self.tr("Connect mode"))
-        self.stateTitleLabel.setText(self.tr("State"))
-        self.packSourceTitleLabel.setText(self.tr("Pack source"))
+        self.connectModeLabel.setText('连接模式')
+        self.stateTitleLabel.setText('状态')
+        self.packSourceTitleLabel.setText('Pack 来源')
 
-        self.infoCardTitle.setText(self.tr("Probe / target info"))
+        self.infoCardTitle.setText('探针 / 目标信息')
         for key, label in self.infoTitleLabels.items():
-            label.setText(self.tr(label.property("sourceText")))
+            label.setText(label.property("sourceText"))
 
-        self.downloadCardTitle.setText(self.tr("Download firmware"))
-        self.firmwareSourceLabel.setText(self.tr("Firmware source"))
+        self.downloadCardTitle.setText('下载固件')
+        self.firmwareSourceLabel.setText('固件来源')
         self._setFirmwareSourceItems()
         self.internalFirmwareCombo.setPlaceholderText(
-            self.tr("Select internal firmware from Resources/Firmware")
+            '从 Resources/Firmware 选择内部固件'
         )
-        self.refreshFirmwareButton.setText(self.tr("Refresh firmware"))
+        self.refreshFirmwareButton.setText('刷新固件')
         self.filePathInput.setPlaceholderText(
-            self.tr("Select the firmware file to download (.bin/.hex/.elf)")
+            '选择待下载的固件文件（.bin/.hex/.elf）'
         )
-        self.browseButton.setText(self.tr("Browse"))
-        self.baseAddressLabel.setText(self.tr("Bin start address"))
+        self.browseButton.setText('浏览')
+        self.baseAddressLabel.setText('Bin 起始地址')
         self.baseAddressInput.setPlaceholderText(
-            self.tr("If empty, use the flash start address from the pack")
+            '为空时使用 Pack 中的 Flash 起始地址'
         )
-        self.eraseModeLabel.setText(self.tr("Erase strategy"))
-        self.smartFlashSwitch.setOnText(self.tr("Smart Flash"))
-        self.smartFlashSwitch.setOffText(self.tr("Smart Flash"))
-        self.trustCrcSwitch.setOnText(self.tr("Trust CRC"))
-        self.trustCrcSwitch.setOffText(self.tr("Trust CRC"))
-        self.resetAfterDownloadSwitch.setOnText(self.tr("Reset when finished"))
-        self.resetAfterDownloadSwitch.setOffText(self.tr("Reset when finished"))
-        self.downloadButton.setText(self.tr("Start download"))
+        self.eraseModeLabel.setText('擦除策略')
+        self.smartFlashSwitch.setOnText('智能下载')
+        self.smartFlashSwitch.setOffText('智能下载')
+        self.trustCrcSwitch.setOnText('信任 CRC')
+        self.trustCrcSwitch.setOffText('信任 CRC')
+        self.resetAfterDownloadSwitch.setOnText('完成后复位')
+        self.resetAfterDownloadSwitch.setOffText('完成后复位')
+        self.downloadButton.setText('开始下载')
 
-        self.logCardTitle.setText(self.tr("Run log"))
-        self.clearLogButton.setText(self.tr("Clear log"))
-        self.saveLogButton.setText(self.tr("Save log"))
+        self.logCardTitle.setText('运行日志')
+        self.clearLogButton.setText('清空日志')
+        self.saveLogButton.setText('保存日志')
 
         self._applyProgress(self.progressBar.value())
         self._reloadInternalFirmwareOptions()
@@ -421,9 +421,9 @@ class DaplinkFlashPage(ScrollArea):
     def browseFile(self):
         filePath, _ = QFileDialog.getOpenFileName(
             self,
-            self.tr("Select firmware"),
+            '选择固件',
             "",
-            self.tr("Firmware Files (*.bin *.hex *.elf *.axf)"),
+            '固件文件 (*.bin *.hex *.elf *.axf)',
         )
         if filePath:
             self.filePathInput.setText(filePath)
@@ -435,8 +435,8 @@ class DaplinkFlashPage(ScrollArea):
 
         self.firmwareSourceCombo.blockSignals(True)
         self.firmwareSourceCombo.clear()
-        self.firmwareSourceCombo.addItem(self.tr("Internal firmware"))
-        self.firmwareSourceCombo.addItem(self.tr("External file"))
+        self.firmwareSourceCombo.addItem('内部固件')
+        self.firmwareSourceCombo.addItem('外部文件')
 
         self.firmwareSourceCombo.setCurrentIndex(min(currentIndex, self.firmwareSourceCombo.count() - 1))
         self.firmwareSourceCombo.blockSignals(False)
@@ -454,7 +454,7 @@ class DaplinkFlashPage(ScrollArea):
         self.internalFirmwareCombo.blockSignals(True)
         self.internalFirmwareCombo.clear()
         if not self._internalFirmwareItems:
-            self.internalFirmwareCombo.addItem(self.tr("No internal firmware found"))
+            self.internalFirmwareCombo.addItem('未找到内部固件')
         else:
             for path in self._internalFirmwareItems:
                 self.internalFirmwareCombo.addItem(self._formatInternalFirmwareItem(path))
@@ -533,16 +533,16 @@ class DaplinkFlashPage(ScrollArea):
 
         if firmwareKind == "Power" and "g474" not in targetText:
             self.showMessage(
-                self.tr("Firmware and target mismatch"),
-                self.tr("Power firmware must be downloaded to STM32G474."),
+                '固件与目标不匹配',
+                'Power 固件必须下载到 STM32G474。',
                 "warning",
             )
             return False
 
         if firmwareKind == "Upper" and "h750" not in targetText:
             self.showMessage(
-                self.tr("Firmware and target mismatch"),
-                self.tr("Upper firmware must be downloaded to STM32H750."),
+                '固件与目标不匹配',
+                'Upper 固件必须下载到 STM32H750。',
                 "warning",
             )
             return False
@@ -551,15 +551,15 @@ class DaplinkFlashPage(ScrollArea):
 
     def clearLog(self):
         self.logEdit.clear()
-        self.log(self.tr("The log has been cleared."), "#888888")
+        self.log('日志已清空。', "#888888")
 
     def saveLog(self):
         defaultFile = str(Path(DirPathsInstance.LogDir) / "daplink_pyocd_ui.log")
         filePath, _ = QFileDialog.getSaveFileName(
             self,
-            self.tr("Save logs"),
+            '保存日志',
             defaultFile,
-            self.tr("Log Files (*.log *.txt)"),
+            '日志文件 (*.log *.txt)',
         )
         if not filePath:
             return
@@ -568,8 +568,8 @@ class DaplinkFlashPage(ScrollArea):
             f.write(self.logEdit.toPlainText())
 
         self.showMessage(
-            self.tr("Log saved"),
-            self.tr("Saved to {path}").format(path=filePath),
+            '日志已保存',
+            '已保存到 {path}'.format(path=filePath),
             "success",
         )
 
@@ -598,16 +598,16 @@ class DaplinkFlashPage(ScrollArea):
         filePath = self._selectedFirmwarePath()
         if not filePath or not os.path.isfile(filePath):
             self.showMessage(
-                self.tr("Invalid firmware"),
-                self.tr("Please select a valid firmware file first."),
+                '固件无效',
+                '请先选择有效的固件文件。',
                 "warning",
             )
             return
 
         if self._selectedTarget() is None:
             self.showMessage(
-                self.tr("Missing target"),
-                self.tr("Please select the target from the local pack first."),
+                '缺少目标',
+                '请先从本地 Pack 中选择目标。',
                 "warning",
             )
             return
@@ -621,10 +621,8 @@ class DaplinkFlashPage(ScrollArea):
                 int(baseAddress, 0)
             except ValueError:
                 self.showMessage(
-                    self.tr("Invalid address"),
-                    self.tr(
-                        "The bin start address must be a decimal or hexadecimal number."
-                    ),
+                    '地址无效',
+                    "Bin 起始地址必须是十进制或十六进制数字。",
                     "warning",
                 )
                 return
@@ -714,13 +712,11 @@ class DaplinkFlashPage(ScrollArea):
         self._probeItems = probes
 
         if not probes:
-            self.probeCombo.addItem(self.tr("No DAPLink / CMSIS-DAP found"))
-            self.stateLabel.setText(self.tr("No debugger found"))
+            self.probeCombo.addItem('未发现 DAPLink / CMSIS-DAP')
+            self.stateLabel.setText('未发现调试器')
             self.stateLabel.setStyleSheet("font-weight: bold; color: #C42B1C;")
             self.summaryLabel.setText(
-                self.tr(
-                    "DAPLink / CMSIS-DAP was not found. Check the USB connection, driver, and firmware."
-                )
+                "未扫描到 DAPLink / CMSIS-DAP，请检查 USB、驱动和固件。"
             )
             self.summaryLabel.setStyleSheet("color: #C42B1C;")
             return
@@ -732,13 +728,11 @@ class DaplinkFlashPage(ScrollArea):
 
         self.probeCombo.setCurrentIndex(0)
         self.stateLabel.setText(
-            self.tr("Detected {count} debugger(s)").format(count=len(probes))
+            '已发现 {count} 个调试器'.format(count=len(probes))
         )
         self.stateLabel.setStyleSheet("font-weight: bold; color: #0F7B0F;")
         self.summaryLabel.setText(
-            self.tr(
-                "Debugger scan finished. You can connect and read target information now."
-            )
+            "调试器扫描完成，可以直接连接并读取目标信息。"
         )
         self.summaryLabel.setStyleSheet("color: #0F7B0F;")
 
@@ -750,22 +744,20 @@ class DaplinkFlashPage(ScrollArea):
 
         if not targets:
             self.targetCombo.clear()
-            self.targetCombo.addItem(self.tr("No local pack targets found"))
+            self.targetCombo.addItem('未发现本地 Pack Target')
             self.packSummaryLabel.setText(
-                self.tr("No .pack file was found in Resources/Tools/Pack.")
+                'Resources/Tools/Pack 中没有可用的 .pack 文件。'
             )
             self.packSummaryLabel.setStyleSheet("color: #C42B1C;")
             self.targetSummaryLabel.setText(
-                self.tr(
-                    "Please put a CMSIS Device Family Pack into the directory first."
-                )
+                "请先放入 CMSIS Device Family Pack。"
             )
             self.targetSummaryLabel.setStyleSheet("color: #C42B1C;")
             return
 
         packNames = sorted({Path(path).name for path in pack_paths})
         self.packSummaryLabel.setText(
-            self.tr("Loaded {count} pack(s): {packs}").format(
+            '已加载 {count} 个 Pack：{packs}'.format(
                 count=len(packNames), packs=", ".join(packNames)
             )
         )
@@ -793,12 +785,10 @@ class DaplinkFlashPage(ScrollArea):
         self._targetItems = filtered
 
         if not filtered:
-            self.targetCombo.addItem(self.tr("No matching target"))
+            self.targetCombo.addItem('没有匹配的 target')
             self.targetCombo.blockSignals(False)
             self.targetSummaryLabel.setText(
-                self.tr(
-                    "No target matches the current filter. Try STM32G474, G474, RETx, and similar keywords."
-                )
+                "当前筛选没有命中 target，请尝试 STM32G474、G474、RETx 等关键字。"
             )
             self.targetSummaryLabel.setStyleSheet("color: #C42B1C;")
             return
@@ -824,17 +814,13 @@ class DaplinkFlashPage(ScrollArea):
         if target is None:
             if self._allTargetItems:
                 self.targetSummaryLabel.setText(
-                    self.tr(
-                        "Please select a local pack target. If your chip is STM32G474, you can filter with STM32G474 directly."
-                    )
+                    "请选择一个本地 Pack target。如果你的芯片是 STM32G474，可以直接在筛选框输入 STM32G474。"
                 )
                 self.targetSummaryLabel.setStyleSheet("color: #777777;")
             return
 
         self.targetSummaryLabel.setText(
-            self.tr(
-                "Current target: {part} | pyOCD ID: {target} | Flash: {flash_start} ({flash_size}) | Pack: {pack_name} {pack_version}"
-            ).format(
+            "当前 Target：{part} | pyOCD ID: {target} | Flash: {flash_start} ({flash_size}) | Pack: {pack_name} {pack_version}".format(
                 part=target.part_number,
                 target=target.target_name,
                 flash_start=target.flash_start,
@@ -852,7 +838,7 @@ class DaplinkFlashPage(ScrollArea):
         if info is None:
             self._clearInfoLabels()
             self.summaryLabel.setText(
-                self.tr("Wait for DAPLink to connect to the target chip...")
+                '等待连接 DAPLink 与目标芯片…'
             )
             self.summaryLabel.setStyleSheet("color: #C42B1C;")
             return
@@ -860,12 +846,10 @@ class DaplinkFlashPage(ScrollArea):
         for key, label in self.infoLabels.items():
             label.setText(getattr(info, key, "--") or "--")
 
-        self.stateLabel.setText(self.tr("Connected"))
+        self.stateLabel.setText('已连接')
         self.stateLabel.setStyleSheet("font-weight: bold; color: #0F7B0F;")
         self.summaryLabel.setText(
-            self.tr(
-                "Probe: {probe} | Device: {part} | Flash: {flash} | Pack: {pack_name} {pack_version}"
-            ).format(
+            "Probe: {probe} | Device: {part} | Flash: {flash} | Pack: {pack_name} {pack_version}".format(
                 probe=info.probe_description,
                 part=info.part_number,
                 flash=info.flash_size,
@@ -879,21 +863,21 @@ class DaplinkFlashPage(ScrollArea):
         value = max(0, min(100, int(round(percent))))
         self.progressBar.setValue(value)
         self.progressLabel.setText(
-            self.tr("Download progress: {value}%").format(value=value)
+            '下载进度：{value}%'.format(value=value)
         )
 
     def _handleActionFinished(self, payload: daplink_pyocd.ActionFinishedPayload):
         if payload.success:
             if payload.action == "connect":
                 self.showMessage(
-                    self.tr("Connect success"),
-                    self.tr("DAPLink and target information have been read."),
+                    '连接成功',
+                    '已读取 DAPLink 与目标芯片信息。',
                     "success",
                 )
             elif payload.action == "download":
                 self.showMessage(
-                    self.tr("Download success"),
-                    self.tr("Firmware has been written to the target."),
+                    '下载成功',
+                    '固件已写入目标芯片。',
                     "success",
                 )
             return
@@ -902,7 +886,7 @@ class DaplinkFlashPage(ScrollArea):
             self.progressBar.setValue(0)
             self._applyProgress(0)
 
-        self.stateLabel.setText(self.tr("Action failed"))
+        self.stateLabel.setText('操作失败')
         self.stateLabel.setStyleSheet("font-weight: bold; color: #C42B1C;")
 
     @staticmethod
@@ -921,16 +905,16 @@ class DaplinkFlashPage(ScrollArea):
         self._deviceInfo = None
         self._clearInfoLabels()
         self.summaryLabel.setText(
-            self.tr("Waiting to connect DAPLink and target chip...")
+            '等待连接 DAPLink 与目标芯片…'
         )
         self.summaryLabel.setStyleSheet("color: #777777;")
-        self.stateLabel.setText(self.tr("Not connected"))
+        self.stateLabel.setText('未连接')
         self.stateLabel.setStyleSheet("font-weight: bold; color: #C42B1C;")
         self.progressBar.setValue(0)
         self._applyProgress(0)
-        self.packSummaryLabel.setText(self.tr("Waiting for local pack data to load..."))
+        self.packSummaryLabel.setText('等待本地 Pack 数据加载…')
         self.packSummaryLabel.setStyleSheet("color: #777777;")
         self.targetSummaryLabel.setText(
-            self.tr("Showing filtered targets from Resources/Tools/Pack.")
+            '当前展示的是 Resources/Tools/Pack 过滤后的 target。'
         )
         self.targetSummaryLabel.setStyleSheet("color: #777777;")

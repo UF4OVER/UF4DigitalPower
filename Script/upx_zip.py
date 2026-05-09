@@ -55,7 +55,7 @@ def compress_with_upx(directory):
 
 if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parent.parent
-    target_directory = repo_root / "build" / "exe"
+    target_directory = repo_root / "Build" / "exe"
 
     if target_directory.exists():
         compress_with_upx(str(target_directory))

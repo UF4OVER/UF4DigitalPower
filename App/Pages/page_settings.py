@@ -11,7 +11,6 @@ from App.Core import (
     get_saved_font_key,
     save_font_selection,
 )
-from App.Core import LANGUAGE_EN_US, LANGUAGE_ZH_CN, language_manager
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import InfoBar, LargeTitleLabel
 from qfluentwidgets import (
@@ -72,11 +71,6 @@ class SettingsPage(ScrollArea):
             cfg.themeColor, FIF.PALETTE, "", "", self.personalGroup
         )
 
-        self.languageCard = ComboSettingCard(
-            FIF.LANGUAGE, "", parent=self.personalGroup
-        )
-        self.languageCard.comboBox.currentIndexChanged.connect(self.__onLanguageChanged)
-
         self.fontCard = ComboSettingCard(FIF.FONT, "", parent=self.personalGroup)
 
         self.updateSoftwareGroup = SettingCardGroup("", self.scrollWidget)
@@ -120,7 +114,6 @@ class SettingsPage(ScrollArea):
         self.__connectSignalToSlot()
         self.__refreshFontOptions()
         self.__refreshThemeOptions()
-        self.__refreshLanguageOptions()
         self._applyTexts()
 
     def __initLayout(self):
@@ -128,7 +121,6 @@ class SettingsPage(ScrollArea):
 
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
-        self.personalGroup.addSettingCard(self.languageCard)
         self.personalGroup.addSettingCard(self.fontCard)
 
         self.updateSoftwareGroup.addSettingCard(self.updateOnStartUpCard)
@@ -157,61 +149,53 @@ class SettingsPage(ScrollArea):
         self.__refreshFontOptions()
 
     def _applyTexts(self):
-        self.settingLabel.setText(self.tr("Settings"))
-        self.personalGroup.titleLabel.setText(self.tr("Personalization"))
-        self.updateSoftwareGroup.titleLabel.setText(self.tr("Software update"))
-        self.aboutGroup.titleLabel.setText(self.tr("About"))
+        self.settingLabel.setText('设置')
+        self.personalGroup.titleLabel.setText('个性化')
+        self.updateSoftwareGroup.titleLabel.setText('软件更新')
+        self.aboutGroup.titleLabel.setText('关于')
 
-        self.themeCard.titleLabel.setText(self.tr("Application theme"))
+        self.themeCard.titleLabel.setText('应用主题')
         self.themeCard.contentLabel.setText(
-            self.tr("Switch between light, dark, or system theme")
+            '切换浅色、深色或跟随系统'
         )
         self.__refreshThemeOptions()
 
         self.__setCustomColorCardTexts(
-            self.tr("Theme color"),
-            self.tr("Adjust the primary accent color of the application"),
+            '主题色',
+            '调整应用的主色调',
         )
 
-        self.languageCard.titleLabel.setText(self.tr("Language"))
-        self.languageCard.contentLabel.setText(
-            self.tr("Switch the application language between Chinese and English")
-        )
-        self.__refreshLanguageOptions()
-
-        self.fontCard.titleLabel.setText(self.tr("Global font"))
+        self.fontCard.titleLabel.setText('全局字体')
         self.fontCard.contentLabel.setText(
-            self.tr(
-                "Put font files in Resources/Font. The selected font will be lazily loaded after restart."
-            )
+            "将字体文件放到 Resources/Font，重启后会按需加载所选字体。"
         )
         self.__refreshFontOptions()
 
         self.updateOnStartUpCard.titleLabel.setText(
-            self.tr("Check for updates on startup")
+            '启动时检查更新'
         )
         self.updateOnStartUpCard.contentLabel.setText(
-            self.tr("Check whether a new version is available when the App starts")
+            '在应用启动时检查是否有新版本'
         )
 
-        self.helpCard.setTitle(self.tr("Help"))
-        self.helpCard.setContent(self.tr("View instructions and common questions."))
-        self.helpCard.linkButton.setText(self.tr("Open help documentation"))
+        self.helpCard.setTitle('帮助')
+        self.helpCard.setContent('查看使用说明和常见问题。')
+        self.helpCard.linkButton.setText('打开帮助文档')
 
-        self.feedbackCard.setTitle(self.tr("Feedback"))
+        self.feedbackCard.setTitle('反馈')
         self.feedbackCard.setContent(
-            self.tr("Report issues or share suggestions here.")
+            '遇到问题或有改进建议时可以在这里反馈。'
         )
-        self.feedbackCard.button.setText(self.tr("Send feedback"))
+        self.feedbackCard.button.setText('提交反馈')
 
-        self.aboutCard.setTitle(self.tr("About"))
+        self.aboutCard.setTitle('关于')
         self.aboutCard.setContent(f"Copyright {YEAR}, {AUTHOR}. Version {VERSION}")
-        self.aboutCard.button.setText(self.tr("View project info"))
+        self.aboutCard.button.setText('查看项目说明')
 
     def __showRestartTooltip(self):
         InfoBar.success(
-            self.tr("Saved"),
-            self.tr("Restart the app to fully apply the change"),
+            '已保存',
+            '请重启应用以完全应用改动',
             duration=1500,
             parent=self,
         )
@@ -219,9 +203,9 @@ class SettingsPage(ScrollArea):
     def __refreshThemeOptions(self):
         value = getattr(cfg.themeMode.value, "value", "Auto")
         items = [
-            (self.tr("Light"), "Light"),
-            (self.tr("Dark"), "Dark"),
-            (self.tr("Use system setting"), "Auto"),
+            ('浅色', "Light"),
+            ('深色', "Dark"),
+            ('跟随系统', "Auto"),
         ]
         self.themeCard.setItems(items, value)
 
@@ -238,24 +222,6 @@ class SettingsPage(ScrollArea):
         if 0 <= index < len(modes):
             qconfig.set(cfg.themeMode, modes[index])
 
-    def __refreshLanguageOptions(self):
-        currentKey = language_manager.get_saved_language()
-        items = [("中文", LANGUAGE_ZH_CN), ("English", LANGUAGE_EN_US)]
-        self.languageCard.setItems(items, currentKey)
-
-    def __onLanguageChanged(self):
-        selectedKey = self.languageCard.currentKey()
-        if not selectedKey or selectedKey == language_manager.get_saved_language():
-            return
-
-        language_manager.save_language(selectedKey)
-        InfoBar.success(
-            self.tr("Settings saved"),
-            self.tr("Restart the app to fully apply the change"),
-            duration=2000,
-            parent=self,
-        )
-
     def __refreshFontOptions(self):
         self._fontOptionsLoaded = False
         self._fontOptions = discover_font_options()
@@ -263,10 +229,10 @@ class SettingsPage(ScrollArea):
         for option in self._fontOptions:
             label = option.label
             if option.key == "__system__":
-                label = self.tr("System Default")
+                label = '系统默认'
             elif option.label.startswith("Built-in Default - "):
                 family = option.label.removeprefix("Built-in Default - ")
-                label = self.tr("Built-in Default - {family}").format(family=family)
+                label = '内置默认 - {family}'.format(family=family)
             translatedItems.append((label, option.key))
 
         self.fontCard.setItems(translatedItems, get_saved_font_key())
@@ -296,10 +262,8 @@ class SettingsPage(ScrollArea):
             apply_font_option(app, option)
 
         InfoBar.success(
-            self.tr("Font switched"),
-            self.tr(
-                "The font has been applied in the current session. It will be lazily loaded after restart."
-            ),
+            '字体已切换',
+            "当前会话已应用所选字体，重启后会按需加载。",
             duration=2500,
             parent=self,
         )

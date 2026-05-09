@@ -1,0 +1,48 @@
+QScrollArea#BatteryPage {
+    background: transparent;
+    border: none;
+}
+
+QWidget#batteryScrollWidget {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+QWidget#batteryScrollWidget TitleLabel,
+QWidget#batteryScrollWidget SubtitleLabel,
+QWidget#batteryScrollWidget StrongBodyLabel {
+    color: #F5F7FA;
+}
+
+QWidget#batteryScrollWidget BodyLabel,
+QWidget#batteryScrollWidget CaptionLabel {
+    color: #A7B0BE;
+}
+
+QWidget#batteryScrollWidget CardWidget {
+    border: none;
+    border-radius: 10px;
+}
+
+QWidget#batteryScrollWidget CardWidget[batteryCard="true"] {
+    border: none;
+    border-radius: 10px;
+}
+
+QWidget#batteryScrollWidget TitleLabel[cellVoltage="true"] {
+    color: #F8FAFC;
+}
+
+QWidget#batteryScrollWidget StrongBodyLabel[cellSoc="true"] {
+    color: #8DD3FF;
+}
+
+QWidget#batteryScrollWidget ComboBox {
+    color: #F5F7FA;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    padding-left: 8px;
+}
+

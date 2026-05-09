@@ -106,14 +106,6 @@ class _DirPaths:
         """
         return self._ensureSubDir(self.ToolsDir, "Pack")
 
-
-    @cached_property
-    def LanguageDir(self) -> Path:
-        """
-        return: Language目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Language")
-
     @cached_property
     def FirmwarePowerDir(self) -> Path:
         """

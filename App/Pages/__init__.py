@@ -15,3 +15,4 @@ from .page_daplink import *
 from .page_home import *
 from .page_power import *
 from .page_settings import *
+from .page_battery import *
