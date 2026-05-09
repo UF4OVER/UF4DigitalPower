@@ -2,7 +2,7 @@
 # -------------------------------
 #  @Project : F4CP
 #  @Time    : 2026 - 01-08 12:30
-#  @FileName: start.py.py
+#  @FileName: start.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
@@ -42,14 +42,15 @@ class Window(MSFluentWindow):
         self.__initNavigation()
         self.__initWindow()
 
-        cfg.themeChanged.connect(self._onThemeChanged)
         self._onThemeChanged()
+
+        cfg.themeChanged.connect(self._onThemeChanged)
+
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
         StyleSheet.BATTERY_PAGE.apply(self.batteryInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
         StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
-        self._applyTexts()
 
         QTimer.singleShot(0, self._refreshStartupTheme)
         QTimer.singleShot(150, self._checkUpdateOnStartUp)
@@ -68,10 +69,10 @@ class Window(MSFluentWindow):
             self.powerInterface, FIF.POWER_BUTTON, '设备'
         )
         self.batteryNavItem = self.addSubInterface(
-            self.batteryInterface, FIF.POWER_BUTTON, '电池'
+            self.batteryInterface, FIF.UNPIN, '电池'
         )
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface, FIF.IOT, 'DAPLink'
+            self.daplinkInterface, FIF.IOT, '烧录'
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
@@ -118,15 +119,6 @@ class Window(MSFluentWindow):
     def _checkUpdateOnStartUp(self):
         if getattr(cfg.checkUpdateAtStartUp, "value", False):
             self.homeInterface.requestUpdateCheck(manual=False)
-
-    def _applyTexts(self):
-        self.homeNavItem.setText('主页')
-        self.deviceNavItem.setText('串口')
-        self.powerNavItem.setText('设备')
-        self.batteryNavItem.setText('电池')
-        self.daplinkNavItem.setText("DAPLink")
-        self.settingNavItem.setText('设置')
-        self.setWindowTitle("Fluor4CellPower")
 
 
 if __name__ == "__main__":

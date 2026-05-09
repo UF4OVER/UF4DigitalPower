@@ -534,7 +534,7 @@ class BatteryPage(ScrollArea):
         self.rootLayout.addStretch(1)
 
     def _applyTexts(self) -> None:
-        self.titleLabel.setText('电池组看板')
+        self.titleLabel.setText('电池组面板')
         self.deviceCaptionLabel.setText('电池组')
         self.deviceLabel.setText('4 串电池组')
         self.connectionModeLabel.setText('连接方式')
