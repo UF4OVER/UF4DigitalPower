@@ -12,11 +12,12 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QPainter
-from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PyQt5.QtCore import QRectF, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QBrush, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -32,6 +33,7 @@ from qfluentwidgets import (
     TitleLabel,
     isDarkTheme,
     setFont,
+    ProgressBar,
 )
 
 from App.Core import StyleSheet
@@ -59,44 +61,137 @@ class BatterySnapshot:
     energy_out_wh: float
 
 
-class LevelFillWidget(QWidget):
+@dataclass(frozen=True)
+class CellState:
+    index: int
+    voltage: float
+    soc: float
+    soh: float
+    capacity_mah: float
+    temperature: float
+    status: str
+
+
+class WaterTankWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._percent = 0.0
-        self.setMinimumSize(34, 110)
+        self._value = 70.0
+        self._phase = 0.0
+        self._status = "idle"
+        self.setMinimumSize(92, 150)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-    def setPercent(self, percent: float) -> None:
-        self._percent = max(0.0, min(100.0, percent))
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._onTimeout)
+        self.timer.start(40)
+
+    def setValue(self, value: float) -> None:
+        self._value = max(0.0, min(100.0, value))
+        self.update()
+
+    def setStatus(self, status: str) -> None:
+        self._status = status
         self.update()
 
     def refreshTheme(self) -> None:
         self.update()
 
-    def _accentColor(self) -> QColor:
+    def _onTimeout(self) -> None:
+        self._phase += 0.18
+        if self._phase > math.pi * 2:
+            self._phase = 0.0
+        self.update()
+
+    def _themeColor(self) -> QColor:
         color = getattr(cfg.themeColor, "value", None)
-        return color if isinstance(color, QColor) else QColor("#3B82F6")
+        return QColor(color) if isinstance(color, QColor) else QColor("#3B82F6")
+
+    def _waterColor(self) -> QColor:
+        status = self._status.lower()
+        if status == "fault":
+            return QColor(255, 90, 90)
+        if self._value >= 70:
+            return self._themeColor()
+        if self._value >= 30:
+            return QColor(255, 185, 70)
+        return QColor(255, 95, 95)
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing)
 
-        border = QColor(255, 255, 255, 84) if isDarkTheme() else QColor(15, 23, 42, 65)
-        shell = QColor(148, 163, 184, 42) if isDarkTheme() else QColor(148, 163, 184, 34)
+        tank_rect = QRectF(18, 12, self.width() - 36, self.height() - 24)
+        radius = 18
 
-        outer = self.rect().adjusted(4, 4, -4, -4)
-        painter.setPen(border)
-        painter.setBrush(shell)
-        painter.drawRoundedRect(outer, 10, 10)
+        tank_path = QPainterPath()
+        tank_path.addRoundedRect(tank_rect, radius, radius)
 
-        inner = outer.adjusted(3, 3, -3, -3)
-        fill_height = int(round(inner.height() * (self._percent / 100.0)))
-        if fill_height <= 0:
-            return
+        dark = isDarkTheme()
+        bg_gradient = QLinearGradient(tank_rect.topLeft(), tank_rect.bottomLeft())
+        if dark:
+            bg_gradient.setColorAt(0, QColor(31, 41, 55))
+            bg_gradient.setColorAt(1, QColor(15, 23, 42))
+        else:
+            bg_gradient.setColorAt(0, QColor(245, 247, 250))
+            bg_gradient.setColorAt(1, QColor(228, 233, 240))
 
-        fill_rect = inner.adjusted(0, inner.height() - fill_height, 0, 0)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(self._accentColor())
-        painter.drawRoundedRect(fill_rect, 7, 7)
+        painter.setBrush(QBrush(bg_gradient))
+        painter.drawPath(tank_path)
+
+        if self._value > 0.5:
+            water_height = tank_rect.height() * self._value / 100.0
+            water_top = tank_rect.bottom() - water_height
+            wave_amp = min(4.0, max(0.0, water_height * 0.30))
+            wave_len = tank_rect.width() / 1.2
+
+            water_path = QPainterPath()
+            water_path.moveTo(tank_rect.left(), tank_rect.bottom())
+            water_path.lineTo(tank_rect.left(), water_top)
+
+            x = tank_rect.left()
+            while x <= tank_rect.right():
+                y = water_top + math.sin((x / wave_len) * math.pi * 2 + self._phase) * wave_amp
+                y = max(tank_rect.top(), min(y, tank_rect.bottom()))
+                water_path.lineTo(x, y)
+                x += 2
+
+            water_path.lineTo(tank_rect.right(), tank_rect.bottom())
+            water_path.closeSubpath()
+
+            water_color = self._waterColor()
+            water_gradient = QLinearGradient(tank_rect.topLeft(), tank_rect.bottomLeft())
+            water_gradient.setColorAt(0.0, QColor(water_color.red(), water_color.green(), water_color.blue(), 210))
+            water_gradient.setColorAt(1.0, QColor(water_color.red(), water_color.green(), water_color.blue(), 255))
+
+            painter.save()
+            painter.setClipPath(tank_path)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(water_gradient))
+            painter.drawPath(water_path)
+            painter.restore()
+
+        highlight = QPainterPath()
+        highlight.addRoundedRect(
+            QRectF(tank_rect.left() + 8, tank_rect.top() + 8, tank_rect.width() * 0.22, tank_rect.height() - 16),
+            8,
+            8,
+        )
+        painter.setBrush(QColor(255, 255, 255, 70 if not dark else 36))
+        painter.setPen(Qt.NoPen)
+        painter.drawPath(highlight.intersected(tank_path))
+
+        border_color = QColor(95, 108, 125) if not dark else QColor(148, 163, 184)
+        painter.setPen(QPen(border_color, 1.6))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPath(tank_path)
+
+        painter.setPen(QColor(35, 42, 52) if not dark else QColor(248, 250, 252))
+        font = QFont()
+        font.setPointSize(12)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(tank_rect, Qt.AlignCenter, f"{self._value:.0f}%")
 
 
 class BatteryCellCard(CardWidget):
@@ -107,50 +202,134 @@ class BatteryCellCard(CardWidget):
         self.setProperty("batteryCard", True)
         self.setProperty("cellCard", True)
         self.setBorderRadius(10)
-        self._soc = 0.0
+        self._cell = CellState(index, 0.0, 0.0, 100.0, 0.0, 25.0, "idle")
 
-        self.titleLabel = SubtitleLabel(self)
-        self.voltageLabel = TitleLabel("--", self)
-        self.socLabel = StrongBodyLabel("--", self)
-        self.levelWidget = LevelFillWidget(self)
+        self.titleLabel = StrongBodyLabel(self)
+        self.statusLabel = CaptionLabel(self)
+        self.tank = WaterTankWidget(self)
+        self.voltageLabel = BodyLabel(self)
+        self.capacityLabel = CaptionLabel(self)
+        self.tempLabel = CaptionLabel(self)
+        self.sohLabel = CaptionLabel("SOH", self)
+        self.sohTextLabel = CaptionLabel("健康度", self)
+        self.sohBar = ProgressBar(self)
+        self.sohBar.setRange(0, 100)
 
-        self.voltageLabel.setProperty("cellVoltage", True)
-        self.socLabel.setProperty("cellSoc", True)
-        setFont(self.voltageLabel, 30, QFont.DemiBold)
+        setFont(self.titleLabel, 14, QFont.DemiBold)
+        setFont(self.voltageLabel, 15, QFont.DemiBold)
+        setFont(self.statusLabel, 12, QFont.DemiBold)
 
-        infoLayout = QVBoxLayout()
-        infoLayout.setContentsMargins(0, 0, 0, 0)
-        infoLayout.setSpacing(6)
-        infoLayout.addWidget(self.titleLabel)
-        infoLayout.addWidget(self.voltageLabel)
-        infoLayout.addWidget(self.socLabel)
-        infoLayout.addStretch(1)
+        self._initLayout()
+        self.updateCell(self._cell)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(12)
-        layout.addLayout(infoLayout, 1)
-        layout.addWidget(self.levelWidget, 0, Qt.AlignRight | Qt.AlignVCenter)
+    def _initLayout(self) -> None:
+        mainLayout = QVBoxLayout(self)
+        mainLayout.setContentsMargins(14, 12, 14, 12)
+        mainLayout.setSpacing(8)
 
-        self._applyCardColor()
-        self.applyTexts()
+        topLayout = QHBoxLayout()
+        topLayout.setContentsMargins(0, 0, 0, 0)
+        topLayout.addWidget(self.titleLabel)
+        topLayout.addStretch(1)
+        topLayout.addWidget(self.statusLabel)
+
+        mainLayout.addLayout(topLayout)
+        mainLayout.addWidget(self.tank, alignment=Qt.AlignCenter)
+        mainLayout.addWidget(self.voltageLabel)
+        mainLayout.addWidget(self.capacityLabel)
+        mainLayout.addWidget(self.tempLabel)
+
+        sohLayout = QHBoxLayout()
+        sohLayout.setContentsMargins(0, 0, 0, 0)
+        sohLayout.addWidget(self.sohLabel)
+        sohLayout.addStretch(1)
+        sohLayout.addWidget(self.sohTextLabel)
+        mainLayout.addLayout(sohLayout)
+        mainLayout.addWidget(self.sohBar)
 
     def applyTexts(self) -> None:
-        self.titleLabel.setText('电芯 {index}'.format(index=self.index))
+        self.updateCell(self._cell)
 
     def setCellValue(self, soc_percent: float, voltage_v: float) -> None:
-        self._soc = max(0.0, min(100.0, soc_percent))
-        self.voltageLabel.setText(f"{voltage_v:.3f} V")
-        self.socLabel.setText('电量 {value:.1f}%'.format(value=self._soc))
-        self.levelWidget.setPercent(self._soc)
+        self.updateCell(
+            CellState(
+                index=self.index,
+                voltage=voltage_v,
+                soc=soc_percent,
+                soh=self._cell.soh,
+                capacity_mah=self._cell.capacity_mah,
+                temperature=self._cell.temperature,
+                status=self._cell.status,
+            )
+        )
+
+    def updateCell(self, cell: CellState) -> None:
+        self._cell = cell
+        self.titleLabel.setText(f"电芯 {cell.index}")
+        self.statusLabel.setText(self._statusText(cell.status))
+        self.tank.setValue(cell.soc)
+        self.tank.setStatus(cell.status)
+        self.voltageLabel.setText(f"电压：{cell.voltage:.3f} V")
+        self.capacityLabel.setText(f"容量：{cell.capacity_mah:.0f} mAh")
+        self.tempLabel.setText(f"温度：{cell.temperature:.1f} ℃")
+        self.sohBar.setValue(int(max(0.0, min(100.0, cell.soh))))
+        self.refreshTheme()
 
     def refreshTheme(self) -> None:
         self._applyCardColor()
-        self.levelWidget.refreshTheme()
+        self.tank.refreshTheme()
+        text = "#F5F7FA" if isDarkTheme() else "#111827"
+        muted = "#A7B0BE" if isDarkTheme() else "#475569"
+        self.titleLabel.setStyleSheet(f"color: {text};")
+        self.voltageLabel.setStyleSheet(f"color: {text};")
+        for label in (self.capacityLabel, self.tempLabel, self.sohLabel, self.sohTextLabel):
+            label.setStyleSheet(f"color: {muted};")
+        accent = self._themeColor().name()
+        track = "rgba(255,255,255,0.12)" if isDarkTheme() else "rgba(15,23,42,0.10)"
+        self.sohBar.setStyleSheet(f"""
+            ProgressBar {{
+                background: {track};
+                border-radius: 4px;
+            }}
+            ProgressBar::chunk {{
+                background: {accent};
+                border-radius: 4px;
+            }}
+            """)
+        self._refreshStatusColor()
 
     def _applyCardColor(self) -> None:
         color = QColor(15, 23, 42, 128) if isDarkTheme() else QColor(255, 255, 255, 210)
         self.setBackgroundColor(color)
+
+    def _themeColor(self) -> QColor:
+        color = getattr(cfg.themeColor, "value", None)
+        return QColor(color) if isinstance(color, QColor) else QColor("#3B82F6")
+
+    def _statusText(self, status: str) -> str:
+        return {
+            "fault": "故障",
+            "charge": "充电",
+            "charging": "充电",
+            "discharge": "放电",
+            "discharging": "放电",
+            "balance": "均衡",
+            "idle": "待机",
+        }.get(status.lower(), status)
+
+    def _refreshStatusColor(self) -> None:
+        status = self._cell.status.lower()
+        if status == "fault":
+            color = "rgb(255, 70, 70)"
+        elif status in ("charge", "charging"):
+            color = self._themeColor().name()
+        elif status in ("discharge", "discharging"):
+            color = "rgb(0, 120, 215)"
+        elif status == "balance":
+            color = "rgb(180, 120, 0)"
+        else:
+            color = "#A7B0BE" if isDarkTheme() else "rgb(100, 100, 100)"
+        self.statusLabel.setStyleSheet(f"color: {color}; font-weight: 600;")
 
 
 class MetricTile(CardWidget):
@@ -310,7 +489,7 @@ class BatteryPage(ScrollArea):
         for index in range(4):
             card = BatteryCellCard(index + 1, self.cellCard)
             self.cellCards.append(card)
-            self.cellGrid.addWidget(card, index // 2, index % 2)
+            self.cellGrid.addWidget(card, 0, index)
 
         layout.addLayout(self.cellGrid)
         self.rootLayout.addWidget(self.cellCard)
@@ -408,10 +587,28 @@ class BatteryPage(ScrollArea):
         while len(volt_values) < 4:
             volt_values.append(0.0)
 
-        for index, card in enumerate(self.cellCards):
-            card.setCellValue(soc_values[index], volt_values[index])
-
         pack_soc = max(0.0, min(100.0, snapshot.pack_soc))
+        state = (snapshot.charge_state or "idle").strip().lower()
+        cell_status = {
+            "charging": "charge",
+            "discharging": "discharge",
+            "fault": "fault",
+            "balance": "balance",
+        }.get(state, "idle")
+        capacity_per_cell_mah = max(0.0, snapshot.remaining_capacity_ah * 1000.0 / max(1, len(self.cellCards)))
+        for index, card in enumerate(self.cellCards):
+            card.updateCell(
+                CellState(
+                    index=index + 1,
+                    voltage=volt_values[index],
+                    soc=soc_values[index],
+                    soh=snapshot.health_percent,
+                    capacity_mah=capacity_per_cell_mah,
+                    temperature=25.0,
+                    status=cell_status,
+                )
+            )
+
         self.packSocLabel.setText('整组电量 {value:.1f}%'.format(value=pack_soc))
         self.packPowerLabel.setText(
             '整组电压: {voltage:.2f} V | 电流: {current:+.2f} A'.format(
@@ -422,7 +619,6 @@ class BatteryPage(ScrollArea):
         voltage_spread_mv = (max(volt_values) - min(volt_values)) * 1000.0
         self.packHintLabel.setText('单节最大电压差: {value:.0f} mV'.format(value=voltage_spread_mv))
 
-        state = (snapshot.charge_state or "idle").strip().lower()
         if state == "charging":
             state_text = '充电中'
             current_value = max(0.0, snapshot.charge_current_a)

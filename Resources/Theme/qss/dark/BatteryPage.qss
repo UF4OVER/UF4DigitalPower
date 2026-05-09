@@ -30,14 +30,6 @@ QWidget#batteryScrollWidget CardWidget[batteryCard="true"] {
     border-radius: 10px;
 }
 
-QWidget#batteryScrollWidget TitleLabel[cellVoltage="true"] {
-    color: #F8FAFC;
-}
-
-QWidget#batteryScrollWidget StrongBodyLabel[cellSoc="true"] {
-    color: #8DD3FF;
-}
-
 QWidget#batteryScrollWidget ComboBox {
     color: #F5F7FA;
     background: rgba(255, 255, 255, 0.08);

@@ -449,7 +449,7 @@ class PowerBluetoothSession(QObject):
 
     def write(self, data: bytes) -> int:
         if not self.is_open:
-            raise RuntimeError("Bluetooth device is not connected")
+            raise RuntimeError("蓝牙设备未连接")
         written = int(self._socket.write(data))
         self._postEvent(TxEvent(data))
         return written
@@ -792,7 +792,7 @@ class PowerPage(ScrollArea):
             self.portCombo.addItems(ports)
             if current in ports:
                 self.portCombo.setCurrentText(current)
-        self._appendLog(f"Ports: {ports}")
+        self._appendLog(f"串口列表: {ports}")
 
     def refreshBluetoothDevices(self) -> None:
         current = self.bluetoothCombo.currentText().strip()
@@ -800,7 +800,7 @@ class PowerPage(ScrollArea):
         self.bluetoothCombo.clear()
 
         if QBluetoothLocalDevice is None:
-            self._appendLog("ERR: 当前环境不支持 Qt Bluetooth")
+            self._appendLog("错误: 当前环境不支持 Qt Bluetooth")
             return
 
         try:
@@ -809,12 +809,12 @@ class PowerPage(ScrollArea):
                 for address in localDevice.connectedDevices():
                     self._addBluetoothTarget(address.toString(), address.toString())
         except Exception as exc:
-            self._appendLog(f"ERR: 蓝牙设备列表读取失败: {exc}")
+            self._appendLog(f"错误: 蓝牙设备列表读取失败: {exc}")
 
         if current in self._bluetoothDevices:
             self.bluetoothCombo.setCurrentText(current)
 
-        self._appendLog(f"Bluetooth devices: {list(self._bluetoothDevices)}")
+        self._appendLog(f"蓝牙设备列表: {list(self._bluetoothDevices)}")
         self._startBluetoothDiscovery()
 
     def refreshCurrentConnectionTargets(self) -> None:
@@ -838,7 +838,7 @@ class PowerPage(ScrollArea):
     def _connectSerialTarget(self) -> None:
         port = self.portCombo.currentText().strip()
         if not port:
-            self._appendLog("ERR: No serial port selected. Refresh first and select a port.")
+            self._appendLog("错误: 未选择串口。请先刷新并选择串口。")
             return
 
         baud = int(self.baudCombo.currentText().strip())
@@ -846,7 +846,7 @@ class PowerPage(ScrollArea):
         try:
             session.open()
         except Exception as exc:
-            self._appendLog(f"ERR: {exc}")
+            self._appendLog(f"错误: {exc}")
             return
 
         self._manualSession = session
@@ -856,14 +856,14 @@ class PowerPage(ScrollArea):
         target = self.bluetoothCombo.currentText().strip()
         address = self._bluetoothDevices.get(target, "")
         if not target or not address:
-            self._appendLog("ERR: No Bluetooth device selected. Refresh first and select a device.")
+            self._appendLog("错误: 未选择蓝牙设备。请先刷新并选择设备。")
             return
 
         session = PowerBluetoothSession(target.rsplit(" (", 1)[0], address, self)
         try:
             session.open()
         except Exception as exc:
-            self._appendLog(f"ERR: {exc}")
+            self._appendLog(f"错误: {exc}")
             return
 
         self._manualSession = session
@@ -879,7 +879,7 @@ class PowerPage(ScrollArea):
             logger.error(f"PowerPage manual session close failed: {exc}")
         self._manualSession = None
         self._applyDisconnectedState()
-        self._appendLog("Device disconnected")
+        self._appendLog("设备已断开")
 
     def _isBluetoothMode(self) -> bool:
         return self.connectionTypeCombo.currentText().strip() == "蓝牙"
@@ -904,7 +904,7 @@ class PowerPage(ScrollArea):
             self._bluetoothDiscoveryAgent.deviceDiscovered.connect(self._onBluetoothDeviceDiscovered)
             self._bluetoothDiscoveryAgent.start()
         except Exception as exc:
-            self._appendLog(f"ERR: 蓝牙扫描启动失败: {exc}")
+            self._appendLog(f"错误: 蓝牙扫描启动失败: {exc}")
 
     def _onBluetoothDeviceDiscovered(self, deviceInfo) -> None:
         try:
@@ -928,7 +928,7 @@ class PowerPage(ScrollArea):
         self.stateBadge.setText('在线')
         self.stateBadge.setProperty("onlineState", "online")
         self.connectButton.setText('断开')
-        self._appendLog(f"Connected on {getattr(session.cfg, 'port', '未知')}")
+        self._appendLog(f"已连接: {getattr(session.cfg, 'port', '未知')}")
         showMessage(
             self,
             '设备已连接',
@@ -943,7 +943,7 @@ class PowerPage(ScrollArea):
     def onDeviceDisconnected(self) -> None:
         self.detachSessionRequested.emit()
         self._applyDisconnectedState()
-        self._appendLog("Device disconnected")
+        self._appendLog("设备已断开")
         showMessage(
             self,
             '设备已断开',
@@ -989,7 +989,7 @@ class PowerPage(ScrollArea):
                 logger.error("PowerPage client thread did not exit within 3000 ms")
 
     def suspendForDaplink(self) -> None:
-        self._appendLog("DAPLink operation started; serial polling is suspended.")
+        self._appendLog("DAPLink 操作开始，已暂停串口轮询。")
         self.stopPollingRequested.emit()
         try:
             self._scanner.stop()
@@ -999,7 +999,7 @@ class PowerPage(ScrollArea):
     def resumeAfterDaplink(self) -> None:
         if self._shutdownDone:
             return
-        self._appendLog("DAPLink operation finished; serial scanner is resumed.")
+        self._appendLog("DAPLink 操作结束，已恢复串口扫描。")
         try:
             self._scanner.start()
         except Exception as exc:
@@ -1007,19 +1007,19 @@ class PowerPage(ScrollArea):
 
     def _readStatusOnce(self) -> None:
         if not self._client.is_connected:
-            self._appendLog("ERR: Serial session is not connected")
+            self._appendLog("错误: 串口会话未连接")
             return
         self.readStatusRequested.emit()
 
     def _runDebugSnapshot(self) -> None:
         if not self._client.is_connected:
-            self._appendLog("ERR: Serial session is not connected")
+            self._appendLog("错误: 串口会话未连接")
             return
         self.debugSnapshotRequested.emit()
 
     def _applyOutputLimits(self) -> None:
         if not self._client.is_connected:
-            self._appendLog("ERR: Serial session is not connected")
+            self._appendLog("错误: 串口会话未连接")
             return
         voltageMv = int(
             round(float(self.writeParams["set_voltage"].text() or "0") * 1000)
@@ -1037,7 +1037,7 @@ class PowerPage(ScrollArea):
 
     def _applyProtectionValues(self) -> None:
         if not self._client.is_connected:
-            self._appendLog("ERR: Serial session is not connected")
+            self._appendLog("错误: 串口会话未连接")
             return
         ovpMv = int(round(float(self.writeParams["ovp"].text() or "0") * 1000))
         ocpMa = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
@@ -1051,13 +1051,13 @@ class PowerPage(ScrollArea):
             self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
         else:
             self.stopPollingRequested.emit()
-            self._appendLog("Host polling disabled")
+            self._appendLog("主机轮询已关闭")
 
     def _onOutputSwitchChanged(self, checked: bool) -> None:
         self._stagedOutputEnabled = checked
         if not self._client.is_connected:
             return
-        self._appendLog(f"Output switch staged as {'ON' if checked else 'OFF'}")
+        self._appendLog(f"输出开关已暂存为{'开启' if checked else '关闭'}")
 
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setText('在线' if connected else '离线')
@@ -1073,27 +1073,27 @@ class PowerPage(ScrollArea):
 
         self.metricCards["vin"].setMetric(
             _MetricValue('输入电压', f"{status.vin_v:.3f}", "V"),
-            f"raw source active | pin={status.pin_w:.2f} W",
+            f"原始采样有效 | 输入功率={status.pin_w:.2f} W",
         )
         self.metricCards["iin"].setMetric(
             _MetricValue('输入电流', f"{status.iin_a:.3f}", "A"),
-            f"efficiency basis | cc/cv={status.mode_name}",
+            f"效率计算基准 | CC/CV={status.mode_name}",
         )
         self.metricCards["pin"].setMetric(
             _MetricValue('输入功率', f"{status.pin_w:.3f}", "W"),
-            f"fault mask 0x{status.fault_state:04X}",
+            f"故障掩码 0x{status.fault_state:04X}",
         )
         self.metricCards["vout"].setMetric(
             _MetricValue('输出电压', f"{status.vout_v:.3f}", "V"),
-            f"ovp={status.ovp_set_value_v:.3f} V",
+            f"过压阈值={status.ovp_set_value_v:.3f} V",
         )
         self.metricCards["iout"].setMetric(
             _MetricValue('输出电流', f"{status.iout_a:.3f}", "A"),
-            f"ocp={status.ocp_set_value_a:.3f} A",
+            f"过流阈值={status.ocp_set_value_a:.3f} A",
         )
         self.metricCards["pout"].setMetric(
             _MetricValue('输出功率', f"{status.pout_w:.3f}", "W"),
-            f"efficiency={status.efficiency:.2f} %",
+            f"效率={status.efficiency:.2f} %",
         )
 
         self.readParams["core_temp"].setDisplayValue(f"{status.core_temp_c:.3f}")
@@ -1135,13 +1135,13 @@ class PowerPage(ScrollArea):
             or previous_status.fault_state != status.fault_state
         ):
             self._appendLog(
-                "STATUS "
-                f"power={'ON' if status.power_enabled else 'OFF'} "
-                f"state={status.state_flag_name} "
-                f"topology={status.topology_name} "
-                f"fault={pretty_faults(status.fault_state)} "
-                f"vout={status.vout_v:.3f}V "
-                f"set={status.set_voltage_limit_mv / 1000.0:.3f}V/{status.set_current_limit_ma / 1000.0:.3f}A"
+                "状态 "
+                f"输出={'开启' if status.power_enabled else '关闭'} "
+                f"状态机={status.state_flag_name} "
+                f"拓扑={status.topology_name} "
+                f"故障={pretty_faults(status.fault_state) or '无'} "
+                f"输出电压={status.vout_v:.3f}V "
+                f"设定={status.set_voltage_limit_mv / 1000.0:.3f}V/{status.set_current_limit_ma / 1000.0:.3f}A"
             )
 
         self._appendHistory(status)
@@ -1178,13 +1178,13 @@ class PowerPage(ScrollArea):
 
     def _diagnoseDebugSnapshot(self, snapshot: DebugSnapshot) -> str:
         if snapshot.output_voltage_raw >= 4090:
-            return "DEBUG_JUDGEMENT: type27 is close to 4095, check MCU ADC/front-end first."
+            return "调试判断: type27 接近 4095，请优先检查 MCU ADC 或前端电路。"
         if (
             snapshot.ovp_set_value_mv == DEFAULT_OVP_SET_VALUE_MV
             and abs(snapshot.output_voltage_mv - snapshot.ovp_set_value_mv) <= 5
         ):
-            return "DEBUG_JUDGEMENT: type32=44000 overlaps type12, field mapping is likely wrong on host side."
-        return "DEBUG_JUDGEMENT: type27 is reasonable, if UI is still wrong check host parsing/binding."
+            return "调试判断: type32=44000 与 type12 重叠，主机字段映射可能有误。"
+        return "调试判断: type27 数值合理；如果界面仍异常，请检查主机解析和绑定。"
 
     def _applyDisconnectedState(self) -> None:
         self._stagedOutputEnabled = None
@@ -1209,7 +1209,7 @@ class PowerPage(ScrollArea):
         self.logEdit.append(f"[{ts}] {text}")
 
     def _onClientError(self, message: str) -> None:
-        self._appendLog(f"ERR: {message}")
+        self._appendLog(f"错误: {message}")
         showMessage(self, '通信错误', message, level="error")
         if self._writePollingRestartPending:
             self._scheduleAutoPollingRestartAfterWrite()
@@ -1237,7 +1237,7 @@ class PowerPage(ScrollArea):
         self._scheduleAutoPollingRestartAfterWrite()
 
     def _onPowerStateWritten(self, enabled: bool) -> None:
-        self._appendLog(f"Output set to {'ON' if enabled else 'OFF'}")
+        self._appendLog(f"输出已设置为{'开启' if enabled else '关闭'}")
         self._scheduleAutoPollingRestartAfterWrite()
 
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:
@@ -1254,7 +1254,7 @@ class PowerPage(ScrollArea):
         if not self._client.is_connected:
             return
         self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
-        self._appendLog("Host polling restart requested after write")
+        self._appendLog("写入后已请求重启主机轮询")
 
     def _applyTexts(self) -> None:
         self.titleLabel.setText('电源面板')

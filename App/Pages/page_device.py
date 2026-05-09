@@ -433,7 +433,7 @@ class DevicePage(ScrollArea):
 
         lc = text.strip()
         dark = isDarkTheme()
-        if lc.startswith("ERR:"):
+        if lc.startswith("ERR:") or lc.startswith("错误:"):
             color = QColor("red")
         elif lc.startswith("RX(") or lc.startswith("V2 RX"):
             color = QColor("#6ea8fe") if dark else QColor("darkBlue")
@@ -507,8 +507,8 @@ class DevicePage(ScrollArea):
         self.tlvTable.setItem(row, 2, QTableWidgetItem(""))
 
         enable = SwitchButton(self.tlvTable)
-        enable.setOnText("ON")
-        enable.setOffText("OFF")
+        enable.setOnText("启用")
+        enable.setOffText("禁用")
         enable.setChecked(True)
         self.tlvTable.setCellWidget(row, 3, enable)
 
@@ -748,7 +748,7 @@ class DevicePage(ScrollArea):
         self.bluetoothCombo.clear()
 
         if QBluetoothLocalDevice is None:
-            self._appendLog("ERR: 当前环境不支持 Qt Bluetooth")
+            self._appendLog("错误: 当前环境不支持 Qt Bluetooth")
             return
 
         try:
@@ -758,7 +758,7 @@ class DevicePage(ScrollArea):
                 for address in local_device.connectedDevices():
                     self._addBluetoothTarget(address.toString(), address.toString())
         except Exception as exc:
-            self._appendLog(f"ERR: 蓝牙设备列表读取失败: {exc}")
+            self._appendLog(f"错误: 蓝牙设备列表读取失败: {exc}")
 
         if current in self._bluetoothDevices:
             self.bluetoothCombo.setCurrentText(current)
@@ -783,7 +783,7 @@ class DevicePage(ScrollArea):
             self._bluetoothDiscoveryAgent.deviceDiscovered.connect(self._onBluetoothDeviceDiscovered)
             self._bluetoothDiscoveryAgent.start()
         except Exception as exc:
-            self._appendLog(f"ERR: 蓝牙扫描启动失败: {exc}")
+            self._appendLog(f"错误: 蓝牙扫描启动失败: {exc}")
 
     def _onBluetoothDeviceDiscovered(self, device_info):
         try:

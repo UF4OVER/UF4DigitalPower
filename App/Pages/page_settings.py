@@ -189,7 +189,7 @@ class SettingsPage(ScrollArea):
         self.feedbackCard.button.setText('提交反馈')
 
         self.aboutCard.setTitle('关于')
-        self.aboutCard.setContent(f"Copyright {YEAR}, {AUTHOR}. Version {VERSION}")
+        self.aboutCard.setContent(f"版权所有 {YEAR}，{AUTHOR}。版本 {VERSION}")
         self.aboutCard.button.setText('查看项目说明')
 
     def __showRestartTooltip(self):
