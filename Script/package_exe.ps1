@@ -10,8 +10,8 @@ try {
         throw "cx_Freeze build failed with exit code $LASTEXITCODE"
     }
 
-    $legacyDir = Join-Path $repoRoot "build\exe\PyQt5.uic.widget-plugins"
-    $targetDir = Join-Path $repoRoot "build\exe\lib\PyQt5\uic\widget-plugins"
+    $legacyDir = Join-Path $repoRoot "Build\exe\PyQt5.uic.widget-plugins"
+    $targetDir = Join-Path $repoRoot "Build\exe\lib\PyQt5\uic\widget-plugins"
     $targetParent = Split-Path -Parent $targetDir
 
     if (-not (Test-Path -LiteralPath $legacyDir)) {

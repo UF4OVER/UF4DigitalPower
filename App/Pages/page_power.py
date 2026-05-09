@@ -379,6 +379,7 @@ class PowerPage(ScrollArea):
         self._clientThread.start()
         self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
         self._lastStatus: PowerStatus | None = None
+        self._stagedOutputEnabled: bool | None = None
         self._lastVerboseLogTs = 0.0
         self._writePollingRestartPending = False
         self._historyDirty = False
@@ -722,8 +723,13 @@ class PowerPage(ScrollArea):
         currentMa = int(
             round(float(self.writeParams["set_current"].text() or "0") * 1000)
         )
+        enabled = (
+            self._stagedOutputEnabled
+            if self._stagedOutputEnabled is not None
+            else self.outputSwitch.isChecked()
+        )
         self._writePollingRestartPending = True
-        self.outputLimitsRequested.emit(voltageMv, currentMa, self.outputSwitch.isChecked())
+        self.outputLimitsRequested.emit(voltageMv, currentMa, enabled)
 
     def _applyProtectionValues(self) -> None:
         if not self._client.is_connected:
@@ -744,6 +750,7 @@ class PowerPage(ScrollArea):
             self._appendLog("Host polling disabled")
 
     def _onOutputSwitchChanged(self, checked: bool) -> None:
+        self._stagedOutputEnabled = checked
         if not self._client.is_connected:
             return
         self._appendLog(f"Output switch staged as {'ON' if checked else 'OFF'}")
@@ -756,6 +763,7 @@ class PowerPage(ScrollArea):
             self._applyDisconnectedState()
 
     def _updateStatusView(self, status: PowerStatus) -> None:
+        previous_status = self._lastStatus
         self._lastStatus = status
 
         self.metricCards["vin"].setMetric(
@@ -804,9 +812,32 @@ class PowerPage(ScrollArea):
         self.writeParams["otp"].setDisplayValue(f"{status.otp_set_value_c:.3f}")
         self.writeParams["fan_set"].setDisplayValue(str(status.fan_set_value))
 
+        switch_value = status.power_enabled
+        if self._stagedOutputEnabled is not None:
+            if self._stagedOutputEnabled == status.power_enabled:
+                self._stagedOutputEnabled = None
+            else:
+                switch_value = self._stagedOutputEnabled
+
         self.outputSwitch.blockSignals(True)
-        self.outputSwitch.setChecked(status.power_enabled)
+        self.outputSwitch.setChecked(switch_value)
         self.outputSwitch.blockSignals(False)
+
+        if (
+            previous_status is None
+            or previous_status.power_state != status.power_state
+            or previous_status.state_machine_flag_bits != status.state_machine_flag_bits
+            or previous_status.fault_state != status.fault_state
+        ):
+            self._appendLog(
+                "STATUS "
+                f"power={'ON' if status.power_enabled else 'OFF'} "
+                f"state={status.state_flag_name} "
+                f"topology={status.topology_name} "
+                f"fault={pretty_faults(status.fault_state)} "
+                f"vout={status.vout_v:.3f}V "
+                f"set={status.set_voltage_limit_mv / 1000.0:.3f}V/{status.set_current_limit_ma / 1000.0:.3f}A"
+            )
 
         self._appendHistory(status)
         if (
@@ -851,6 +882,7 @@ class PowerPage(ScrollArea):
         return "DEBUG_JUDGEMENT: type27 is reasonable, if UI is still wrong check host parsing/binding."
 
     def _applyDisconnectedState(self) -> None:
+        self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
         self._writePollRestartTimer.stop()
         self.deviceLabel.setText(self.tr("Disconnected"))
