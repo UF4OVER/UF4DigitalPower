@@ -147,11 +147,12 @@ static bool append_u32(uint8_t *payload, uint16_t *offset, uint8_t type, uint32_
     return append_tlv(payload, offset, type, bytes, sizeof(bytes));
 }
 
-static bool append_i32(uint8_t *payload, uint16_t *offset, uint8_t type, int32_t value)
+static uint32_t non_negative_milli(float value)
 {
-    uint8_t bytes[4];
-    put_u32(bytes, (uint32_t)value);
-    return append_tlv(payload, offset, type, bytes, sizeof(bytes));
+    int32_t milli = UF4_FloatToMilli(value);
+    if (milli < 0)
+        milli = 0;
+    return (uint32_t)milli;
 }
 
 static uint8_t state_bits(void)
@@ -185,11 +186,11 @@ static bool read_data(uint8_t type, uint8_t *payload, uint16_t *offset)
     case TVL_TYPE_INPUT_VOLTAGE:
         return append_u32(payload, offset, type, (uint32_t)UF4_FloatToMilli(VIN));
     case TVL_TYPE_INPUT_CURRENT:
-        return append_i32(payload, offset, type, UF4_FloatToMilli(IIN));
+        return append_u32(payload, offset, type, non_negative_milli(IIN));
     case TVL_TYPE_OUTPUT_VOLTAGE:
         return append_u32(payload, offset, type, (uint32_t)UF4_FloatToMilli(VOUT));
     case TVL_TYPE_OUTPUT_CURRENT:
-        return append_i32(payload, offset, type, UF4_FloatToMilli(IOUT));
+        return append_u32(payload, offset, type, non_negative_milli(IOUT));
     case TVL_TYPE_CORE_TEMPERATURE:
         return append_u32(payload, offset, type, (uint32_t)UF4_FloatToMilli(CPU_TEMP));
     case TVL_TYPE_BOARD_TEMPERATURE:
@@ -426,8 +427,6 @@ static void handle_write(uint8_t seq, const uint8_t *payload, uint16_t payload_l
     if (output_settings_changed)
     {
         UF4_PowerApplySetpoints();
-        if ((DF.OUTPUT_Flag != 0U) && (DF.SMFlag != Err))
-            UF4_PowerRestartOutput();
     }
 
     send_frame(TVL_CMD_ACK, seq, NULL, 0U);

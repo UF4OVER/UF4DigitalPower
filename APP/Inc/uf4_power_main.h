@@ -195,6 +195,8 @@ float bytes_to_float(uint8_t *bytes);
 void Auto_FAN(void);
 float UF4_AdcToVoltage(uint32_t adc);
 float UF4_AdcToCurrent(uint32_t adc);
+float UF4_AdcToInputCurrent(uint32_t adc);
+float UF4_AdcToOutputCurrent(uint32_t adc);
 uint32_t UF4_VoltageToAdc(float voltage);
 uint32_t UF4_CurrentToAdc(float current);
 int32_t UF4_FloatToMilli(float value);

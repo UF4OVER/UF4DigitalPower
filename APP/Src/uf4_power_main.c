@@ -58,6 +58,18 @@ float UF4_AdcToCurrent(uint32_t adc)
     return (adc_voltage - CURRENT_ADC_ZERO_V) / CURRENT_SENSE_GAIN;
 }
 
+float UF4_AdcToInputCurrent(uint32_t adc)
+{
+    const float current = -UF4_AdcToCurrent(adc);
+    return (current > 0.0F) ? current : 0.0F;
+}
+
+float UF4_AdcToOutputCurrent(uint32_t adc)
+{
+    const float current = -UF4_AdcToCurrent(adc);
+    return (current > 0.0F) ? current : 0.0F;
+}
+
 uint32_t UF4_VoltageToAdc(float voltage)
 {
     if (voltage < 0.0F)
@@ -184,10 +196,10 @@ CCMRAM void ADCSample(void)
 void ADC_calculate(void)
 {
     VIN = UF4_AdcToVoltage(SADC.VinAvg);                            // 计算ADC1通道0输入电压采样结果
-    IIN = UF4_AdcToCurrent(SADC.IinAvg);                             // 计算ADC1通道1输入电流采样结果
+    IIN = UF4_AdcToInputCurrent(SADC.IinAvg);                        // 计算ADC1通道1输入电流采样结果
 
     VOUT = UF4_AdcToVoltage(SADC.VoutAvg);                           // 计算ADC1通道2输出电压采样结果
-    IOUT = UF4_AdcToCurrent(SADC.IoutAvg);                            // 计算ADC1通道3输出电流采样结果
+    IOUT = UF4_AdcToOutputCurrent(SADC.IoutAvg);                      // 计算ADC1通道3输出电流采样结果
     MainBoard_TEMP = GET_NTC_Temperature();                         // 获取NTC温度(主板温度)
     CPU_TEMP = GET_CPU_Temperature();                               // 获取单片机CPU温度
 }
@@ -459,7 +471,7 @@ void ShortOff(void)
     static int32_t RSCnt = 0;
     static uint8_t RSNum = 0;
     float Vout = UF4_AdcToVoltage(SADC.Vout);
-    float Iout = UF4_AdcToCurrent(SADC.Iout);
+    float Iout = UF4_AdcToOutputCurrent(SADC.Iout);
     // 当输出电流大于 *A，且电压小于*V时，可判定为发生短路保护
     if ((Iout > MAX_SHORT_I) && (Vout < MIN_SHORT_V))
     {
@@ -552,7 +564,7 @@ void OCP(void)
     // 保留保护重启计数器
     static uint16_t RSNum = 0;
 
-    float Iout = UF4_AdcToCurrent(SADC.Iout);
+    float Iout = UF4_AdcToOutputCurrent(SADC.Iout);
 
     // 当输出电流大于*A，且保持50ms
     if ((Iout >= MAX_VOUT_OCP_VAL) && (DF.SMFlag == Run))

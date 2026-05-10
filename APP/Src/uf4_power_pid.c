@@ -110,7 +110,7 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
 
     float vin = UF4_AdcToVoltage(ADC1_RESULT[0]);
     float vout = UF4_AdcToVoltage((ADC1_RESULT[2] * CAL_VOUT_K >> 12) + CAL_VOUT_B);
-    float iout = UF4_AdcToCurrent((ADC1_RESULT[3] * CAL_IOUT_K >> 12) + CAL_IOUT_B);
+    float iout = UF4_AdcToOutputCurrent((ADC1_RESULT[3] * CAL_IOUT_K >> 12) + CAL_IOUT_B);
     float target = SET_Value.Vout;
     float error;
     float duty_ff;
