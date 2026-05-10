@@ -61,6 +61,20 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
 {
     static int32_t I_Integral = 0; // 电流环路积分量
 
+    if ((DF.OUTPUT_Flag == 0U) || (DF.PWMENFlag == 0U) || (DF.SMFlag == Init) || (DF.SMFlag == Wait) || (DF.SMFlag == Err))
+    {
+        CVCC_Mode = CV;
+        I_Integral = 0;
+        i0 = 0;
+        IErr0 = 0;
+        IErr1 = 0;
+        CtrValue.BuckDuty = MIN_BUKC_DUTY;
+        CtrValue.BoostDuty = MIN_BOOST_DUTY;
+        __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
+        __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, CtrValue.BoostDuty);
+        return;
+    }
+
     CtrValue.Vout_ref = CtrValue.Vout_SETref; // 输出参考电压设置为设置电压
 
     int32_t VoutTemp = (ADC1_RESULT[2] * CAL_VOUT_K >> 12) + CAL_VOUT_B; // 获取矫正后的输出电压
@@ -203,9 +217,9 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
 
     // 更新对应寄存器
     // buck占空比
-    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
     // ADC触发采样点，buck占空比的一半，右移1位为除以2
-    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_3, __HAL_HRTIM_GETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1) >> 1);
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, __HAL_HRTIM_GETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1) >> 1);
     // Boost占空比
-    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, HRTIM_COMPAREUNIT_1, CtrValue.BoostDuty);
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, CtrValue.BoostDuty);
 }

@@ -21,9 +21,17 @@ extern "C" {
 #define CCMRAM __attribute__((section("ccmram")))
 
 #define ADC_MAX_VALUE 8190.0F				   // ADC最大值
-#define REF_3V3 3.2806F						   // VREF参考电压
+#define ADC_REF_VOLTAGE 3.3F				   // ADC参考电压
+#define REF_3V3 ADC_REF_VOLTAGE				   // 兼容旧代码命名
+#define VOLTAGE_DIVIDER_GAIN 13.5135F		   // 输入/输出电压分压还原系数
+#define CURRENT_SHUNT_OHM 0.008F			   // 电流采样分流电阻
+#define CURRENT_AMP_GAIN 20.0F				   // 电流采样运放增益
+#define CURRENT_ADC_ZERO_V 1.65F			   // 双向电流采样中点偏置
+#define CURRENT_SENSE_GAIN (CURRENT_SHUNT_OHM * CURRENT_AMP_GAIN)
+
 #define TS_CAL1 *((__IO uint16_t *)0x1FFF75A8) // 内部温度传感器在30度和VREF为3V时的校准数据
 #define TS_CAL2 *((__IO uint16_t *)0x1FFF75CA) // 内部温度传感器在130度和VREF为3V时的校准数据
+
 #define TS_CAL1_TEMP 30.0F
 #define TS_CAL2_TEMP 130.0F
 
@@ -49,6 +57,12 @@ extern "C" {
 #define F_SW_IOUT_OCP 0x0010 // 输出过流
 #define F_SW_SHORT 0x0020	 // 输出短路
 #define F_OTP 0x0040		 // 温度过高
+
+#define MAX_OUTPUT_VOLTAGE 44.0F								   // 输出最高设定电压
+#define MAX_OUTPUT_CURRENT 10.0F								   // 输出最高设定电流
+#define MIN_OUTPUT_VOLTAGE 0.5F								   // 输出最低设定电压
+#define MAX_SHORT_I 10.1F                                          // 短路电流判据
+#define MIN_SHORT_V 0.5F                                           // 短路电压判据
 
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/

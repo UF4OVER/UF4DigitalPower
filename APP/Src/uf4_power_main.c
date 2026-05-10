@@ -27,15 +27,16 @@ volatile uint8_t Encoder_Flag = 0;                                 // 编码器�
 volatile uint8_t BUZZER_Short_Flag = 0;                            // 蜂鸣器短叫触发标志位
 volatile uint8_t BUZZER_Middle_Flag = 0;                           // 蜂鸣器中等时间长度鸣叫触发标志位
 volatile uint8_t BUZZER_Flag = 0;                                  // 蜂鸣器当前状态标志位
+
 volatile float MAX_OTP_VAL;                                        // 过温保护阈值
 volatile float MAX_VOUT_OVP_VAL;                                   // 输出过压保护阈值
 volatile float MAX_VOUT_OCP_VAL;                                   // 输出过流保护阈值
-#define MAX_SHORT_I 10.1F                                          // 短路电流判据
-#define MIN_SHORT_V 0.5F                                           // 短路电压判据
-struct _Ctr_value CtrValue = {0, 0, 0, 0, MIN_BUKC_DUTY, 0, 0, 0}; // 控制参数
+
+struct _Ctr_value CtrValue = {0, 0, 0, 0, 0, MIN_BUKC_DUTY, MIN_BOOST_DUTY, MIN_BUKC_DUTY, MIN_BOOST_DUTY, 0}; // 控制参数
 struct _FLAG DF = {0, 0, 0, 0, 0, 0, 0};                           // 控制标志位
 struct _ADI SADC = {0, 0, 0, 0, 0, 0, 0, 0};                       // 输入输出参数采样值和平均值
 struct _SET_Value SET_Value = {0, 0, 0, 0, 0};                     // 设置参数
+
 SState_M STState = SSInit;                                         // 软启动状态标志位
 _Screen_page Screen_page = VIset_page;                             // 当前屏幕页面标志位
 volatile float VIN, VOUT, IIN, IOUT;                               // 电压电流实际值
@@ -45,6 +46,40 @@ volatile float powerEfficiency = 0;                                // 电源转�
 extern volatile int32_t VErr0, VErr1, VErr2; // 电压误差
 extern volatile int32_t u0, u1;              // 电压环输出量
 
+float UF4_AdcToVoltage(uint32_t adc)
+{
+    return ((float)adc * ADC_REF_VOLTAGE / ADC_MAX_VALUE) * VOLTAGE_DIVIDER_GAIN;
+}
+
+float UF4_AdcToCurrent(uint32_t adc)
+{
+    const float adc_voltage = (float)adc * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
+    return (adc_voltage - CURRENT_ADC_ZERO_V) / CURRENT_SENSE_GAIN;
+}
+
+uint32_t UF4_VoltageToAdc(float voltage)
+{
+    if (voltage < 0.0F)
+        voltage = 0.0F;
+    const float adc = (voltage / VOLTAGE_DIVIDER_GAIN) / ADC_REF_VOLTAGE * ADC_MAX_VALUE;
+    return (uint32_t)(adc + 0.5F);
+}
+
+uint32_t UF4_CurrentToAdc(float current)
+{
+    const float adc_voltage = CURRENT_ADC_ZERO_V + current * CURRENT_SENSE_GAIN;
+    if (adc_voltage <= 0.0F)
+        return 0;
+    const float adc = adc_voltage / ADC_REF_VOLTAGE * ADC_MAX_VALUE;
+    if (adc >= ADC_MAX_VALUE)
+        return (uint32_t)ADC_MAX_VALUE;
+    return (uint32_t)(adc + 0.5F);
+}
+
+int32_t UF4_FloatToMilli(float value)
+{
+    return (int32_t)(value * 1000.0F + (value >= 0.0F ? 0.5F : -0.5F));
+}
 
 /**
  * @brief 采样输出电压、输出电流、输入电压、输入电流并滤波
@@ -64,8 +99,6 @@ CCMRAM void ADCSample(void)
         SADC.Vin = 0;
     if (SADC.Vout < 15)
         SADC.Vout = 0;
-    if (SADC.Iout < 16)
-        SADC.Iout = 0;
 
     // 计算各个采样值的平均值-滑动平均方式
     VinAvgSum = VinAvgSum + SADC.Vin - (VinAvgSum >> 3); // 求和，新增入一个新的采样值，同时减去之前的平均值。
@@ -84,10 +117,11 @@ CCMRAM void ADCSample(void)
  */
 void ADC_calculate(void)
 {
-    VIN = SADC.VinAvg * REF_3V3 / ADC_MAX_VALUE / (4.7F / 75.0F);   // 计算ADC1通道0输入电压采样结果
-    IIN = SADC.IinAvg * REF_3V3 / ADC_MAX_VALUE / 62.0F / 0.005F;   // 计算ADC1通道1输入电流采样结果
-    VOUT = SADC.VoutAvg * REF_3V3 / ADC_MAX_VALUE / (4.7F / 75.0F); // 计算ADC1通道2输出电压采样结果
-    IOUT = SADC.IoutAvg * REF_3V3 / ADC_MAX_VALUE / 62.0F / 0.005F; // 计算ADC1通道3输出电流采样结果
+    VIN = UF4_AdcToVoltage(SADC.VinAvg);                            // 计算ADC1通道0输入电压采样结果
+    IIN = UF4_AdcToCurrent(SADC.IinAvg);                             // 计算ADC1通道1输入电流采样结果
+
+    VOUT = UF4_AdcToVoltage(SADC.VoutAvg);                           // 计算ADC1通道2输出电压采样结果
+    IOUT = UF4_AdcToCurrent(SADC.IoutAvg);                            // 计算ADC1通道3输出电流采样结果
     MainBoard_TEMP = GET_NTC_Temperature();                         // 获取NTC温度(主板温度)
     CPU_TEMP = GET_CPU_Temperature();                               // 获取单片机CPU温度
 }
@@ -141,8 +175,8 @@ void ValInit(void)
 {
     // 关闭PWM
     DF.PWMENFlag = 0;
-    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
     DF.BBFlag = NA;
     // 清除故障标志位
     DF.ErrFlag = 0;
@@ -160,8 +194,8 @@ void ValInit(void)
     u0 = 0;
     u1 = 0;
     // 设置值初始化
-    SET_Value.Vout = 5.0;
-    SET_Value.Iout = 10.0;
+    SET_Value.Vout = 5.0F;
+    SET_Value.Iout = 10.0F;
     MAX_OTP_VAL = 80.0F;      // 过温保护阈值
     MAX_VOUT_OVP_VAL = 50.0F; // 输出过压保护阈值
     MAX_VOUT_OCP_VAL = 10.5F; // 输出过流保护阈值
@@ -181,8 +215,8 @@ void StateMErr(void)
 {
     // 关闭PWM
     DF.PWMENFlag = 0;
-    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
     HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);               // 开启蜂鸣器
     DF.BBFlag = NA;                                                              // 切换运行模式
     // 若故障消除跳转至等待重新软启
@@ -242,8 +276,8 @@ void StateMRise(void)
     {
         // 关闭PWM
         DF.PWMENFlag = 0;
-        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
         // 软启中将运行限制占空比启动，从最小占空比开始启动
         CtrValue.BUCKMaxDuty = MIN_BUKC_DUTY;
         CtrValue.BoostMaxDuty = MIN_BOOST_DUTY;
@@ -254,8 +288,8 @@ void StateMRise(void)
         u0 = 0;
         u1 = 0;
         // 将设置值传到参考值
-        CtrValue.Vout_SETref = SET_Value.Vout * (4.7F / 75.0F) / REF_3V3 * ADC_MAX_VALUE;
-        CtrValue.Iout_ref = SET_Value.Iout * 0.005F * (6200.0F / 100.0F) / REF_3V3 * ADC_MAX_VALUE;
+        CtrValue.Vout_SETref = (int32_t)UF4_VoltageToAdc(SET_Value.Vout);
+        CtrValue.Iout_ref = (int32_t)UF4_CurrentToAdc(SET_Value.Iout);
         // 跳转至软启等待状态
         STState = SSWait;
 
@@ -298,10 +332,10 @@ void StateMRise(void)
             VErr2 = 0;
             u0 = 0;
             u1 = 0;
-            __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, 30000); // BUCK电路下管占空比拉满
-            __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, HRTIM_COMPAREUNIT_1, 30000); // BOOST电路下管占空比拉满
-            HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2);           // 开启HRTIM的PWM输出
+            __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, 30000); // BUCK电路下管占空比拉满
+            __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, 30000); // BOOST电路下管占空比拉满
             HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2);           // 开启HRTIM的PWM输出
+            HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2);           // 开启HRTIM的PWM输出
         }
         // 发波标志位置位
         DF.PWMENFlag = 1;
@@ -335,15 +369,15 @@ void ShortOff(void)
 {
     static int32_t RSCnt = 0;
     static uint8_t RSNum = 0;
-    float Vout = SADC.Vout * REF_3V3 / ADC_MAX_VALUE / (4.7F / 75.0F);
-    float Iout = SADC.Iout * REF_3V3 / ADC_MAX_VALUE / 62.0F / 0.005F;
+    float Vout = UF4_AdcToVoltage(SADC.Vout);
+    float Iout = UF4_AdcToCurrent(SADC.Iout);
     // 当输出电流大于 *A，且电压小于*V时，可判定为发生短路保护
     if ((Iout > MAX_SHORT_I) && (Vout < MIN_SHORT_V))
     {
         // 关闭PWM
         DF.PWMENFlag = 0;
+        HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 开启HRTIM的PWM输出
         HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 开启HRTIM的PWM输出
-        HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 开启HRTIM的PWM输出
         // 故障标志位
         setRegBits(DF.ErrFlag, F_SW_SHORT);
         // 跳转至故障状态
@@ -367,8 +401,8 @@ void ShortOff(void)
                 RSNum = 11;
                 // 关闭PWM
                 DF.PWMENFlag = 0;
+                HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 开启HRTIM的PWM输出
                 HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 开启HRTIM的PWM输出
-                HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 开启HRTIM的PWM输出
             }
             else
             {
@@ -390,7 +424,7 @@ void OVP(void)
 {
     // 过压保护判据保持计数器定义
     static uint16_t OVPCnt = 0;
-    float Vout = SADC.Vout * REF_3V3 / ADC_MAX_VALUE / (4.7F / 75.0F);
+    float Vout = UF4_AdcToVoltage(SADC.Vout);
     // 当输出电压大于50V，且保持10ms
     if (Vout >= MAX_VOUT_OVP_VAL)
     {
@@ -403,8 +437,8 @@ void OVP(void)
             OVPCnt = 0;
             // 关闭PWM
             DF.PWMENFlag = 0;
-            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
             // 故障标志位
             setRegBits(DF.ErrFlag, F_SW_VOUT_OVP);
             // 跳转至故障状态
@@ -429,7 +463,7 @@ void OCP(void)
     // 保留保护重启计数器
     static uint16_t RSNum = 0;
 
-    float Iout = SADC.Iout * REF_3V3 / ADC_MAX_VALUE / 62.0F / 0.005F;
+    float Iout = UF4_AdcToCurrent(SADC.Iout);
 
     // 当输出电流大于*A，且保持50ms
     if ((Iout >= MAX_VOUT_OCP_VAL) && (DF.SMFlag == Run))
@@ -443,8 +477,8 @@ void OCP(void)
             OCPCnt = 0;
             // 关闭PWM
             DF.PWMENFlag = 0;
-            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+            HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
             // 故障标志位
             setRegBits(DF.ErrFlag, F_SW_IOUT_OCP);
             // 跳转至故障状态
@@ -475,8 +509,8 @@ void OCP(void)
                 RSNum = 11;
                 // 关闭PWM
                 DF.PWMENFlag = 0;
-                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
             }
             else
             {
@@ -500,8 +534,8 @@ void OTP(void)
         DF.SMFlag = Wait;
         // 关闭PWM
         DF.PWMENFlag = 0;
-        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BUCK电路的PWM输出
-        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1 | HRTIM_OUTPUT_TF2); // 关闭BOOST电路的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭BUCK电路的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭BOOST电路的PWM输出
         setRegBits(DF.ErrFlag, F_OTP);                                               // 故障标志位
         DF.SMFlag = Err;                                                             // 跳转至故障状态
     }
@@ -672,7 +706,7 @@ float GET_NTC_Temperature(void)
     HAL_ADC_Start(&hadc2); // 启动ADC2采样，采样NTC温度
     // HAL_ADC_PollForConversion(&hadc2, 100); // 等待ADC采样结束
     uint32_t TEMP_adcValue = HAL_ADC_GetValue(&hadc2);                            // 读取ADC2采样结果
-    float temperature = calculateTemperature(TEMP_adcValue * REF_3V3 / 65520.0F); // 计算温度
+    float temperature = calculateTemperature(TEMP_adcValue * ADC_REF_VOLTAGE / 65520.0F); // 计算温度
     return temperature;                                                           // 返回温度值
 }
 
@@ -688,7 +722,7 @@ float GET_CPU_Temperature(void)
     float Temp_Scale = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP) / (float)(TS_CAL2 - TS_CAL1); // 计算温度比例因子
     // 读取ADC5采样结果, 除以8是因为开启了硬件超采样到15bit，但下面计算用的是12bit，开启硬件超采样是为了得到一个比较平滑的采样结果
     float TEMP_adcValue = HAL_ADC_GetValue(&hadc5) / 8.0F;
-    float temperature = Temp_Scale * (TEMP_adcValue * (REF_3V3 / 3.0F) - TS_CAL1) + TS_CAL1_TEMP; // 计算温度
+    float temperature = Temp_Scale * (TEMP_adcValue * (ADC_REF_VOLTAGE / 3.0F) - TS_CAL1) + TS_CAL1_TEMP; // 计算温度
     return one_order_lowpass_filter(temperature, 0.1F);                                           // 返回温度值
 }
 

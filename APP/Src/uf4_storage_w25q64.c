@@ -42,7 +42,7 @@ void W25Q64_SPIStop(void)
 uint8_t MySPI_SwapByte(uint8_t ByteSend)
 {
 	uint8_t rxData = 0;													   // 用于接收数据的变量
-	HAL_SPI_TransmitReceive(&hspi3, &ByteSend, &rxData, 1, HAL_MAX_DELAY); // SPI发送数据并接收数据
+	HAL_SPI_TransmitReceive(&W25Q64_SPI, &ByteSend, &rxData, 1, HAL_MAX_DELAY); // SPI发送数据并接收数据
 	return rxData;
 }
 

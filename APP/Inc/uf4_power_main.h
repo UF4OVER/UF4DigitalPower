@@ -170,7 +170,6 @@ void ADCSample(void);
 float GET_NTC_Temperature(void);
 void Encoder(void);
 void Key_Process(void);
-void OLED_Display(void);
 void ADC_calculate(void);
 void StateM(void);
 void StateMInit(void);
@@ -194,6 +193,11 @@ void Read_Flash(void);
 void float_to_bytes(float value, uint8_t *bytes);
 float bytes_to_float(uint8_t *bytes);
 void Auto_FAN(void);
+float UF4_AdcToVoltage(uint32_t adc);
+float UF4_AdcToCurrent(uint32_t adc);
+uint32_t UF4_VoltageToAdc(float voltage);
+uint32_t UF4_CurrentToAdc(float current);
+int32_t UF4_FloatToMilli(float value);
 
 #ifdef __cplusplus
 }
