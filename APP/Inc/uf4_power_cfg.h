@@ -61,6 +61,7 @@ extern "C" {
 #define MAX_OUTPUT_VOLTAGE 44.0F								   // 输出最高设定电压
 #define MAX_OUTPUT_CURRENT 10.0F								   // 输出最高设定电流
 #define MIN_OUTPUT_VOLTAGE 0.5F								   // 输出最低设定电压
+#define MIN_INPUT_START_VOLTAGE 6.0F							   // 输入达到该电压后才允许启动输出
 #define MAX_SHORT_I 10.1F                                          // 短路电流判据
 #define MIN_SHORT_V 0.5F                                           // 短路电压判据
 

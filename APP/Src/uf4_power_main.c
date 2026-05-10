@@ -10,6 +10,7 @@
  */
 
 #include "uf4_power_main.h"
+#include "uf4_power_pid.h"
 #include "uf4_storage_w25q64.h"
 
 #include <math.h>
@@ -79,6 +80,71 @@ uint32_t UF4_CurrentToAdc(float current)
 int32_t UF4_FloatToMilli(float value)
 {
     return (int32_t)(value * 1000.0F + (value >= 0.0F ? 0.5F : -0.5F));
+}
+
+static void UF4_PowerStopPwm(void)
+{
+    DF.PWMENFlag = 0;
+    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2);
+    HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2);
+    CtrValue.BuckDuty = MIN_BUKC_DUTY;
+    CtrValue.BUCKMaxDuty = MIN_BUKC_DUTY;
+    CtrValue.BoostDuty = MIN_BOOST_DUTY;
+    CtrValue.BoostMaxDuty = MIN_BOOST_DUTY;
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, CtrValue.BoostDuty);
+}
+
+static uint8_t UF4_InputReady(void)
+{
+    return (UF4_AdcToVoltage(SADC.VinAvg) >= MIN_INPUT_START_VOLTAGE) ? 1U : 0U;
+}
+
+void UF4_PowerApplySetpoints(void)
+{
+    if (SET_Value.Vout < MIN_OUTPUT_VOLTAGE)
+        SET_Value.Vout = MIN_OUTPUT_VOLTAGE;
+    if (SET_Value.Vout > MAX_OUTPUT_VOLTAGE)
+        SET_Value.Vout = MAX_OUTPUT_VOLTAGE;
+    if (SET_Value.Iout < 0.0F)
+        SET_Value.Iout = 0.0F;
+    if (SET_Value.Iout > MAX_OUTPUT_CURRENT)
+        SET_Value.Iout = MAX_OUTPUT_CURRENT;
+
+    CtrValue.Vout_SETref = (int32_t)UF4_VoltageToAdc(SET_Value.Vout);
+    CtrValue.Iout_ref = (int32_t)UF4_CurrentToAdc(SET_Value.Iout);
+}
+
+void UF4_PowerRestartOutput(void)
+{
+    UF4_PowerApplySetpoints();
+    UF4_PowerStopPwm();
+    VErr0 = 0;
+    VErr1 = 0;
+    VErr2 = 0;
+    u0 = 0;
+    u1 = 0;
+    DF.BBFlag = NA;
+    STState = SSInit;
+    if (DF.ErrFlag == F_NOERR)
+        DF.SMFlag = Wait;
+}
+
+void UF4_PowerSetOutputEnabled(uint8_t enabled)
+{
+    if (enabled == 0U)
+    {
+        DF.OUTPUT_Flag = 0U;
+        UF4_PowerStopPwm();
+        DF.BBFlag = NA;
+        STState = SSInit;
+        if (DF.SMFlag != Err)
+            DF.SMFlag = Wait;
+        return;
+    }
+
+    DF.OUTPUT_Flag = 1U;
+    UF4_PowerRestartOutput();
 }
 
 /**
@@ -206,6 +272,13 @@ void ValInit(void)
  */
 void StateMRun(void)
 {
+    if (!UF4_InputReady())
+    {
+        UF4_PowerStopPwm();
+        DF.BBFlag = NA;
+        STState = SSInit;
+        DF.SMFlag = Wait;
+    }
 }
 
 /*
@@ -238,6 +311,11 @@ void StateMWait(void)
 
     // 关PWM
     DF.PWMENFlag = 0;
+    if ((DF.OUTPUT_Flag == 0U) || !UF4_InputReady())
+    {
+        CntS = 0;
+        return;
+    }
     // 计数器累加
     CntS++;
     // 等待1S，进入启动状态
@@ -267,6 +345,17 @@ void StateMRise(void)
     static uint16_t Cnt = 0;
     // 最大占空比限制计数器
     static uint16_t BUCKMaxDutyCnt = 0, BoostMaxDutyCnt = 0;
+
+    if (!UF4_InputReady())
+    {
+        UF4_PowerStopPwm();
+        BUCKMaxDutyCnt = 0;
+        BoostMaxDutyCnt = 0;
+        STState = SSInit;
+        DF.BBFlag = NA;
+        DF.SMFlag = Wait;
+        return;
+    }
 
     // 判断软启状态
     switch (STState)
@@ -376,8 +465,8 @@ void ShortOff(void)
     {
         // 关闭PWM
         DF.PWMENFlag = 0;
-        HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 开启HRTIM的PWM输出
-        HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 开启HRTIM的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭HRTIM的PWM输出
+        HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭HRTIM的PWM输出
         // 故障标志位
         setRegBits(DF.ErrFlag, F_SW_SHORT);
         // 跳转至故障状态
@@ -401,8 +490,8 @@ void ShortOff(void)
                 RSNum = 11;
                 // 关闭PWM
                 DF.PWMENFlag = 0;
-                HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 开启HRTIM的PWM输出
-                HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 开启HRTIM的PWM输出
+                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TA1 | HRTIM_OUTPUT_TA2); // 关闭HRTIM的PWM输出
+                HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TD1 | HRTIM_OUTPUT_TD2); // 关闭HRTIM的PWM输出
             }
             else
             {
@@ -554,6 +643,13 @@ CCMRAM void BBMode(void)
     uint8_t PreBBFlag = 0;
     // 暂存当前的模式状态量
     PreBBFlag = DF.BBFlag;
+
+    if (!UF4_InputReady())
+    {
+        DF.BBFlag = NA;
+        DF.BBModeChange = (PreBBFlag == DF.BBFlag) ? 0U : 1U;
+        return;
+    }
 
     uint32_t VIN_ADC = ADC1_RESULT[0]; // 输入电压ADC采样值
 

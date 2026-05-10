@@ -198,6 +198,9 @@ float UF4_AdcToCurrent(uint32_t adc);
 uint32_t UF4_VoltageToAdc(float voltage);
 uint32_t UF4_CurrentToAdc(float current);
 int32_t UF4_FloatToMilli(float value);
+void UF4_PowerApplySetpoints(void);
+void UF4_PowerRestartOutput(void);
+void UF4_PowerSetOutputEnabled(uint8_t enabled);
 
 #ifdef __cplusplus
 }

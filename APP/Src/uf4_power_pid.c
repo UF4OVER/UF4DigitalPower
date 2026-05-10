@@ -52,6 +52,24 @@ void PID_Init(void)
 #define ILOOP_KI 3 // 电流环PID补偿器I值
 #define ILOOP_KD 1 // 电流环PID补偿器D值
 
+#define UF4_VLOOP_KP 0.025F
+#define UF4_VLOOP_KI 0.00008F
+#define UF4_VLOOP_DIVIDER 50U
+#define UF4_VLOOP_INTEGRAL_MIN (-0.2F)
+#define UF4_VLOOP_INTEGRAL_MAX 0.2F
+#define UF4_DUTY_MIN ((float)MIN_BUKC_DUTY / (float)PERIOD)
+#define UF4_DUTY_MAX ((float)MAX_BUCK_DUTY / (float)PERIOD)
+#define UF4_BOOST_DUTY_MAX ((float)MAX_BOOST_DUTY / (float)PERIOD)
+
+static float uf4_clampf(float value, float min_value, float max_value)
+{
+    if (value < min_value)
+        return min_value;
+    if (value > max_value)
+        return max_value;
+    return value;
+}
+
 /**
  * @brief BuckBoost电压电流环路控制PID函数。
  * 该函数用于实现BuckBoost电压电流环路控制的PID算法。
@@ -60,11 +78,17 @@ void PID_Init(void)
 CCMRAM void BuckBoostVILoopCtlPID(void)
 {
     static int32_t I_Integral = 0; // 电流环路积分量
+    static float v_integral = 0.0F;
+    static uint16_t v_loop_divider = 0U;
+    static uint16_t previous_mode = NA;
 
     if ((DF.OUTPUT_Flag == 0U) || (DF.PWMENFlag == 0U) || (DF.SMFlag == Init) || (DF.SMFlag == Wait) || (DF.SMFlag == Err))
     {
         CVCC_Mode = CV;
         I_Integral = 0;
+        v_integral = 0.0F;
+        v_loop_divider = 0U;
+        previous_mode = DF.BBFlag;
         i0 = 0;
         IErr0 = 0;
         IErr1 = 0;
@@ -75,146 +99,102 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
         return;
     }
 
-    CtrValue.Vout_ref = CtrValue.Vout_SETref; // 输出参考电压设置为设置电压
-
-    int32_t VoutTemp = (ADC1_RESULT[2] * CAL_VOUT_K >> 12) + CAL_VOUT_B; // 获取矫正后的输出电压
-    int32_t IoutTemp = (ADC1_RESULT[3] * CAL_IOUT_K >> 12) + CAL_IOUT_B; // 获取矫正后的输出电流
-
-    // 计算电流误差量，当输出电流小于参考电流，输出量增加
-    IErr0 = CtrValue.Iout_ref - IoutTemp;
-    // 电流环路输出= 积分量 + KP*误差量 + KD*当前误差减上次误差
-    i0 = I_Integral + IErr0 * ILOOP_KP + (IErr0 - IErr1) * ILOOP_KD;
-    // 积分量=积分量+KI*误差量
-    I_Integral = I_Integral + IErr0 * ILOOP_KI;
-
-    // 积分量限制，积分量最大值限制
-    if (I_Integral > ADC_MAX_VALUE)
-        I_Integral = ADC_MAX_VALUE;
-
-    if (DF.SMFlag == Rise && (VoutTemp < (CtrValue.Vout_ref / 2))) // 判断是否在软启动状态
+    if (++v_loop_divider < UF4_VLOOP_DIVIDER)
     {
-
-        CtrValue.Vout_ref = CtrValue.Vout_ref + i0;  // 输出参考电压加上电流环计算结果
-        CVCC_Mode = CC;                              // 恒流模式
-        if (CtrValue.Vout_ref > CtrValue.Vout_SSref) // 输出参考电压超过软启动设置电压时限制在软启动设置电压
-        {
-            CtrValue.Vout_ref = CtrValue.Vout_SSref; // 限制输出参考电压
-            CVCC_Mode = CV;                          // 恒压模式
-        }
-        if (CtrValue.Vout_ref < 0) // 输出参考电压小于0时限制在0
-        {
-            CtrValue.Vout_ref = 0;
-        }
+        __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
+        __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, __HAL_HRTIM_GETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1) >> 1);
+        __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, CtrValue.BoostDuty);
+        return;
     }
-    else
+    v_loop_divider = 0U;
+
+    float vin = UF4_AdcToVoltage(ADC1_RESULT[0]);
+    float vout = UF4_AdcToVoltage((ADC1_RESULT[2] * CAL_VOUT_K >> 12) + CAL_VOUT_B);
+    float iout = UF4_AdcToCurrent((ADC1_RESULT[3] * CAL_IOUT_K >> 12) + CAL_IOUT_B);
+    float target = SET_Value.Vout;
+    float error;
+    float duty_ff;
+    float duty;
+    float duty_max = UF4_DUTY_MAX;
+
+    if (DF.SMFlag == Rise)
     {
-        CtrValue.Vout_ref = CtrValue.Vout_ref + i0;   // 输出参考电压加上电流环计算结果
-        CVCC_Mode = CC;                               // 恒流模式
-        if (CtrValue.Vout_ref > CtrValue.Vout_SETref) // 输出参考电压超过设置电压时限制在设置电压
-        {
-            CtrValue.Vout_ref = CtrValue.Vout_SETref; // 限制输出参考电压
-            CVCC_Mode = CV;                           // 恒压模式
-        }
-        if (CtrValue.Vout_ref < 0) // 输出参考电压小于0时限制在0
-        {
-            CtrValue.Vout_ref = 0;
-        }
+        const float rise_limit = (float)CtrValue.BUCKMaxDuty / (float)PERIOD;
+        duty_max = uf4_clampf(rise_limit, UF4_DUTY_MIN, UF4_DUTY_MAX);
     }
 
-    VErr0 = CtrValue.Vout_ref - VoutTemp; // 计算电压误差量，当参考电压大于输出电压，占空比增加，输出量增加
-
-    // 当模式切换时，降低占空比，确保模式切换不过冲
-    // BBModeChange为模式切换为，不同模式切换时，该位会被置1
-    if (DF.BBModeChange)
+    if ((DF.BBModeChange != 0U) || (previous_mode != DF.BBFlag))
     {
-        u1 = 0;
-        I_Integral = 0;
-        i0 = 0;
+        v_integral = 0.0F;
+        v_loop_divider = 0U;
         DF.BBModeChange = 0;
+        previous_mode = DF.BBFlag;
     }
 
-    // 判断工作模式，BUCK，BOOST，BUCK-BOOST
+    if (vin < 0.5F)
+    {
+        CtrValue.BuckDuty = MIN_BUKC_DUTY;
+        CtrValue.BoostDuty = MIN_BOOST_DUTY;
+        goto update_pwm;
+    }
+
+    CtrValue.Vout_ref = (int32_t)UF4_VoltageToAdc(target);
+    VErr0 = CtrValue.Vout_ref - (int32_t)((ADC1_RESULT[2] * CAL_VOUT_K >> 12) + CAL_VOUT_B);
+    error = target - vout;
+
+    v_integral += UF4_VLOOP_KI * error;
+    v_integral = uf4_clampf(v_integral, UF4_VLOOP_INTEGRAL_MIN, UF4_VLOOP_INTEGRAL_MAX);
+
+    CVCC_Mode = CV;
+    if ((SET_Value.Iout > 0.001F) && (iout > SET_Value.Iout))
+    {
+        CVCC_Mode = CC;
+        v_integral -= 0.01F;
+        v_integral = uf4_clampf(v_integral, UF4_VLOOP_INTEGRAL_MIN, UF4_VLOOP_INTEGRAL_MAX);
+    }
+
     switch (DF.BBFlag)
     {
-    case NA: // 初始阶段
-    {
-        VErr0 = 0;
-        VErr1 = 0;
-        VErr2 = 0;
-        u0 = 0;
-        u1 = 0;
-        i0 = 0;
-        I_Integral = 0;
-        IErr0 = 0;
-        IErr1 = 0;
+    case Buck:
+        duty_ff = target / vin;
+        duty = duty_ff + (UF4_VLOOP_KP * error) + v_integral;
+        duty = uf4_clampf(duty, UF4_DUTY_MIN, duty_max);
+        CtrValue.BuckDuty = (int16_t)(duty * (float)PERIOD + 0.5F);
+        CtrValue.BoostDuty = MIN_BOOST_DUTY1;
         break;
-    }
-    case Buck: // BUCK模式
-    {
-        u0 = u1 + VErr0 * BUCKPIDb0 + VErr1 * BUCKPIDb1 + VErr2 * BUCKPIDb2; // 计算电压环输出
-        // 历史数据幅值
-        VErr2 = VErr1;
-        VErr1 = VErr0;
-        u1 = u0;
 
-        // 环路输出赋值
-        CtrValue.BoostDuty = MIN_BOOST_DUTY1; // BOOST上管固定占空比94%，下管6%
-        CtrValue.BuckDuty = (u0 >> 8) * 3;    // 电压环占空比输出
-
-        // 环路输出最大最小占空比限制
-        if (CtrValue.BuckDuty > CtrValue.BUCKMaxDuty)
-            CtrValue.BuckDuty = CtrValue.BUCKMaxDuty;
-        if (CtrValue.BuckDuty < MIN_BUKC_DUTY)
-            CtrValue.BuckDuty = MIN_BUKC_DUTY;
+    case Boost:
+        duty_ff = 1.0F - (vin / uf4_clampf(target, 1.0F, MAX_OUTPUT_VOLTAGE));
+        duty = duty_ff + (UF4_VLOOP_KP * error) + v_integral;
+        duty = uf4_clampf(duty, UF4_DUTY_MIN, UF4_BOOST_DUTY_MAX);
+        CtrValue.BuckDuty = MAX_BUCK_DUTY;
+        CtrValue.BoostDuty = (int16_t)(duty * (float)PERIOD + 0.5F);
         break;
-    }
-    case Boost: // Boost模式
-    {
-        // 调用PID环路计算公式（参照PID环路计算文档）
-        u0 = u1 + VErr0 * BOOSTPIDb0 + VErr1 * BOOSTPIDb1 + VErr2 * BOOSTPIDb2;
-        // 历史数据幅值
-        VErr2 = VErr1;
-        VErr1 = VErr0;
-        u1 = u0;
 
-        // 环路输出赋值
-        CtrValue.BuckDuty = MAX_BUCK_DUTY;  // BUCK上管固定占空比94%
-        CtrValue.BoostDuty = (u0 >> 8) * 3; // 电压环占空比输出
-
-        // 环路输出最大最小占空比限制
-        if (CtrValue.BoostDuty > CtrValue.BoostMaxDuty)
-            CtrValue.BoostDuty = CtrValue.BoostMaxDuty;
-        if (CtrValue.BoostDuty < MIN_BOOST_DUTY)
-            CtrValue.BoostDuty = MIN_BOOST_DUTY;
+    case Mix:
+        duty_ff = (target > vin) ? (1.0F - (vin / uf4_clampf(target, 1.0F, MAX_OUTPUT_VOLTAGE))) : UF4_DUTY_MIN;
+        duty = duty_ff + (UF4_VLOOP_KP * error) + v_integral;
+        duty = uf4_clampf(duty, UF4_DUTY_MIN, UF4_BOOST_DUTY_MAX);
+        CtrValue.BuckDuty = MAX_BUCK_DUTY1;
+        CtrValue.BoostDuty = (int16_t)(duty * (float)PERIOD + 0.5F);
         break;
-    }
-    case Mix: // Mix模式
-    {
-        // 调用PID环路计算公式
-        u0 = u1 + VErr0 * BOOSTPIDb0 + VErr1 * BOOSTPIDb1 + VErr2 * BOOSTPIDb2;
-        // 历史数据幅值
-        VErr2 = VErr1;
-        VErr1 = VErr0;
-        u1 = u0;
-        IErr1 = IErr0;
 
-        // 环路输出赋值
-        CtrValue.BuckDuty = MAX_BUCK_DUTY1; // BUCK上管固定占空比80%
-        CtrValue.BoostDuty = (u0 >> 8) * 3; // 电压环占空比输出
-
-        // 环路输出最大最小占空比限制
-        if (CtrValue.BoostDuty > CtrValue.BoostMaxDuty)
-            CtrValue.BoostDuty = CtrValue.BoostMaxDuty;
-        if (CtrValue.BoostDuty < MIN_BOOST_DUTY)
-            CtrValue.BoostDuty = MIN_BOOST_DUTY;
-        break;
-    }
-    }
-
-    // PWMENFlag是PWM开启标志位，当该位为0时,buck的占空比为0，无输出;
-    if (DF.PWMENFlag == 0)
+    default:
         CtrValue.BuckDuty = MIN_BUKC_DUTY;
+        CtrValue.BoostDuty = MIN_BOOST_DUTY;
+        break;
+    }
 
+    if (CtrValue.BuckDuty > CtrValue.BUCKMaxDuty)
+        CtrValue.BuckDuty = CtrValue.BUCKMaxDuty;
+    if (CtrValue.BuckDuty < MIN_BUKC_DUTY)
+        CtrValue.BuckDuty = MIN_BUKC_DUTY;
+    if (CtrValue.BoostDuty > CtrValue.BoostMaxDuty)
+        CtrValue.BoostDuty = CtrValue.BoostMaxDuty;
+    if (CtrValue.BoostDuty < MIN_BOOST_DUTY)
+        CtrValue.BoostDuty = MIN_BOOST_DUTY;
+
+update_pwm:
     // 更新对应寄存器
     // buck占空比
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
