@@ -30,7 +30,7 @@ add_compile_options(-mcpu=cortex-m4 -mthumb -mthumb-interwork)
 add_compile_options(-ffunction-sections -fdata-sections -fno-common -fmessage-length=0)
 
 # uncomment to mitigate c++17 absolute addresses warnings
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-register")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-register")
 
 # Enable assembler files preprocessing
 add_compile_options($<$<COMPILE_LANGUAGE:ASM>:-x$<SEMICOLON>assembler-with-cpp>)
@@ -59,21 +59,20 @@ include_directories(
         Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
-        USER/Inc
-        TVLCOM_V2_FULL/Inc
+        APP/Inc
+        Middlewares/TVLCOM_V2_FULL/Inc
+
 )
 
-add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32G474xx -DTVLCOM_USE_STM32_HAL)
+add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32G474xx)
 
 file(GLOB_RECURSE SOURCES
         "USB_Device/*.*"
         "Core/*.*"
         "Middlewares/*.*"
         "Drivers/*.*"
-        "USER/*.*")
+        "APP/*.*"
 
-list(APPEND SOURCES
-        TVLCOM_V2_FULL/Src/tvlcom.c)
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)
 

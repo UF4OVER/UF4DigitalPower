@@ -30,7 +30,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "user_power.h"
+#include "uf4_power_main.h"
+#include "uf4_power_pid.h"
+#include "uf4_tvlcom.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,36 +51,36 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+// 毫秒计时变量
+volatile uint16_t ms_cnt_1 = 0; // 计时变量1
+volatile uint16_t ms_cnt_2 = 0; // 计时变量2
+volatile uint16_t ms_cnt_3 = 0; // 计时变量3
+volatile uint16_t ms_cnt_4 = 0; // 计时变量4
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#if !HRTIM_AD_PIN_DEMO
-static volatile uint32_t g_tick_1ms = 0U;
-#else
-static volatile uint32_t g_demo_hrtim_rep_count = 0U;
-#endif
-static volatile uint16_t g_user_adc_result[USER_POWER_ADC_CHANNEL_COUNT] = {0U};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
-
+int main(void) {
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -106,7 +108,6 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_ADC5_Init();
-  MX_IWDG_Init();
   MX_SPI3_Init();
   MX_TIM4_Init();
   MX_USB_Device_Init();
@@ -115,26 +116,93 @@ int main(void)
   MX_TIM8_Init();
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
+  MX_TIM16_Init();
+  MX_TIM17_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
+  DF.SMFlag = Init;                         // 初始化状态机
+  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3); // 启动定时器8和通道3的PWM输出
+  FAN_PWM_set(100);                         // 设置风扇转速为100%
 
-  HAL_GPIO_WritePin(DIV_SW_GPIO_Port, DIV_SW_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DIV_SW_GPIO_Port, DIV_SW_Pin, GPIO_PIN_SET); // 设置分压开关为分压状态
 
-  UserPower_Init(g_user_adc_result);
+  HAL_TIM_Base_Start_IT(&htim2);            // 启动定时器2和定时器中断，1kHz
+  HAL_TIM_Base_Start_IT(&htim3);            // 启动定时器3和定时器中断，200Hz
+  HAL_TIM_Base_Start_IT(&htim4);            // 启动定时器4和定时器中断，100Hz
+  PID_Init();                               // PID初始化
+  Init_Flash();                             // Flash初始化
+  Read_Flash();                             // 读取Flash数据
+  UF4_TvlcomInit();                         // TVLCOM通信初始化
+
+  HAL_Delay(200);                                        // 延时100ms，等待供电稳定
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED); // 校准ADC1
+  HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED); // 校准ADC2
+  HAL_ADCEx_Calibration_Start(&hadc5, ADC_SINGLE_ENDED); // 校准ADC5
+
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC1_RESULT, 4); // 启动ADC1采样和DMA数据传送,采样输入输出电压电流
+
+  HAL_ADC_Start(&hadc2);                                 // 启动ADC2采样，采样NTC温度
+  HAL_ADC_Start(&hadc5);                                 // 启动ADC5采样，采样单片机CPU温度
+
+  HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_A);                     // 开启HRTIM波形计数器
+  HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_D);                     // 开启HRTIM波形计数器
+
+  __HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_TIM_IT_REP); // 开启HRTIM定时器A的中断
+
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin | LED2_Pin, GPIO_PIN_RESET); // 关闭LED_G和LED_R
+
+  FAN_PWM_set(0); // 设置风扇转速为0
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_IWDG_Refresh(&hiwdg);
-    UserPower_BackgroundTask();
-    HAL_Delay(1);
+
+    UF4_TvlcomProcess(); // 处理上位机TVLCOM命令
+
+    if (ms_cnt_3 >= 10) // 判断是否计时到10ms
+    {
+      ms_cnt_3 = 0;    // 计时清零
+      BUZZER_Short();  // 蜂鸣器短促鸣叫
+      ADC_calculate(); // ADC采样结果计算
+    }
+
+    if (ms_cnt_4 >= 50) // 判断是否计时到50ms
+    {
+      ms_cnt_4 = 0;    // 计时清零
+      BUZZER_Middle(); // 蜂鸣器中速鸣叫
+
+      if ((DF.SMFlag == Rise) || (DF.SMFlag == Run)) // 判断当前状态
+      {
+        HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, GPIO_PIN_SET); // LED_G输出状态指示灯亮
+      }
+      else
+      {
+        HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, GPIO_PIN_RESET); // LED_G输出状态指示灯灭
+      }
+
+      if (ms_cnt_2 >= 100) // 判断是否计时到100ms
+      {
+        ms_cnt_2 = 0;   // 计时清零
+        Auto_FAN();     // 风扇转速控制
+      }
+
+      if (ms_cnt_1 >= 500) // 判断是否计时到500ms
+      {
+        ms_cnt_1 = 0;                                   // 计时清零
+        HAL_GPIO_TogglePin(LED_R_GPIO_Port, LED_R_Pin); // LED_R电平翻转
+        Update_Flash();                                 // 更新Flash存储内容
+
+      }
+
+      HAL_IWDG_Refresh(&hiwdg); // 喂狗
+    }
+    /* USER CODE END 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -186,30 +254,34 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_HRTIM_RepetitionEventCallback(HRTIM_HandleTypeDef *hhrtim, uint32_t TimerIdx)
-{
-  if ((hhrtim == &hhrtim1) && (TimerIdx == HRTIM_TIMERINDEX_TIMER_A))
-  {
-    UserPower_FastLoop();
-  }
-}
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim->Instance == TIM2)
+/**
+ * @brief HAL_TIM_PeriodElapsedCallback函数,中断回调函数
+ *
+ * 当定时器周期结束时，该函数将被调用。
+ *
+ * @param htim TIM句柄指针
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim->Instance == TIM2) // 定时器TIM2，中断时间1ms
   {
-    HAL_IWDG_Refresh(&hiwdg);
-    g_tick_1ms++;
-    if ((g_tick_1ms % 500U) == 0U)
-    {
-      HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-    }
+    ms_cnt_1++;
+    ms_cnt_2++;
+    ms_cnt_3++;
+    ms_cnt_4++;
   }
-  else if (htim->Instance == TIM3)
+  if (htim->Instance == TIM3) // 定时器TIM3，中断时间5ms
   {
+    ADCSample(); // ADC采样滤波函数
+    ShortOff();  // 短路保护
+    OTP();       // 过温保护
+    OVP();       // 输出过压保护
+    OCP();       // 输出过流保护
+    StateM();    // 电源状态机函数
+    BBMode();    // 运行模式判断
   }
+  // if (htim->Instance == TIM4) // 定时器TIM4，中断时间10ms
 }
-
 /* USER CODE END 4 */
 
 /**

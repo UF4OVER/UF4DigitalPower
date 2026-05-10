@@ -87,8 +87,16 @@ void Error_Handler(void);
 #define LED1_GPIO_Port GPIOB
 #define DIV_SW_Pin GPIO_PIN_7
 #define DIV_SW_GPIO_Port GPIOB
+#define FAN_PWM_Pin GPIO_PIN_9
+#define FAN_PWM_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define LED_G_Pin LED1_Pin
+#define LED_G_GPIO_Port LED1_GPIO_Port
+#define LED_R_Pin LED2_Pin
+#define LED_R_GPIO_Port LED2_GPIO_Port
+#define BUZZER_Pin LED4_Pin
+#define BUZZER_GPIO_Port LED4_GPIO_Port
 
 /* USER CODE END Private defines */
 
