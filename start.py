@@ -23,6 +23,7 @@ from Config import AppIconPath, cfg
 
 from App.Core import StyleSheet, logger, load_saved_font
 from App.Pages import BatteryPage, DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
+from Core import UF4Icon
 
 
 class Window(MSFluentWindow):
@@ -63,16 +64,29 @@ class Window(MSFluentWindow):
             self.homeInterface, FIF.HOME, '主页', FIF.HOME_FILL
         )
         self.deviceNavItem = self.addSubInterface(
-            self.deviceInterface, FIF.DEVELOPER_TOOLS, '串口'
+            self.deviceInterface,
+            UF4Icon.SERIAL_PORT,
+            '串口',
+            UF4Icon.SERIAL_PORT_FILL
         )
         self.powerNavItem = self.addSubInterface(
-            self.powerInterface, FIF.POWER_BUTTON, '设备'
+            self.powerInterface,
+            UF4Icon.DEVELOPER_BOARD,
+            '设备',
+            UF4Icon.DEVELOPER_BOARD_FILL
         )
         self.batteryNavItem = self.addSubInterface(
-            self.batteryInterface, FIF.UNPIN, '电池'
+            self.batteryInterface,
+            UF4Icon.BATTERY_SAVER,
+            '电池',
+            UF4Icon.BATTERY_SAVER_FILL
         )
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface, FIF.IOT, '烧录'
+            self.daplinkInterface,
+            UF4Icon.FLASH_SETTINGS,
+            '烧录',
+            UF4Icon.FLASH_SETTINGS_FILL
+
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
