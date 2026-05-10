@@ -60,9 +60,8 @@ include_directories(
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
         APP/Inc
-#        DSP/Include
-#        DSP/Include/dsp
         Middlewares/TVLCOM_V2_FULL/Inc
+
 )
 
 add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32G474xx)
@@ -73,8 +72,7 @@ file(GLOB_RECURSE SOURCES
         "Middlewares/*.*"
         "Drivers/*.*"
         "APP/*.*"
-#        "DSP/*.*"
-        "USER_Code/*.*")
+
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)
 
@@ -83,6 +81,7 @@ add_link_options(-mcpu=cortex-m4 -mthumb -mthumb-interwork)
 add_link_options(-T ${LINKER_SCRIPT})
 
 add_executable(${PROJECT_NAME}.elf ${SOURCES} ${LINKER_SCRIPT})
+target_link_libraries(${PROJECT_NAME}.elf m)
 
 set(HEX_FILE ${PROJECT_BINARY_DIR}/${PROJECT_NAME}.hex)
 set(BIN_FILE ${PROJECT_BINARY_DIR}/${PROJECT_NAME}.bin)
