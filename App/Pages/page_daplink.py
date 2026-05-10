@@ -29,7 +29,7 @@ from App.Core.utility import showMessage
 from App.Core.Session import session_daplink as daplink_pyocd
 
 
-class DaplinkFlashPage(ScrollArea):
+class DaplinkPage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("DaplinkFlashPage")

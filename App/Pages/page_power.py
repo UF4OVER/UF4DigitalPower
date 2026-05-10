@@ -45,9 +45,8 @@ from qfluentwidgets import (
     setFont,
 )
 
-from Config import SettingMangerInstance, cfg, logger
+from Config import cfg, logger
 from App.Core import (
-    DeviceScanner,
     ErrorEvent,
     RxEvent,
     SendEvent,
@@ -65,7 +64,8 @@ from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
-POWER_POLL_INTERVAL_MS = 200
+POWER_POLL_INTERVAL_MS = 500
+POWER_SERIAL_BAUD_RATE = 921600
 WRITE_POLL_RESTART_DELAY_MS = 600
 PLOT_Y_MIN = 0
 PLOT_Y_MAX = 45
@@ -91,16 +91,6 @@ POWER_TEXT = {
     "Output Current": "输出电流",
     "Output Power": "输出功率",
 }
-
-
-def _readPortIdentity() -> tuple[int, int]:
-    try:
-        return int(SettingMangerInstance.get("port", "vid")), int(
-            SettingMangerInstance.get("port", "pid")
-        )
-    except Exception as exc:
-        logger.error(f"Failed to load VID/PID from settings: {exc}")
-        return -1, -1
 
 
 @dataclass(frozen=True)
@@ -500,13 +490,11 @@ class PowerPage(ScrollArea):
         self.setObjectName("PowerPage")
         self._shutdownDone = False
 
-        vid, pid = _readPortIdentity()
         self._client = F4CPPowerClient()
         self._clientThread = QThread(self)
         self._client.moveToThread(self._clientThread)
         self._clientThread.finished.connect(self._client.deleteLater)
         self._clientThread.start()
-        self._scanner = DeviceScanner(vid=vid, pid=pid, parent=self)
         self._manualSession = None
         self._bluetoothDevices: dict[str, str] = {}
         self._bluetoothDiscoveryAgent = None
@@ -514,6 +502,7 @@ class PowerPage(ScrollArea):
         self._stagedOutputEnabled: bool | None = None
         self._lastVerboseLogTs = 0.0
         self._writePollingRestartPending = False
+        self._writeInFlight = False
         self._historyDirty = False
         self._plotRefreshTimer = QTimer(self)
         self._plotRefreshTimer.setInterval(200)
@@ -573,11 +562,6 @@ class PowerPage(ScrollArea):
         self.portLabel = BodyLabel(self.summaryCard)
         self.portCombo = ComboBox(self.summaryCard)
         self.portCombo.setMinimumWidth(132)
-        self.baudLabel = BodyLabel(self.summaryCard)
-        self.baudCombo = ComboBox(self.summaryCard)
-        self.baudCombo.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"])
-        self.baudCombo.setCurrentText("921600")
-        self.baudCombo.setMinimumWidth(116)
         self.bluetoothLabel = BodyLabel(self.summaryCard)
         self.bluetoothCombo = ComboBox(self.summaryCard)
         self.bluetoothCombo.setMinimumWidth(160)
@@ -600,8 +584,6 @@ class PowerPage(ScrollArea):
         layout.addWidget(self.connectionTypeCombo)
         layout.addWidget(self.portLabel)
         layout.addWidget(self.portCombo)
-        layout.addWidget(self.baudLabel)
-        layout.addWidget(self.baudCombo)
         layout.addWidget(self.bluetoothLabel)
         layout.addWidget(self.bluetoothCombo)
         layout.addWidget(self.refreshTargetButton)
@@ -748,9 +730,6 @@ class PowerPage(ScrollArea):
         self.rootLayout.addWidget(self.logCard)
 
     def _bindSignals(self) -> None:
-        self._scanner.device_connected.connect(self.onDeviceConnected)
-        self._scanner.device_disconnected.connect(self.onDeviceDisconnected)
-
         self._client.log.connect(self._appendLog)
         self._client.error.connect(self._onClientError)
         self._client.connectionChanged.connect(self._onConnectionChanged)
@@ -759,6 +738,7 @@ class PowerPage(ScrollArea):
         self._client.outputLimitsWritten.connect(self._onOutputLimitsWritten)
         self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
         self._client.powerStateWritten.connect(self._onPowerStateWritten)
+        self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
 
         self.attachSessionRequested.connect(self._client.attach_session)
         self.detachSessionRequested.connect(self._client.detach_session)
@@ -841,8 +821,9 @@ class PowerPage(ScrollArea):
             self._appendLog("错误: 未选择串口。请先刷新并选择串口。")
             return
 
-        baud = int(self.baudCombo.currentText().strip())
-        session = SerialSession(SerialConfig(port=port, baudrate=baud))
+        session = SerialSession(
+            SerialConfig(port=port, baudrate=POWER_SERIAL_BAUD_RATE)
+        )
         try:
             session.open()
         except Exception as exc:
@@ -888,8 +869,6 @@ class PowerPage(ScrollArea):
         isBluetooth = text.strip() == "蓝牙"
         self.portLabel.setVisible(not isBluetooth)
         self.portCombo.setVisible(not isBluetooth)
-        self.baudLabel.setVisible(not isBluetooth)
-        self.baudCombo.setVisible(not isBluetooth)
         self.bluetoothLabel.setVisible(isBluetooth)
         self.bluetoothCombo.setVisible(isBluetooth)
 
@@ -940,17 +919,6 @@ class PowerPage(ScrollArea):
         else:
             self.readStatusRequested.emit()
 
-    def onDeviceDisconnected(self) -> None:
-        self.detachSessionRequested.emit()
-        self._applyDisconnectedState()
-        self._appendLog("设备已断开")
-        showMessage(
-            self,
-            '设备已断开',
-            '电源设备会话已关闭。',
-            level="error",
-        )
-
     def closeEvent(self, event) -> None:
         self.shutdown()
         super().closeEvent(event)
@@ -962,11 +930,6 @@ class PowerPage(ScrollArea):
         self._shutdownDone = True
         self._plotRefreshTimer.stop()
         self._writePollRestartTimer.stop()
-
-        try:
-            self._scanner.stop()
-        except Exception as exc:
-            logger.error(f"PowerPage scanner shutdown failed: {exc}")
 
         try:
             if self._manualSession:
@@ -989,21 +952,15 @@ class PowerPage(ScrollArea):
                 logger.error("PowerPage client thread did not exit within 3000 ms")
 
     def suspendForDaplink(self) -> None:
-        self._appendLog("DAPLink 操作开始，已暂停串口轮询。")
+        self._appendLog("DAPLink 操作开始，已暂停主机轮询。")
         self.stopPollingRequested.emit()
-        try:
-            self._scanner.stop()
-        except Exception as exc:
-            logger.error(f"PowerPage scanner suspend failed: {exc}")
 
     def resumeAfterDaplink(self) -> None:
         if self._shutdownDone:
             return
-        self._appendLog("DAPLink 操作结束，已恢复串口扫描。")
-        try:
-            self._scanner.start()
-        except Exception as exc:
-            logger.error(f"PowerPage scanner resume failed: {exc}")
+        if self.autoPollSwitch.isChecked() and self._client.is_connected:
+            self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
+            self._appendLog("DAPLink 操作结束，已恢复主机轮询。")
 
     def _readStatusOnce(self) -> None:
         if not self._client.is_connected:
@@ -1021,6 +978,9 @@ class PowerPage(ScrollArea):
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
+        if self._writeInFlight:
+            self._appendLog("写入进行中，请等待当前操作完成")
+            return
         voltageMv = int(
             round(float(self.writeParams["set_voltage"].text() or "0") * 1000)
         )
@@ -1032,6 +992,7 @@ class PowerPage(ScrollArea):
             if self._stagedOutputEnabled is not None
             else self.outputSwitch.isChecked()
         )
+        self._setWriteControlsEnabled(False)
         self._writePollingRestartPending = True
         self.outputLimitsRequested.emit(voltageMv, currentMa, enabled)
 
@@ -1039,10 +1000,14 @@ class PowerPage(ScrollArea):
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
+        if self._writeInFlight:
+            self._appendLog("写入进行中，请等待当前操作完成")
+            return
         ovpMv = int(round(float(self.writeParams["ovp"].text() or "0") * 1000))
         ocpMa = int(round(float(self.writeParams["ocp"].text() or "0") * 1000))
         otpMc = int(round(float(self.writeParams["otp"].text() or "0") * 1000))
         fanValue = int(float(self.writeParams["fan_set"].text() or "0"))
+        self._setWriteControlsEnabled(False)
         self._writePollingRestartPending = True
         self.protectionValuesRequested.emit(ovpMv, ocpMa, otpMc, fanValue)
 
@@ -1057,7 +1022,13 @@ class PowerPage(ScrollArea):
         self._stagedOutputEnabled = checked
         if not self._client.is_connected:
             return
-        self._appendLog(f"输出开关已暂存为{'开启' if checked else '关闭'}")
+        if self._writeInFlight:
+            self._appendLog("写入进行中，请等待当前操作完成")
+            return
+        self._setWriteControlsEnabled(False)
+        self._writePollingRestartPending = True
+        self._appendLog(f"输出开关正在设置为{'开启' if checked else '关闭'}")
+        self.powerStateRequested.emit(checked)
 
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setText('在线' if connected else '离线')
@@ -1065,6 +1036,7 @@ class PowerPage(ScrollArea):
         self.connectButton.setText('断开' if connected else '连接')
         self._refreshStateBadgeStyle()
         if not connected:
+            self._closeManualSessionSilently()
             self._applyDisconnectedState()
 
     def _updateStatusView(self, status: PowerStatus) -> None:
@@ -1189,6 +1161,7 @@ class PowerPage(ScrollArea):
     def _applyDisconnectedState(self) -> None:
         self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
+        self._setWriteControlsEnabled(True)
         self._writePollRestartTimer.stop()
         self.stateBadge.setText('离线')
         self.stateBadge.setProperty("onlineState", "offline")
@@ -1200,6 +1173,17 @@ class PowerPage(ScrollArea):
         self.outputSwitch.blockSignals(False)
         self.writeParams["ovp"].setDisplayValue(DEFAULT_OVP_SET_VALUE_TEXT)
 
+    def _closeManualSessionSilently(self) -> None:
+        session = self._manualSession
+        self._manualSession = None
+        if session is None:
+            return
+        try:
+            session.set_event_receiver(None)
+            session.close()
+        except Exception as exc:
+            logger.error(f"PowerPage serial cleanup failed: {exc}")
+
     def _appendLog(self, text: str) -> None:
         if not (
             text.startswith("REQ ") or text.startswith("RX ") or text.startswith("TX ")
@@ -1210,15 +1194,29 @@ class PowerPage(ScrollArea):
 
     def _onClientError(self, message: str) -> None:
         self._appendLog(f"错误: {message}")
+        self._setWriteControlsEnabled(True)
         showMessage(self, '通信错误', message, level="error")
         if self._writePollingRestartPending:
             self._scheduleAutoPollingRestartAfterWrite()
+
+    def _disconnectAfterWriteFailures(self) -> None:
+        if not self._client.is_connected and self._manualSession is None:
+            return
+        self._appendLog("连续写入失败 3 次，已断开串口")
+        showMessage(
+            self,
+            '串口已断开',
+            '连续写入失败 3 次，已关闭当前串口连接。',
+            level="error",
+        )
+        self._disconnectManualSession()
 
     def _handleDebugSnapshotReady(self, snapshot: DebugSnapshot) -> None:
         self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
         self._appendLog(self._diagnoseDebugSnapshot(snapshot))
 
     def _onOutputLimitsWritten(self) -> None:
+        self._setWriteControlsEnabled(True)
         showMessage(
             self,
             '输出参数已更新',
@@ -1228,6 +1226,7 @@ class PowerPage(ScrollArea):
         self._scheduleAutoPollingRestartAfterWrite()
 
     def _onProtectionValuesWritten(self) -> None:
+        self._setWriteControlsEnabled(True)
         showMessage(
             self,
             '保护参数已更新',
@@ -1237,8 +1236,20 @@ class PowerPage(ScrollArea):
         self._scheduleAutoPollingRestartAfterWrite()
 
     def _onPowerStateWritten(self, enabled: bool) -> None:
+        self._setWriteControlsEnabled(True)
+        if self._stagedOutputEnabled == enabled:
+            self._stagedOutputEnabled = None
         self._appendLog(f"输出已设置为{'开启' if enabled else '关闭'}")
         self._scheduleAutoPollingRestartAfterWrite()
+
+    def _setWriteControlsEnabled(self, enabled: bool) -> None:
+        self._writeInFlight = not enabled
+        if hasattr(self, "applySetButton"):
+            self.applySetButton.setEnabled(enabled)
+        if hasattr(self, "applyProtectButton"):
+            self.applyProtectButton.setEnabled(enabled)
+        if hasattr(self, "outputSwitch"):
+            self.outputSwitch.setEnabled(enabled)
 
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:
         self._writePollingRestartPending = False
@@ -1260,9 +1271,8 @@ class PowerPage(ScrollArea):
         self.titleLabel.setText('电源面板')
         self.connectionTypeLabel.setText('连接方式')
         self.portLabel.setText('串口')
-        self.baudLabel.setText('波特率')
         self.bluetoothLabel.setText('蓝牙')
-        self.refreshTargetButton.setText('刷新设备')
+        self.refreshTargetButton.setText('刷新列表')
         self.connectButton.setText('断开' if self._client.is_connected else '连接')
         self.stateCaptionLabel.setText('状态')
         self.autoPollSwitch.setOnText('自动轮询')

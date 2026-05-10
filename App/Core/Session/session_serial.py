@@ -207,7 +207,14 @@ class SerialSession(QObject):
             return 0
 
         with QMutexLocker(self._write_lock):  # PyQt 的 QMutex 并不完全兼容 Python 的 with 语法，需要用 QMutexLocker 来自动解锁
-            self._ser.write(data)
+            written = self._ser.write(data)
+            if written != len(data):
+                raise RuntimeError(
+                    f"串口写入不完整: 期望 {len(data)} 字节，实际 {written} 字节"
+                )
+            timeout_ms = max(500, int(getattr(self.cfg, "read_timeout_s", 0.1) * 1000))
+            if not self._ser.waitForBytesWritten(timeout_ms):
+                raise RuntimeError(f"串口写入超时: {self._ser.errorString()}")
             logger.info(f"{self.__class__.__name__} 写入数据: {data.hex()}")
 
         self._post_event(TxEvent(data))
@@ -255,8 +262,9 @@ class SerialSession(QObject):
                         self.write(data)
                     except Exception as exc:
                         # notify UI of error
-                        logger.error(f"{self.__class__.__name__}: {e}")
-                        self._post_event(ErrorEvent(code=-1, message=str(exc), fatal=False))
+                        logger.error(f"{self.__class__.__name__}: {exc}")
+                        self._post_event(ErrorEvent(code=-1, message=str(exc), fatal=True))
+                        self._post_event(StateEvent(SerialState.ERROR, info=str(exc)))
                 return True
         except Exception as exc:
             logger.error(f"{self.__class__.__name__}: {e}")

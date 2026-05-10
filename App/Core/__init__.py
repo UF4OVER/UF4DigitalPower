@@ -10,7 +10,6 @@
 #  @Python  : 
 # -------------------------------
 
-from .scan_connect_device import *
 from .const import *
 from .utility import showMessage
 from .icons import *

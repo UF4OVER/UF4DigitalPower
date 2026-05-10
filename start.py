@@ -22,7 +22,7 @@ from qfluentwidgets import setTheme
 from Config import AppIconPath, cfg
 
 from App.Core import StyleSheet, logger, load_saved_font
-from App.Pages import BatteryPage, DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
+from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
 from Core import UF4Icon
 
 
@@ -37,7 +37,7 @@ class Window(MSFluentWindow):
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
         self.batteryInterface = BatteryPage(self)
-        self.daplinkInterface = DaplinkFlashPage(self)
+        self.daplinkInterface = DaplinkPage(self)
         self.settingInterface = SettingsPage(self)
 
         self.__initNavigation()
@@ -51,7 +51,7 @@ class Window(MSFluentWindow):
         StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
         StyleSheet.BATTERY_PAGE.apply(self.batteryInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
+        StyleSheet.DAPLINK_PAGE.apply(self.daplinkInterface)
 
         QTimer.singleShot(0, self._refreshStartupTheme)
         QTimer.singleShot(150, self._checkUpdateOnStartUp)
