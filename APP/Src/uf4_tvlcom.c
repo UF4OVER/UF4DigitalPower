@@ -176,7 +176,22 @@ static uint8_t state_bits(void)
 
 static uint32_t fan_to_permille(void)
 {
-    return fan_current_permille;
+    uint32_t period = __HAL_TIM_GET_AUTORELOAD(&htim8);
+    uint32_t compare;
+    uint32_t permille;
+
+    if (period == 0U)
+        return 0U;
+
+    compare = __HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_1);
+    if (compare >= period)
+        return 1000U;
+
+    permille = (compare * 1000U) / period;
+    if (permille > 1000U)
+        permille = 1000U;
+
+    return permille;
 }
 
 static bool read_data(uint8_t type, uint8_t *payload, uint16_t *offset)
