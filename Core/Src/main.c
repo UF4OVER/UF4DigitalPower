@@ -43,6 +43,10 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+/* Set to 0 to run normal USER power-control flow. */
+#define HRTIM_AD_PIN_DEMO          0U
+#define DEMO_SELF_CHECK_TIMEOUT_MS 200U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

@@ -37,9 +37,9 @@ SOF(2) + Length(2, little-endian) + CMD(1) + SEQ(1) + Payload(N) + CRC16(2, litt
 | 名称 | Type | 长度 | 权限 | 单位 | 说明 |
 | --- | ---: | ---: | --- | --- | --- |
 | `INPUT_VOLTAGE` | `10` | 4 | READ | mV | 输入电压 |
-| `INPUT_CURRENT` | `11` | 4 | READ | i32 mA | 输入电流，允许轻微负值表示零点漂移/反向电流 |
+| `INPUT_CURRENT` | `11` | 4 | READ | mA | 输入电流，非负值；小于 0 的测量结果不编码，按 0 上报 |
 | `OUTPUT_VOLTAGE` | `12` | 4 | READ | mV | 输出电压 |
-| `OUTPUT_CURRENT` | `13` | 4 | READ | i32 mA | 输出电流，允许轻微负值表示零点漂移/反向电流 |
+| `OUTPUT_CURRENT` | `13` | 4 | READ | mA | 输出电流，非负值；小于 0 的测量结果不编码，按 0 上报 |
 | `CORE_TEMPERATURE` | `14` | 4 | READ | mC | 核心温度，摄氏度 x1000 |
 | `BOARD_TEMPERATURE` | `15` | 4 | READ | mC | 板载温度，摄氏度 x1000 |
 | `SET_VOLTAGE_LIMIT` | `17` | 4 | READ_WRITE | mV | 输出电压设定 |

@@ -176,7 +176,22 @@ static uint8_t state_bits(void)
 
 static uint32_t fan_to_permille(void)
 {
-    return fan_current_permille;
+    uint32_t period = __HAL_TIM_GET_AUTORELOAD(&htim8);
+    uint32_t compare;
+    uint32_t permille;
+
+    if (period == 0U)
+        return 0U;
+
+    compare = __HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_1);
+    if (compare >= period)
+        return 1000U;
+
+    permille = (compare * 1000U) / period;
+    if (permille > 1000U)
+        permille = 1000U;
+
+    return permille;
 }
 
 static bool read_data(uint8_t type, uint8_t *payload, uint16_t *offset)
@@ -477,18 +492,35 @@ static void handle_report(uint8_t seq)
 
 static void handle_frame(const uint8_t *frame, uint16_t frame_len)
 {
+    uint8_t seq = 0U;
+
+    if (frame_len >= 6U)
+        seq = frame[5];
+
+    if (frame_len < 8U)
+    {
+        send_nack(seq);
+        return;
+    }
+
     const uint16_t body_len = get_u16(&frame[2]);
+
+    if (body_len < 2U || body_len > (TVL_MAX_PAYLOAD + 2U) || frame_len < (uint16_t)(4U + body_len + 2U))
+    {
+        send_nack(seq);
+        return;
+    }
+
     const uint16_t received_crc = get_u16(&frame[4U + body_len]);
     const uint16_t actual_crc = tvl_crc16(frame, (uint16_t)(4U + body_len));
 
-    if (frame_len < 8U || body_len < 2U || body_len > (TVL_MAX_PAYLOAD + 2U) || received_crc != actual_crc)
+    if (received_crc != actual_crc)
     {
-        send_nack(0U);
+        send_nack(seq);
         return;
     }
 
     const uint8_t cmd = frame[4];
-    const uint8_t seq = frame[5];
     const uint8_t *payload = &frame[6];
     const uint16_t payload_len = (uint16_t)(body_len - 2U);
 
