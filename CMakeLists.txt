@@ -72,9 +72,7 @@ file(GLOB_RECURSE SOURCES
         "Core/*.*"
         "Middlewares/*.*"
         "Drivers/*.*"
-        "APP/*.*"
-#        "DSP/*.*"
-        "USER_Code/*.*")
+        "APP/*.*")
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)
 
