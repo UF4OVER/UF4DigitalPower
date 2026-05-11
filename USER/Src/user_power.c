@@ -9,7 +9,6 @@
 #include "hrtim.h"
 #include "tim.h"
 
-#include "arm_math.h"
 
 #include <math.h>
 #include <string.h>
