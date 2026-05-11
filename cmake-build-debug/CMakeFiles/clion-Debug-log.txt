@@ -1,5 +1,6 @@
 "D:\Program Files\STMicroelectronics\STM32CubeCLT_1.16.0\CMake\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=D:/Program Files/JetBrains/CLion 2024.3.5/bin/ninja/win/x64/ninja.exe" "-DCMAKE_C_COMPILER=D:/Program Files/STMicroelectronics/STM32CubeCLT_1.16.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc.exe" "-DCMAKE_CXX_COMPILER=D:/Program Files/STMicroelectronics/STM32CubeCLT_1.16.0/GNU-tools-for-STM32/bin/arm-none-eabi-g++.exe" -G Ninja -S E:\PROJECT_DPOWER\UF4DigitalPower -B E:\PROJECT_DPOWER\UF4DigitalPower\cmake-build-debug
--- Minimal optimization, debug info included
--- Configuring done (0.2s)
--- Generating done (0.0s)
--- Build files have been written to: E:/PROJECT_DPOWER/UF4DigitalPower/cmake-build-debug
+CMake Error at CMakeLists.txt:69:
+  Parse error.  Function missing ending ")".  End of file reached.
+
+
+-- Configuring incomplete, errors occurred!

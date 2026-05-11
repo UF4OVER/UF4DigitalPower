@@ -40,9 +40,8 @@ CMAKE_ASM_FLAGS_RELEASE:STRING=-O3 -DNDEBUG
 //Flags used by the ASM compiler during RELWITHDEBINFO builds.
 CMAKE_ASM_FLAGS_RELWITHDEBINFO:STRING=-O2 -g -DNDEBUG
 
-//Choose the type of build, options are: None Debug Release RelWithDebInfo
-// MinSizeRel ...
-CMAKE_BUILD_TYPE:STRING=Debug
+//No help, variable specified on the command line.
+CMAKE_BUILD_TYPE:UNINITIALIZED=Debug
 
 //Enable colored diagnostics throughout.
 CMAKE_COLOR_DIAGNOSTICS:BOOL=ON
@@ -129,8 +128,8 @@ CMAKE_INSTALL_PREFIX:PATH=C:/Program Files (x86)/UF4DigitalPower
 //Path to a program.
 CMAKE_LINKER:FILEPATH=D:/Program Files/STMicroelectronics/STM32CubeCLT_1.16.0/GNU-tools-for-STM32/bin/arm-none-eabi-ld.exe
 
-//make program
-CMAKE_MAKE_PROGRAM:FILEPATH=D:/Program Files/JetBrains/CLion 2024.3.5/bin/ninja/win/x64/ninja.exe
+//No help, variable specified on the command line.
+CMAKE_MAKE_PROGRAM:UNINITIALIZED=D:/Program Files/JetBrains/CLion 2024.3.5/bin/ninja/win/x64/ninja.exe
 
 //Flags used by the linker during the creation of modules during
 // all build types.
