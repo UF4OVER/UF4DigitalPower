@@ -149,7 +149,8 @@ int main(void) {
 
   __HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_TIM_IT_REP); // 开启HRTIM定时器A的中断
 
-  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin | LED2_Pin, GPIO_PIN_RESET); // 关闭LED_G和LED_R
+  UF4_BoardSetRunLed(0U);    // 关闭LED_G
+  UF4_BoardSetStatusLed(0U); // 关闭LED_R
 
   FAN_PWM_set(0); // 设置风扇转速为0
 
@@ -178,11 +179,11 @@ int main(void) {
 
       if ((DF.SMFlag == Rise) || (DF.SMFlag == Run)) // 判断当前状态
       {
-        HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, GPIO_PIN_SET); // LED_G输出状态指示灯亮
+        UF4_BoardSetRunLed(1U); // LED_G输出状态指示灯亮
       }
       else
       {
-        HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, GPIO_PIN_RESET); // LED_G输出状态指示灯灭
+        UF4_BoardSetRunLed(0U); // LED_G输出状态指示灯灭
       }
 
       if (ms_cnt_2 >= 100) // 判断是否计时到100ms
@@ -194,7 +195,7 @@ int main(void) {
       if (ms_cnt_1 >= 500) // 判断是否计时到500ms
       {
         ms_cnt_1 = 0;                                   // 计时清零
-        HAL_GPIO_TogglePin(LED_R_GPIO_Port, LED_R_Pin); // LED_R电平翻转
+        UF4_BoardToggleStatusLed();                     // LED_R电平翻转
         Update_Flash();                                 // 更新Flash存储内容
 
       }

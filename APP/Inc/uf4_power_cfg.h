@@ -12,6 +12,8 @@
 #ifndef UF4DIGITALPOWER_UF4_POWER_CFG_H
 #define UF4DIGITALPOWER_UF4_POWER_CFG_H
 
+#include "bsp_board.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,26 +22,6 @@ extern "C" {
 
 #define CCMRAM __attribute__((section("ccmram")))
 
-#define ADC_MAX_VALUE 8190.0F				   // ADC最大值
-#define ADC_REF_VOLTAGE 3.3F				   // ADC参考电压
-#define REF_3V3 ADC_REF_VOLTAGE				   // 兼容旧代码命名
-#define VOLTAGE_DIVIDER_GAIN 13.5135F		   // 输入/输出电压分压还原系数
-#define CURRENT_SHUNT_OHM 0.008F			   // 电流采样分流电阻
-#define CURRENT_AMP_GAIN 20.0F				   // 电流采样运放增益
-#define CURRENT_ADC_ZERO_V 1.65F			   // 双向电流采样中点偏置；单向开发阶段 1.65V~3.3V 为正向有效电流
-#define CURRENT_SENSE_GAIN (CURRENT_SHUNT_OHM * CURRENT_AMP_GAIN)
-#define CURRENT_FORWARD_DEADBAND_A 0.02F	   // 正向电流零点死区，低于该值按0A处理
-#define INPUT_CURRENT_ADC_ZERO_V CURRENT_ADC_ZERO_V   // 输入电流采样零点，可按实板单独修正
-#define OUTPUT_CURRENT_ADC_ZERO_V CURRENT_ADC_ZERO_V  // 输出电流采样零点，可按实板单独修正
-#define INPUT_CURRENT_POLARITY (-1.0F)                // 带载时输入电流采样下降，正向电流需反向换算
-#define OUTPUT_CURRENT_POLARITY (-1.0F)               // 带载时输出电流采样下降，正向电流需反向换算
-
-#define TS_CAL1 *((__IO uint16_t *)0x1FFF75A8) // 内部温度传感器在30度和VREF为3V时的校准数据
-#define TS_CAL2 *((__IO uint16_t *)0x1FFF75CA) // 内部温度传感器在130度和VREF为3V时的校准数据
-
-#define TS_CAL1_TEMP 30.0F
-#define TS_CAL2_TEMP 130.0F
-
 #define MIN_BUKC_DUTY 100	  // BUCK最小占空比
 #define MAX_BUCK_DUTY 28200	  // BUCK最大占空比94%
 #define MAX_BUCK_DUTY1 24000  // MIX模式下 BUCK固定占空比80%
@@ -47,11 +29,6 @@ extern "C" {
 #define MIN_BOOST_DUTY1 1800  // BOOST最小占空6%
 #define MAX_BOOST_DUTY 19500  // BOOST工作模式下最大占空比65%
 #define MAX_BOOST_DUTY1 28200 // BOOST最大占空比94%
-
-#define CAL_VOUT_K 4099 // 输出电压矫正K值
-#define CAL_VOUT_B 1	// 输出电压矫正B值
-#define CAL_IOUT_K 4095 // 输出电流矫正K值
-#define CAL_IOUT_B 1	// 输出电流矫正B值
 
     /***************故障类型*****************/
 #define F_NOERR 0x0000		 // 无故障

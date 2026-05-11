@@ -111,9 +111,9 @@ static uint32_t UF4_GetCalibratedIoutAdc(void)
 
 static void UF4_UpdateFilteredMeasurements(void)
 {
-    const float vin_raw = UF4_AdcToVoltage(ADC1_RESULT[0]);
+    const float vin_raw = UF4_AdcToInputVoltage(ADC1_RESULT[0]);
     const float iin_raw = UF4_AdcToInputCurrent(ADC1_RESULT[1]);
-    const float vout_raw = UF4_AdcToVoltage(UF4_GetCalibratedVoutAdc());
+    const float vout_raw = UF4_AdcToOutputVoltage(UF4_GetCalibratedVoutAdc());
     const float iout_raw = UF4_AdcToOutputCurrent(UF4_GetCalibratedIoutAdc());
 
     if (g_ctrl.measurement_ready == 0U)

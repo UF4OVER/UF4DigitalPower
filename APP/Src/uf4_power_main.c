@@ -18,7 +18,6 @@
 #include "usart.h"
 #include "tim.h"
 #include "hrtim.h"
-#include <stdint.h>
 #include <string.h>
 
 // 数字后面加F表示使用单精度浮点数类型，C语言默认使用双精度浮点数类型，硬件浮点运算只支持单精度浮点数
@@ -43,59 +42,9 @@ _Screen_page Screen_page = VIset_page;                             // 当前屏�
 volatile float VIN, VOUT, IIN, IOUT;                               // 电压电流实际值
 volatile float MainBoard_TEMP, CPU_TEMP;                           // 主板和CPU温度实际值
 volatile float powerEfficiency = 0;                                // 电源转换效率
-static volatile uint8_t FAN_ManualOverride = 0;                    // 风扇手动覆盖标志
-static volatile uint16_t FAN_ManualDuty = 0;                       // 风扇手动PWM占空比
 
 extern volatile int32_t VErr0, VErr1, VErr2; // 电压误差
 extern volatile int32_t u0, u1;              // 电压环输出量
-
-float UF4_AdcToVoltage(uint32_t adc)
-{
-    return ((float)adc * ADC_REF_VOLTAGE / ADC_MAX_VALUE) * VOLTAGE_DIVIDER_GAIN;
-}
-
-float UF4_AdcToCurrent(uint32_t adc)
-{
-    const float adc_voltage = (float)adc * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
-    return (adc_voltage - CURRENT_ADC_ZERO_V) / CURRENT_SENSE_GAIN;
-}
-
-static float UF4_AdcToSignedCurrentByConfig(uint32_t adc, float zero_voltage, float polarity)
-{
-    const float adc_voltage = (float)adc * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
-    return ((adc_voltage - zero_voltage) * polarity) / CURRENT_SENSE_GAIN;
-}
-
-float UF4_AdcToInputCurrent(uint32_t adc)
-{
-    const float current = UF4_AdcToSignedCurrentByConfig(adc, INPUT_CURRENT_ADC_ZERO_V, INPUT_CURRENT_POLARITY);
-    return (current > CURRENT_FORWARD_DEADBAND_A) ? current : 0.0F;
-}
-
-float UF4_AdcToOutputCurrent(uint32_t adc)
-{
-    const float current = UF4_AdcToSignedCurrentByConfig(adc, OUTPUT_CURRENT_ADC_ZERO_V, OUTPUT_CURRENT_POLARITY);
-    return (current > CURRENT_FORWARD_DEADBAND_A) ? current : 0.0F;
-}
-
-uint32_t UF4_VoltageToAdc(float voltage)
-{
-    if (voltage < 0.0F)
-        voltage = 0.0F;
-    const float adc = (voltage / VOLTAGE_DIVIDER_GAIN) / ADC_REF_VOLTAGE * ADC_MAX_VALUE;
-    return (uint32_t)(adc + 0.5F);
-}
-
-uint32_t UF4_CurrentToAdc(float current)
-{
-    const float adc_voltage = OUTPUT_CURRENT_ADC_ZERO_V + (current * CURRENT_SENSE_GAIN / OUTPUT_CURRENT_POLARITY);
-    if (adc_voltage <= 0.0F)
-        return 0;
-    const float adc = adc_voltage / ADC_REF_VOLTAGE * ADC_MAX_VALUE;
-    if (adc >= ADC_MAX_VALUE)
-        return (uint32_t)ADC_MAX_VALUE;
-    return (uint32_t)(adc + 0.5F);
-}
 
 int32_t UF4_FloatToMilli(float value)
 {
@@ -118,7 +67,7 @@ static void UF4_PowerStopPwm(void)
 
 static uint8_t UF4_InputReady(void)
 {
-    return (UF4_AdcToVoltage(SADC.VinAvg) >= MIN_INPUT_START_VOLTAGE) ? 1U : 0U;
+    return (UF4_AdcToInputVoltage(SADC.VinAvg) >= MIN_INPUT_START_VOLTAGE) ? 1U : 0U;
 }
 
 void UF4_PowerApplySetpoints(void)
@@ -204,10 +153,10 @@ CCMRAM void ADCSample(void)
  */
 void ADC_calculate(void)
 {
-    VIN = UF4_AdcToVoltage(SADC.VinAvg);                            // 计算ADC1通道0输入电压采样结果
+    VIN = UF4_AdcToInputVoltage(SADC.VinAvg);                        // 计算ADC1通道0输入电压采样结果
     IIN = UF4_AdcToInputCurrent(SADC.IinAvg);                        // 计算ADC1通道1输入电流采样结果
 
-    VOUT = UF4_AdcToVoltage(SADC.VoutAvg);                           // 计算ADC1通道2输出电压采样结果
+    VOUT = UF4_AdcToOutputVoltage(SADC.VoutAvg);                      // 计算ADC1通道2输出电压采样结果
     IOUT = UF4_AdcToOutputCurrent(SADC.IoutAvg);                      // 计算ADC1通道3输出电流采样结果
     MainBoard_TEMP = GET_NTC_Temperature();                         // 获取NTC温度(主板温度)
     CPU_TEMP = GET_CPU_Temperature();                               // 获取单片机CPU温度
@@ -490,7 +439,7 @@ void ShortOff(void)
 {
     static int32_t RSCnt = 0;
     static uint8_t RSNum = 0;
-    float Vout = UF4_AdcToVoltage(SADC.Vout);
+    float Vout = UF4_AdcToOutputVoltage(SADC.Vout);
     float Iout = UF4_AdcToOutputCurrent(SADC.Iout);
     // 当输出电流大于 *A，且电压小于*V时，可判定为发生短路保护
     if ((Iout > MAX_SHORT_I) && (Vout < MIN_SHORT_V))
@@ -545,7 +494,7 @@ void OVP(void)
 {
     // 过压保护判据保持计数器定义
     static uint16_t OVPCnt = 0;
-    float Vout = UF4_AdcToVoltage(SADC.Vout);
+    float Vout = UF4_AdcToOutputVoltage(SADC.Vout);
     // 当输出电压大于50V，且保持10ms
     if (Vout >= MAX_VOUT_OVP_VAL)
     {
@@ -801,97 +750,6 @@ void BUZZER_Middle(void)
 }
 
 /**
- * @brief 一阶低通滤波器。
- * 使用一阶低通滤波算法对输入信号进行滤波处理。
- * @param input 输入信号
- * @param alpha 滤波系数
- * @return 滤波后的输出信号
- */
-float one_order_lowpass_filter(float input, float alpha)
-{
-    static float prev_output = 0.0F;                             // 静态变量，用于保存上一次的输出值
-    float output = alpha * input + (1.0F - alpha) * prev_output; // 一阶低通滤波算法
-    prev_output = output;                                        // 保存本次输出值，以备下一次使用
-    return output;                                               // 返回滤波后的输出信号
-}
-
-/**
- * @brief 计算NTC温度,
- * 根据给定的电阻值计算温度。
- * @param resistance 电阻值
- * @return 计算得到的温度值
- */
-float calculateTemperature(float voltage)
-{
-    // 数据进入前，可先做滤波处理
-    float Rt = 0;                                                  // NTC电阻
-    float R = 10000;                                               // 10K固定阻值电阻
-    float T0 = 273.15F + 25;                                       // 转换为开尔文温度
-    float B = 3950;                                                // B值
-    float Ka = 273.15F;                                            // K值
-    Rt = (REF_3V3 - voltage) * 10000.0F / voltage;                 // 计算Rt
-    float temperature = 1.0F / (1.0F / T0 + logf(Rt / R) / B) - Ka; // 计算温度
-    return temperature;
-}
-
-/**
- * @brief 获取NTC温度
- * @return 返回温度值
- */
-float GET_NTC_Temperature(void)
-{
-    HAL_ADC_Start(&hadc2); // 启动ADC2采样，采样NTC温度
-    // HAL_ADC_PollForConversion(&hadc2, 100); // 等待ADC采样结束
-    uint32_t TEMP_adcValue = HAL_ADC_GetValue(&hadc2);                            // 读取ADC2采样结果
-    float temperature = calculateTemperature((float)TEMP_adcValue * ADC_REF_VOLTAGE / 65520.0F); // 计算温度
-    return temperature;                                                           // 返回温度值
-}
-
-/**
- * @brief 读取CPU温度。
- * 使用ADC5采样单片机CPU温度，并根据校准值计算实际温度值。
- * @return 返回计算得到的温度值，单位为摄氏度。
- */
-float GET_CPU_Temperature(void)
-{
-    HAL_ADC_Start(&hadc5); // 启动ADC5采样，采样单片机CPU温度
-    // HAL_ADC_PollForConversion(&hadc5, 100); // 等待ADC采样结束
-    float Temp_Scale = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP) / (float)(TS_CAL2 - TS_CAL1); // 计算温度比例因子
-    // 读取ADC5采样结果, 除以8是因为开启了硬件超采样到15bit，但下面计算用的是12bit，开启硬件超采样是为了得到一个比较平滑的采样结果
-    float TEMP_adcValue = (float)HAL_ADC_GetValue(&hadc5) / 8.0F;
-    float temperature = Temp_Scale * (TEMP_adcValue * (ADC_REF_VOLTAGE / 3.0F) - TS_CAL1) + TS_CAL1_TEMP; // 计算温度
-    return one_order_lowpass_filter(temperature, 0.1F);                                           // 返回温度值
-}
-
-/**
- * @brief 设置风扇 PWM 值,
- * 根据给定的 PWM 值，设置风扇的 PWM 输出。
- * @param dutyCycle PWM 值，范围在 0 到 100 之间
- */
-void FAN_PWM_set(uint16_t dutyCycle)
-{
-    if (dutyCycle > 100)
-    {
-        dutyCycle = 100;
-    }
-    if (dutyCycle == 0U)
-    {
-        FAN_ManualOverride = 0U;
-        FAN_ManualDuty = 0U;
-    }
-    else
-    {
-        FAN_ManualOverride = 1U;
-        FAN_ManualDuty = dutyCycle;
-    }
-
-    uint32_t compare = (uint32_t)dutyCycle * 10U;
-    if (compare > 999U)
-        compare = 999U;
-    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, compare);
-}
-
-/**
  * @brief 初始化Flash。
  * 检查Flash中存储的数据是否有效，如果不有效则初始化。
  */
@@ -1000,51 +858,3 @@ float bytes_to_float(uint8_t *bytes)
     return value;
 }
 
-/**
- * @brief 根据主板温度自动控制风扇转速
- */
-void Auto_FAN(void)
-{
-    if (FAN_ManualOverride != 0U)
-    {
-        uint32_t compare = (uint32_t)FAN_ManualDuty * 10U;
-        if (compare > 999U)
-            compare = 999U;
-        __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, compare);
-        return;
-    }
-
-    float TEMP = GET_NTC_Temperature(); // 获取NTC温度值
-    if (TEMP >= 65)
-    {
-        FAN_PWM_set(100);
-    }
-    else if (TEMP >= 60)
-    {
-        FAN_PWM_set(90);
-    }
-    else if (TEMP >= 55)
-    {
-        FAN_PWM_set(80);
-    }
-    else if (TEMP >= 50)
-    {
-        FAN_PWM_set(70);
-    }
-    else if (TEMP >= 45)
-    {
-        FAN_PWM_set(60);
-    }
-    else if (TEMP >= 40)
-    {
-        FAN_PWM_set(45);
-    }
-    else if (TEMP >= 35)
-    {
-        FAN_PWM_set(35); // 设置风扇转速为35%
-    }
-    else
-    {
-        FAN_PWM_set(0); // 设置风扇转速为0
-    }
-}

@@ -61,6 +61,7 @@ include_directories(
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
         APP/Inc
+        BSP/Inc
 #        DSP/Include
 #        DSP/Include/dsp
 )
@@ -72,7 +73,8 @@ file(GLOB_RECURSE SOURCES
         "Core/*.*"
         "Middlewares/*.*"
         "Drivers/*.*"
-        "APP/*.*")
+        "APP/*.*"
+        "BSP/*.*")
 
 set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32G474RBTX_FLASH.ld)
 
