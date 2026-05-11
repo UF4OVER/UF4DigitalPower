@@ -43,6 +43,8 @@ _Screen_page Screen_page = VIset_page;                             // 当前屏�
 volatile float VIN, VOUT, IIN, IOUT;                               // 电压电流实际值
 volatile float MainBoard_TEMP, CPU_TEMP;                           // 主板和CPU温度实际值
 volatile float powerEfficiency = 0;                                // 电源转换效率
+static volatile uint8_t FAN_ManualOverride = 0;                    // 风扇手动覆盖标志
+static volatile uint16_t FAN_ManualDuty = 0;                       // 风扇手动PWM占空比
 
 extern volatile int32_t VErr0, VErr1, VErr2; // 电压误差
 extern volatile int32_t u0, u1;              // 电压环输出量
@@ -58,15 +60,21 @@ float UF4_AdcToCurrent(uint32_t adc)
     return (adc_voltage - CURRENT_ADC_ZERO_V) / CURRENT_SENSE_GAIN;
 }
 
+static float UF4_AdcToSignedCurrentByConfig(uint32_t adc, float zero_voltage, float polarity)
+{
+    const float adc_voltage = (float)adc * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
+    return ((adc_voltage - zero_voltage) * polarity) / CURRENT_SENSE_GAIN;
+}
+
 float UF4_AdcToInputCurrent(uint32_t adc)
 {
-    const float current = UF4_AdcToCurrent(adc);
+    const float current = UF4_AdcToSignedCurrentByConfig(adc, INPUT_CURRENT_ADC_ZERO_V, INPUT_CURRENT_POLARITY);
     return (current > CURRENT_FORWARD_DEADBAND_A) ? current : 0.0F;
 }
 
 float UF4_AdcToOutputCurrent(uint32_t adc)
 {
-    const float current = UF4_AdcToCurrent(adc);
+    const float current = UF4_AdcToSignedCurrentByConfig(adc, OUTPUT_CURRENT_ADC_ZERO_V, OUTPUT_CURRENT_POLARITY);
     return (current > CURRENT_FORWARD_DEADBAND_A) ? current : 0.0F;
 }
 
@@ -80,7 +88,7 @@ uint32_t UF4_VoltageToAdc(float voltage)
 
 uint32_t UF4_CurrentToAdc(float current)
 {
-    const float adc_voltage = CURRENT_ADC_ZERO_V + current * CURRENT_SENSE_GAIN;
+    const float adc_voltage = OUTPUT_CURRENT_ADC_ZERO_V + (current * CURRENT_SENSE_GAIN / OUTPUT_CURRENT_POLARITY);
     if (adc_voltage <= 0.0F)
         return 0;
     const float adc = adc_voltage / ADC_REF_VOLTAGE * ADC_MAX_VALUE;
@@ -104,6 +112,7 @@ static void UF4_PowerStopPwm(void)
     CtrValue.BoostDuty = MIN_BOOST_DUTY;
     CtrValue.BoostMaxDuty = MIN_BOOST_DUTY;
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, PERIOD - CtrValue.BuckDuty);
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, (PERIOD - CtrValue.BuckDuty) >> 1);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D, HRTIM_COMPAREUNIT_1, CtrValue.BoostDuty);
 }
 
@@ -271,12 +280,19 @@ void ValInit(void)
     VErr2 = 0;
     u0 = 0;
     u1 = 0;
-    // 设置值初始化
-    SET_Value.Vout = 5.0F;
-    SET_Value.Iout = 10.0F;
-    MAX_OTP_VAL = 80.0F;      // 过温保护阈值
-    MAX_VOUT_OVP_VAL = 50.0F; // 输出过压保护阈值
-    MAX_VOUT_OCP_VAL = 10.5F; // 输出过流保护阈值
+    // 设置值初始化：优先保留Flash中已读取的参数，仅在越界时回退默认值
+    if ((SET_Value.Vout < MIN_OUTPUT_VOLTAGE) || (SET_Value.Vout > MAX_OUTPUT_VOLTAGE))
+        SET_Value.Vout = 5.0F;
+    if ((SET_Value.Iout < 0.0F) || (SET_Value.Iout > MAX_OUTPUT_CURRENT))
+        SET_Value.Iout = 10.0F;
+    if ((MAX_OTP_VAL < 20.0F) || (MAX_OTP_VAL > 120.0F))
+        MAX_OTP_VAL = 80.0F; // 过温保护阈值
+    if ((MAX_VOUT_OVP_VAL < 1.0F) || (MAX_VOUT_OVP_VAL > 55.0F))
+        MAX_VOUT_OVP_VAL = 50.0F; // 输出过压保护阈值
+    if ((MAX_VOUT_OCP_VAL < 0.1F) || (MAX_VOUT_OCP_VAL > 15.0F))
+        MAX_VOUT_OCP_VAL = 10.5F; // 输出过流保护阈值
+
+    UF4_PowerApplySetpoints();
 }
 
 /*
@@ -357,6 +373,8 @@ void StateMRise(void)
     static uint16_t Cnt = 0;
     // 最大占空比限制计数器
     static uint16_t BUCKMaxDutyCnt = 0, BoostMaxDutyCnt = 0;
+    int32_t next_buck_max;
+    int32_t next_boost_max;
 
     if (!UF4_InputReady())
     {
@@ -444,8 +462,10 @@ void StateMRise(void)
         BUCKMaxDutyCnt++;
         BoostMaxDutyCnt++;
         // 最大占空比限制累加
-        CtrValue.BUCKMaxDuty = CtrValue.BUCKMaxDuty + BUCKMaxDutyCnt * 15;
-        CtrValue.BoostMaxDuty = CtrValue.BoostMaxDuty + BoostMaxDutyCnt * 15;
+        next_buck_max = (int32_t)CtrValue.BUCKMaxDuty + (int32_t)BUCKMaxDutyCnt * 15;
+        next_boost_max = (int32_t)CtrValue.BoostMaxDuty + (int32_t)BoostMaxDutyCnt * 15;
+        CtrValue.BUCKMaxDuty = (next_buck_max > MAX_BUCK_DUTY) ? MAX_BUCK_DUTY : (int16_t)next_buck_max;
+        CtrValue.BoostMaxDuty = (next_boost_max > MAX_BOOST_DUTY) ? MAX_BOOST_DUTY : (int16_t)next_boost_max;
         // 累加到最大值
         if (CtrValue.BUCKMaxDuty > MAX_BUCK_DUTY)
             CtrValue.BUCKMaxDuty = MAX_BUCK_DUTY;
@@ -651,84 +671,93 @@ void OTP(void)
  */
 CCMRAM void BBMode(void)
 {
-    // 上一次模式状态量
-    uint8_t PreBBFlag = 0;
-    // 暂存当前的模式状态量
-    PreBBFlag = DF.BBFlag;
+    static uint8_t candidate_mode = NA;
+    static uint8_t candidate_count = 0U;
+    uint8_t PreBBFlag = DF.BBFlag;
+    uint8_t desired_mode;
+    uint32_t VIN_ADC;
+    uint32_t VREF_ADC;
+    float vin_adc_f;
+    float vref_adc_f;
 
-    if (!UF4_InputReady())
+    if ((!UF4_InputReady()) || ((DF.SMFlag != Rise) && (DF.SMFlag != Run)))
     {
         DF.BBFlag = NA;
+        candidate_mode = NA;
+        candidate_count = 0U;
         DF.BBModeChange = (PreBBFlag == DF.BBFlag) ? 0U : 1U;
         return;
     }
 
-    uint32_t VIN_ADC = ADC1_RESULT[0]; // 输入电压ADC采样值
+    VIN_ADC = (SADC.VinAvg != 0U) ? SADC.VinAvg : ADC1_RESULT[0];
+    VREF_ADC = (CtrValue.Vout_ref > 0) ? (uint32_t)CtrValue.Vout_ref : UF4_VoltageToAdc(SET_Value.Vout);
+    vin_adc_f = (float)VIN_ADC;
+    vref_adc_f = (float)VREF_ADC;
 
-    // 对输入电压ADC采样值累计取平均值
-    static uint32_t VIN_ADC_SUM = 0;
-    static uint8_t VIN_ADC_Count = 0;
-
-    if (VIN_ADC_Count < 5)
-    {
-        VIN_ADC_SUM += ADC1_RESULT[0];
-        VIN_ADC_Count++;
-    }
-    if (VIN_ADC_Count == 5)
-    {
-        VIN_ADC = VIN_ADC_SUM / 5;
-        VIN_ADC_SUM = 0;
-        VIN_ADC_Count = 0;
-    }
-
-    // 判断当前模块的工作模式
     switch (DF.BBFlag)
     {
-    // NA-初始化模式
     case NA:
-    {
-        if (CtrValue.Vout_ref < (VIN_ADC * 0.8F))      // 输出参考电压小于0.8倍输入电压时
-            DF.BBFlag = Buck;                          // 切换到buck模式
-        else if (CtrValue.Vout_ref > (VIN_ADC * 1.2F)) // 输出参考电压大于1.2倍输入电压时
-            DF.BBFlag = Boost;                         // 切换到boost模式
+        if (vref_adc_f < (vin_adc_f * 0.78F))
+            desired_mode = Buck;
+        else if (vref_adc_f > (vin_adc_f * 1.22F))
+            desired_mode = Boost;
         else
-            DF.BBFlag = Mix; // buck-boost（MIX） mode
+            desired_mode = Mix;
         break;
-    }
-    // BUCK模式
     case Buck:
-    {
-        if (CtrValue.Vout_ref > (VIN_ADC * 1.2F))       // vout>1.2*vin
-            DF.BBFlag = Boost;                          // boost mode
-        else if (CtrValue.Vout_ref > (VIN_ADC * 0.85F)) // 1.2*vin>vout>0.85*vin
-            DF.BBFlag = Mix;                            // buck-boost（MIX） mode
+        if (vref_adc_f > (vin_adc_f * 1.20F))
+            desired_mode = Boost;
+        else if (vref_adc_f > (vin_adc_f * 0.88F))
+            desired_mode = Mix;
+        else
+            desired_mode = Buck;
         break;
-    }
-    // Boost模式
     case Boost:
-    {
-        if (CtrValue.Vout_ref < ((VIN_ADC * 0.8F)))     // vout<0.8*vin
-            DF.BBFlag = Buck;                           // buck mode
-        else if (CtrValue.Vout_ref < (VIN_ADC * 1.15F)) // 0.8*vin<vout<1.15*vin
-            DF.BBFlag = Mix;                            // buck-boost（MIX） mode
+        if (vref_adc_f < (vin_adc_f * 0.80F))
+            desired_mode = Buck;
+        else if (vref_adc_f < (vin_adc_f * 1.12F))
+            desired_mode = Mix;
+        else
+            desired_mode = Boost;
         break;
-    }
-    // Mix模式
     case Mix:
-    {
-        if (CtrValue.Vout_ref < (VIN_ADC * 0.8F))      // vout<0.8*vin
-            DF.BBFlag = Buck;                          // buck mode
-        else if (CtrValue.Vout_ref > (VIN_ADC * 1.2F)) // vout>1.2*vin
-            DF.BBFlag = Boost;                         // boost mode
+        if (vref_adc_f < (vin_adc_f * 0.76F))
+            desired_mode = Buck;
+        else if (vref_adc_f > (vin_adc_f * 1.24F))
+            desired_mode = Boost;
+        else
+            desired_mode = Mix;
         break;
-    }
+    default:
+        desired_mode = Mix;
+        break;
     }
 
-    // 当模式发生变换时（上一次和这一次不一样）,则标志位置位，标志位用以环路计算复位，保证模式切换过程不会有大的过冲
-    if (PreBBFlag == DF.BBFlag)
-        DF.BBModeChange = 0;
+    if (desired_mode != DF.BBFlag)
+    {
+        if (candidate_mode != desired_mode)
+        {
+            candidate_mode = desired_mode;
+            candidate_count = 1U;
+        }
+        else if (candidate_count < 4U)
+        {
+            candidate_count++;
+        }
+
+        if (candidate_count >= 4U)
+        {
+            DF.BBFlag = desired_mode;
+            candidate_count = 0U;
+        }
+    }
     else
-        DF.BBModeChange = 1;
+    {
+        candidate_mode = desired_mode;
+        candidate_count = 0U;
+    }
+
+    DF.BBModeChange = (PreBBFlag == DF.BBFlag) ? 0U : 1U;
 }
 
 /**
@@ -801,7 +830,7 @@ float calculateTemperature(float voltage)
     float B = 3950;                                                // B值
     float Ka = 273.15F;                                            // K值
     Rt = (REF_3V3 - voltage) * 10000.0F / voltage;                 // 计算Rt
-    float temperature = 1.0F / (1.0F / T0 + log(Rt / R) / B) - Ka; // 计算温度
+    float temperature = 1.0F / (1.0F / T0 + logf(Rt / R) / B) - Ka; // 计算温度
     return temperature;
 }
 
@@ -814,7 +843,7 @@ float GET_NTC_Temperature(void)
     HAL_ADC_Start(&hadc2); // 启动ADC2采样，采样NTC温度
     // HAL_ADC_PollForConversion(&hadc2, 100); // 等待ADC采样结束
     uint32_t TEMP_adcValue = HAL_ADC_GetValue(&hadc2);                            // 读取ADC2采样结果
-    float temperature = calculateTemperature(TEMP_adcValue * ADC_REF_VOLTAGE / 65520.0F); // 计算温度
+    float temperature = calculateTemperature((float)TEMP_adcValue * ADC_REF_VOLTAGE / 65520.0F); // 计算温度
     return temperature;                                                           // 返回温度值
 }
 
@@ -829,7 +858,7 @@ float GET_CPU_Temperature(void)
     // HAL_ADC_PollForConversion(&hadc5, 100); // 等待ADC采样结束
     float Temp_Scale = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP) / (float)(TS_CAL2 - TS_CAL1); // 计算温度比例因子
     // 读取ADC5采样结果, 除以8是因为开启了硬件超采样到15bit，但下面计算用的是12bit，开启硬件超采样是为了得到一个比较平滑的采样结果
-    float TEMP_adcValue = HAL_ADC_GetValue(&hadc5) / 8.0F;
+    float TEMP_adcValue = (float)HAL_ADC_GetValue(&hadc5) / 8.0F;
     float temperature = Temp_Scale * (TEMP_adcValue * (ADC_REF_VOLTAGE / 3.0F) - TS_CAL1) + TS_CAL1_TEMP; // 计算温度
     return one_order_lowpass_filter(temperature, 0.1F);                                           // 返回温度值
 }
@@ -845,7 +874,21 @@ void FAN_PWM_set(uint16_t dutyCycle)
     {
         dutyCycle = 100;
     }
-    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, dutyCycle * 10);
+    if (dutyCycle == 0U)
+    {
+        FAN_ManualOverride = 0U;
+        FAN_ManualDuty = 0U;
+    }
+    else
+    {
+        FAN_ManualOverride = 1U;
+        FAN_ManualDuty = dutyCycle;
+    }
+
+    uint32_t compare = (uint32_t)dutyCycle * 10U;
+    if (compare > 999U)
+        compare = 999U;
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, compare);
 }
 
 /**
@@ -962,37 +1005,46 @@ float bytes_to_float(uint8_t *bytes)
  */
 void Auto_FAN(void)
 {
+    if (FAN_ManualOverride != 0U)
+    {
+        uint32_t compare = (uint32_t)FAN_ManualDuty * 10U;
+        if (compare > 999U)
+            compare = 999U;
+        __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, compare);
+        return;
+    }
+
     float TEMP = GET_NTC_Temperature(); // 获取NTC温度值
-    if (TEMP < 35)
+    if (TEMP >= 65)
     {
-        FAN_PWM_set(0); // 设置风扇转速为0
-    }
-    else if (TEMP >= 35)
-    {
-        FAN_PWM_set(35); // 设置风扇转速为35%
-    }
-    else if (TEMP >= 40)
-    {
-        FAN_PWM_set(45);
-    }
-    else if (TEMP >= 45)
-    {
-        FAN_PWM_set(60);
-    }
-    else if (TEMP >= 50)
-    {
-        FAN_PWM_set(70);
-    }
-    else if (TEMP >= 55)
-    {
-        FAN_PWM_set(80);
+        FAN_PWM_set(100);
     }
     else if (TEMP >= 60)
     {
         FAN_PWM_set(90);
     }
-    else if (TEMP >= 65)
+    else if (TEMP >= 55)
     {
-        FAN_PWM_set(100);
+        FAN_PWM_set(80);
+    }
+    else if (TEMP >= 50)
+    {
+        FAN_PWM_set(70);
+    }
+    else if (TEMP >= 45)
+    {
+        FAN_PWM_set(60);
+    }
+    else if (TEMP >= 40)
+    {
+        FAN_PWM_set(45);
+    }
+    else if (TEMP >= 35)
+    {
+        FAN_PWM_set(35); // 设置风扇转速为35%
+    }
+    else
+    {
+        FAN_PWM_set(0); // 设置风扇转速为0
     }
 }

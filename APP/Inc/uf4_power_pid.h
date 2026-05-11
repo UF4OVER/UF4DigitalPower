@@ -26,6 +26,7 @@ extern "C" {
 /* Exported function prototypes ----------------------------------------------*/
 
 void PID_Init(void);
+void BuckBoostVILoopCtlIsr(void);
 void BuckBoostVILoopCtlPID(void);
 
 #ifdef __cplusplus

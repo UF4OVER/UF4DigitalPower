@@ -44,10 +44,11 @@
 
 环路函数：`BuckBoostVILoopCtlPID()`（HRTIM 中断调用）。
 
-- 当前实现为**主电压环 + 电流限幅判定**：
-  - 电压误差：`error = target - vout`
-  - 电压环：`KP + KI`（含积分限幅）计算占空比修正
-  - 电流限制：当 `iout > SET_Value.Iout` 时切 `CC` 标志，并对积分项执行回退抑制
+- 当前实现已重构为**单向 CV/CC Buck-Boost 控制器**：
+  - 只允许正向输出电流，输入/输出电流反馈统一按单向处理；
+  - 主控制环为**电压 PI + 模式前馈**，直接输出占空比目标；
+  - 恒流控制通过**下拉有效电压参考 `limited_vref`** 实现，不再直接对占空比做硬切换；
+  - 占空比输出带**上升/下降斜率限制**，用于抑制轻载与切模时的啸叫。
 - 运行模式输入：`DF.BBFlag`（Buck / Boost / Mix），分别采用不同前馈与占空比映射。
 - 保护边界：占空比最终受 `MIN/MAX` 与软启动阶段 `BUCKMaxDuty/BoostMaxDuty` 双重限制。
 
@@ -57,18 +58,13 @@
 
 1. 公共计算（进入模式分支之前）
 
-- 采样量：
-  - `vin = UF4_AdcToVoltage(ADC1_RESULT[0])`
-  - `vout = UF4_AdcToVoltage(...)`
-  - `iout = UF4_AdcToOutputCurrent(...)`
-- 目标值：`target = SET_Value.Vout`
-- 误差：`error = target - vout`
-- 积分：`v_integral += UF4_VLOOP_KI * error`，并限幅到 `UF4_VLOOP_INTEGRAL_MIN ~ UF4_VLOOP_INTEGRAL_MAX`
-- CC 判定：当 `SET_Value.Iout > 0.001` 且 `iout > SET_Value.Iout`，置 `CVCC_Mode = CC`，并让 `v_integral` 额外回退 `0.01`
-- 软启动限制：
-  - 正常运行 `duty_max = UF4_DUTY_MAX`
-  - `Rise` 阶段 `duty_max = clamp(BUCKMaxDuty/PERIOD, UF4_DUTY_MIN, UF4_DUTY_MAX)`
-- 输入欠压保护：若 `vin < 0.5V`，直接置最小占空比并返回，不执行后续映射。
+- 采样量先经过快速一阶滤波，得到 `vin / vout / iin / iout`
+- `soft_vref` 以斜坡方式逼近 `SET_Value.Vout`
+- 当 `iout > SET_Value.Iout` 时，CC 管理器缓慢下拉 `limited_vref`；电流回落后再平滑释放
+- 电压环输出：`duty = duty_ff + KP * (limited_vref - vout) + integral`
+- 轻载过压与输入掉压时会自动回退积分和占空比
+- 最终占空比还会经过**slew-rate limiter**，避免磁性器件被低频包络激励
+- 输入欠压时直接回最小占空比并清空控制器内部状态
 
 2. BUCK 模式映射（`DF.BBFlag == Buck`）
 
@@ -112,20 +108,17 @@
 
 7. 关键实现特性（便于调试）
 
-- 模式切换时（`DF.BBModeChange`）会清 `v_integral`，避免 Buck/Boost/Mix 切换瞬间积分延续导致过冲。
-- 电压环按分频执行（`UF4_VLOOP_DIVIDER`），但 PWM 寄存器每次中断都会刷新。
-- 软启动阶段除了状态机抬升 `BUCKMaxDuty/BoostMaxDuty` 外，环路层还有 `duty_max` 约束，双层避免启动过冲。
+- 模式切换时（`DF.BBModeChange`）会衰减积分项并重贴前馈，避免 Buck/Boost/Mix 切换瞬间过冲。
+- 控制核心统一在一个快速环里运行，PWM 寄存器每次中断都会刷新。
+- 软启动阶段除了状态机抬升 `BUCKMaxDuty/BoostMaxDuty` 外，环路层还有 `soft_vref + duty_slew` 双重约束，降低启动鸣叫与冲击。
 
 ### 5) BUCK/BOOST/MIX 模式切换
 
 模式判断函数：`BBMode()`。
 
-- 根据 `Vout_ref` 与 `Vin` 比值切换：
-  - Buck：`Vout_ref < 0.8 * Vin`
-  - Boost：`Vout_ref > 1.2 * Vin`
-  - Mix：中间区间
-- 含迟滞边界（0.8 / 0.85 / 1.15 / 1.2）抑制临界点抖动。
-- 模式变化置位 `DF.BBModeChange`，环路端检测后清积分，降低切换过冲。
+- 仍根据 `Vout_ref` 与 `Vin` 比值切换 Buck / Boost / Mix。
+- 在原有迟滞基础上新增**连续多次判定确认**，避免临界点来回跳模引起啸叫。
+- 模式变化置位 `DF.BBModeChange`，环路端检测后衰减积分，降低切换过冲。
 
 ### 6) 保护策略
 
@@ -159,3 +152,4 @@
 
 - 使用 W25Q64 存储输出设定与保护阈值：`Vout/Iout/OTP/OCP/OVP`。
 - 相关函数：`Init_Flash()`、`Read_Flash()`、`Update_Flash()`。
+- 上电初始化会优先保留已读取且合法的 Flash 参数，仅在越界时回退默认值。

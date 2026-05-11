@@ -190,7 +190,7 @@ static uint32_t fan_to_permille(void)
     if (period == 0U)
         return 0U;
 
-    compare = __HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_1);
+    compare = __HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_3);
     if (compare >= period)
         return 1000U;
 

@@ -344,7 +344,7 @@ void HRTIM1_TIMA_IRQHandler(void)
   /* USER CODE END HRTIM1_TIMA_IRQn 0 */
   HAL_HRTIM_IRQHandler(&hhrtim1,HRTIM_TIMERINDEX_TIMER_A);
   /* USER CODE BEGIN HRTIM1_TIMA_IRQn 1 */
-  BuckBoostVILoopCtlPID();  // PID控制
+  BuckBoostVILoopCtlIsr();  // 降频后的快速控制中断
   /* USER CODE END HRTIM1_TIMA_IRQn 1 */
 }
 
