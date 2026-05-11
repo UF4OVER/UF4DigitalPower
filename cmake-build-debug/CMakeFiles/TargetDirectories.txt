@@ -1,3 +1,0 @@
-E:/PROJECT_DPOWER/UF4DigitalPower/cmake-build-debug/CMakeFiles/UF4DigitalPower.elf.dir
-E:/PROJECT_DPOWER/UF4DigitalPower/cmake-build-debug/CMakeFiles/edit_cache.dir
-E:/PROJECT_DPOWER/UF4DigitalPower/cmake-build-debug/CMakeFiles/rebuild_cache.dir
