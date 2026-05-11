@@ -58,13 +58,19 @@ typedef enum
     TVL_TYPE_PWM_D_COMPARE = 37,
     TVL_TYPE_FAN_SPEED = 38,
     TVL_TYPE_FAN_SET_VALUE = 39,
-    TVL_TYPE_DEBUG_SNAPSHOT = 40
+    TVL_TYPE_DEBUG_SNAPSHOT = 40,
+    TVL_TYPE_LOOP_CURRENT_FEEDBACK = 41,
+    TVL_TYPE_LOOP_CURRENT_REFERENCE = 42,
+    TVL_TYPE_VOLTAGE_LOOP_CURRENT_REFERENCE = 43
 } tvl_data_type_t;
 
 extern volatile float MAX_OTP_VAL;
 extern volatile float MAX_VOUT_OVP_VAL;
 extern volatile float MAX_VOUT_OCP_VAL;
 extern volatile _CVCC_Mode CVCC_Mode;
+extern volatile float UF4_DebugLoopImeas;
+extern volatile float UF4_DebugLoopIref;
+extern volatile float UF4_DebugLoopIrefV;
 
 static uint8_t rx_frame[TVL_MAX_FRAME];
 static uint8_t rx_ring[TVL_RX_RING_SIZE];
@@ -254,10 +260,22 @@ static bool read_data(uint8_t type, uint8_t *payload, uint16_t *offset)
         return append_u32(payload, offset, type, fan_to_permille());
     case TVL_TYPE_FAN_SET_VALUE:
         return append_u32(payload, offset, type, fan_set_permille);
+    case TVL_TYPE_LOOP_CURRENT_FEEDBACK:
+        return append_u32(payload, offset, type, non_negative_milli(UF4_DebugLoopImeas));
+    case TVL_TYPE_LOOP_CURRENT_REFERENCE:
+        return append_u32(payload, offset, type, non_negative_milli(UF4_DebugLoopIref));
+    case TVL_TYPE_VOLTAGE_LOOP_CURRENT_REFERENCE:
+        return append_u32(payload, offset, type, non_negative_milli(UF4_DebugLoopIrefV));
     case TVL_TYPE_DEBUG_SNAPSHOT:
         return read_data(TVL_TYPE_OUTPUT_VOLTAGE_RAW, payload, offset) &&
                read_data(TVL_TYPE_OUTPUT_VOLTAGE, payload, offset) &&
-               read_data(TVL_TYPE_OVP_SET_VALUE, payload, offset);
+               read_data(TVL_TYPE_INPUT_CURRENT_RAW, payload, offset) &&
+               read_data(TVL_TYPE_OUTPUT_CURRENT_RAW, payload, offset) &&
+               read_data(TVL_TYPE_INPUT_CURRENT, payload, offset) &&
+               read_data(TVL_TYPE_OUTPUT_CURRENT, payload, offset) &&
+               read_data(TVL_TYPE_LOOP_CURRENT_FEEDBACK, payload, offset) &&
+               read_data(TVL_TYPE_LOOP_CURRENT_REFERENCE, payload, offset) &&
+               read_data(TVL_TYPE_VOLTAGE_LOOP_CURRENT_REFERENCE, payload, offset);
     default:
         return false;
     }
@@ -464,6 +482,8 @@ static void handle_report(uint8_t seq)
         TVL_TYPE_FAULT_STATE,
         TVL_TYPE_STATE_MACHINE_FLAG_BITS,
         TVL_TYPE_STATE_MACHINE_STATE,
+        TVL_TYPE_INPUT_CURRENT_RAW,
+        TVL_TYPE_OUTPUT_CURRENT_RAW,
         TVL_TYPE_OTP_VALUE,
         TVL_TYPE_OTP_SET_VALUE,
         TVL_TYPE_OVP_VALUE,
@@ -475,6 +495,9 @@ static void handle_report(uint8_t seq)
         TVL_TYPE_PWM_D_COMPARE,
         TVL_TYPE_FAN_SPEED,
         TVL_TYPE_FAN_SET_VALUE,
+        TVL_TYPE_LOOP_CURRENT_FEEDBACK,
+        TVL_TYPE_LOOP_CURRENT_REFERENCE,
+        TVL_TYPE_VOLTAGE_LOOP_CURRENT_REFERENCE,
     };
     uint8_t response[TVL_MAX_PAYLOAD];
     uint16_t response_len = 0;

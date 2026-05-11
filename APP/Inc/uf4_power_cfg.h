@@ -26,8 +26,9 @@ extern "C" {
 #define VOLTAGE_DIVIDER_GAIN 13.5135F		   // 输入/输出电压分压还原系数
 #define CURRENT_SHUNT_OHM 0.008F			   // 电流采样分流电阻
 #define CURRENT_AMP_GAIN 20.0F				   // 电流采样运放增益
-#define CURRENT_ADC_ZERO_V 1.65F			   // 双向电流采样中点偏置
+#define CURRENT_ADC_ZERO_V 1.65F			   // 双向电流采样中点偏置；单向开发阶段 1.65V~3.3V 为正向有效电流
 #define CURRENT_SENSE_GAIN (CURRENT_SHUNT_OHM * CURRENT_AMP_GAIN)
+#define CURRENT_FORWARD_DEADBAND_A 0.02F	   // 正向电流零点死区，低于该值按0A处理
 
 #define TS_CAL1 *((__IO uint16_t *)0x1FFF75A8) // 内部温度传感器在30度和VREF为3V时的校准数据
 #define TS_CAL2 *((__IO uint16_t *)0x1FFF75CA) // 内部温度传感器在130度和VREF为3V时的校准数据

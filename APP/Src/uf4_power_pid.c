@@ -27,6 +27,9 @@ volatile int32_t IErr0 = 0, IErr1 = 0;            // 电流误差
 volatile int32_t u0 = 0, u1 = 0;                  // 电压环输出量
 volatile int32_t i0 = 0, i1 = 0;                  // 电流环输出量
 volatile _CVCC_Mode CVCC_Mode = CV;               // 恒流恒压模式标志位
+volatile float UF4_DebugLoopImeas = 0.0F;         // 环路实际使用的电流反馈
+volatile float UF4_DebugLoopIref = 0.0F;          // 电流内环参考
+volatile float UF4_DebugLoopIrefV = 0.0F;         // 电压外环输出的电流参考
 
 // 环路的参数buck输出-恒压-PID型补偿器
 #define BUCKPIDb0 5271
@@ -44,12 +47,14 @@ volatile _CVCC_Mode CVCC_Mode = CV;               // 恒流恒压模式标志位
 #define UF4_VLOOP_KP 0.50F
 #define UF4_VLOOP_KI 0.002F
 #define UF4_VLOOP_DIVIDER 50U
+#define UF4_ILOOP_DIVIDER 8U
 #define UF4_ILOOP_KP 0.010F
 #define UF4_ILOOP_KI 0.00002F
 #define UF4_ILOOP_INTEGRAL_MIN (-0.20F)
 #define UF4_ILOOP_INTEGRAL_MAX 0.20F
 #define UF4_CC_EPS 0.02F
 #define UF4_ILIMIT_DISABLED_EPS 0.001F
+#define UF4_LIGHT_LOAD_OVERVOLTAGE_MARGIN 0.05F
 #define UF4_DUTY_MIN ((float)MIN_BUKC_DUTY / (float)PERIOD)
 #define UF4_DUTY_MAX ((float)MAX_BUCK_DUTY / (float)PERIOD)
 #define UF4_BOOST_DUTY_MAX ((float)MAX_BOOST_DUTY / (float)PERIOD)
@@ -59,6 +64,7 @@ static float i_int = 0.0F;
 static float iref_v = 0.0F;
 static float iref = 0.0F;
 static uint16_t v_loop_divider = 0U;
+static uint16_t i_loop_divider = 0U;
 static uint16_t previous_mode = NA;
 
 static float uf4_clampf(float value, float min_value, float max_value)
@@ -94,6 +100,7 @@ static void UF4_ResetLoopState(void)
     iref_v = 0.0F;
     iref = 0.0F;
     v_loop_divider = 0U;
+    i_loop_divider = 0U;
     previous_mode = DF.BBFlag;
     VErr0 = 0;
     VErr1 = 0;
@@ -106,6 +113,9 @@ static void UF4_ResetLoopState(void)
     i1 = 0;
     CtrValue.I_Limit = 0;
     CtrValue.Ilimitout = 0;
+    UF4_DebugLoopImeas = 0.0F;
+    UF4_DebugLoopIref = 0.0F;
+    UF4_DebugLoopIrefV = 0.0F;
 }
 
 static void UF4_ApplyMinimumDuty(void)
@@ -114,13 +124,20 @@ static void UF4_ApplyMinimumDuty(void)
     CtrValue.BoostDuty = MIN_BOOST_DUTY;
 }
 
-static float UF4_GetCurrentFeedback(void)
+static float UF4_GetCurrentFeedback(float vin, float vout)
 {
     const float iin = UF4_AdcToInputCurrent(ADC1_RESULT[1]);
     const float iout = UF4_AdcToOutputCurrent(UF4_GetCalibratedIoutAdc());
 
     if (DF.BBFlag == Buck)
-        return iout;
+    {
+        float iin_as_output = iin;
+
+        if (vout > 1.0F)
+            iin_as_output = iin * vin / vout;
+
+        return (iout > iin_as_output) ? iout : iin_as_output;
+    }
 
     return iin;
 }
@@ -187,7 +204,7 @@ static float UF4_RunVoltageLoop(float vref, float vout, float ilimit)
     return iref_cmd;
 }
 
-static float UF4_RunCurrentLoop(float current_ref, float current_meas, float duty_ff, float duty_min, float duty_max)
+static float UF4_RunCurrentLoop(float current_ref, float current_meas, float duty_ff, float duty_min, float duty_max, float zero_current_duty)
 {
     float duty;
     const float error = current_ref - current_meas;
@@ -199,8 +216,10 @@ static float UF4_RunCurrentLoop(float current_ref, float current_meas, float dut
     {
         i_int = 0.0F;
         i1 = i0;
-        i0 = (int32_t)(duty_min * (float)PERIOD);
-        return duty_min;
+        duty = uf4_clampf(zero_current_duty, duty_min, duty_max);
+        i0 = (int32_t)(duty * (float)PERIOD + 0.5F);
+        CtrValue.Ilimitout = i0;
+        return duty;
     }
 
     i_int += UF4_ILOOP_KI * error;
@@ -273,6 +292,7 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
     float duty_ff;
     float duty_max;
     float duty_cmd;
+    float zero_current_duty;
 
     if ((DF.OUTPUT_Flag == 0U) || (DF.PWMENFlag == 0U) || (DF.SMFlag == Init) || (DF.SMFlag == Wait) || (DF.SMFlag == Err))
     {
@@ -282,6 +302,17 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
         UF4_UpdatePwmCompare();
         return;
     }
+
+    /*
+     * HRTIM中断频率很高，完整浮点双环每次都跑会挤占USB/5ms状态机。
+     * 先按分频运行内环，未到分频点时保持上一拍占空比。
+     */
+    if (++i_loop_divider < UF4_ILOOP_DIVIDER)
+    {
+        UF4_UpdatePwmCompare();
+        return;
+    }
+    i_loop_divider = 0U;
 
     if ((DF.BBModeChange != 0U) || (previous_mode != DF.BBFlag))
     {
@@ -299,10 +330,15 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
     VErr1 = VErr0;
     VErr0 = CtrValue.Vout_ref - (int32_t)vout_adc;
 
-    if (vin < 0.5F)
+    if (vin < MIN_INPUT_START_VOLTAGE)
     {
+        v_int = 0.0F;
         i_int = 0.0F;
+        iref_v = 0.0F;
         iref = 0.0F;
+        UF4_DebugLoopImeas = 0.0F;
+        UF4_DebugLoopIref = 0.0F;
+        UF4_DebugLoopIrefV = iref_v;
         UF4_ApplyMinimumDuty();
         UF4_UpdatePwmCompare();
         return;
@@ -317,10 +353,19 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
     iref = (iref_v < ilimit) ? iref_v : ilimit;
     CVCC_Mode = (iref_v >= (ilimit - UF4_CC_EPS)) ? CC : CV;
 
-    imeas = UF4_GetCurrentFeedback();
+    imeas = UF4_GetCurrentFeedback(vin, vout);
+    UF4_DebugLoopImeas = imeas;
+    UF4_DebugLoopIref = iref;
+    UF4_DebugLoopIrefV = iref_v;
+
     duty_ff = UF4_GetDutyFeedForward(vin, target);
     duty_max = UF4_GetDutyMax();
-    duty_cmd = UF4_RunCurrentLoop(iref, imeas, duty_ff, UF4_DUTY_MIN, duty_max);
+
+    zero_current_duty = UF4_DUTY_MIN;
+    if ((ilimit > UF4_ILIMIT_DISABLED_EPS) && (vout < (target + UF4_LIGHT_LOAD_OVERVOLTAGE_MARGIN)))
+        zero_current_duty = duty_ff;
+
+    duty_cmd = UF4_RunCurrentLoop(iref, imeas, duty_ff, UF4_DUTY_MIN, duty_max, zero_current_duty);
 
     UF4_ApplyDutyByMode(duty_cmd);
     UF4_UpdatePwmCompare();

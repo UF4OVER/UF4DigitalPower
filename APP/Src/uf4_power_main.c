@@ -60,14 +60,14 @@ float UF4_AdcToCurrent(uint32_t adc)
 
 float UF4_AdcToInputCurrent(uint32_t adc)
 {
-    const float current = -UF4_AdcToCurrent(adc);
-    return (current > 0.0F) ? current : 0.0F;
+    const float current = UF4_AdcToCurrent(adc);
+    return (current > CURRENT_FORWARD_DEADBAND_A) ? current : 0.0F;
 }
 
 float UF4_AdcToOutputCurrent(uint32_t adc)
 {
-    const float current = -UF4_AdcToCurrent(adc);
-    return (current > 0.0F) ? current : 0.0F;
+    const float current = UF4_AdcToCurrent(adc);
+    return (current > CURRENT_FORWARD_DEADBAND_A) ? current : 0.0F;
 }
 
 uint32_t UF4_VoltageToAdc(float voltage)
