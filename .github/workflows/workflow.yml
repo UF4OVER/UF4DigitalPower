@@ -3,6 +3,7 @@ permissions:
 
 name: Build and Release Power
 
+
 on:
   push:
     branches: [Power_release]
@@ -13,7 +14,10 @@ jobs:
 
     steps:
       - name: Checkout
+        uses: actions/checkout@v4
+
         uses: actions/checkout@v5
+
         with:
           fetch-depth: 0
 
@@ -31,6 +35,7 @@ jobs:
       - name: Generate tag
         id: tag
         run: |
+
           DATE_MM_DD="$(date +%m_%d)"
           TAG="Power_${DATE_MM_DD}_$(printf '%03d' "$GITHUB_RUN_NUMBER")"
 
@@ -39,6 +44,7 @@ jobs:
 
       - name: Prepare release assets
         run: |
+
           cp "build/UF4DigitalPower.elf" "build/UF4DP_Power_${{ steps.tag.outputs.date_mm_dd }}.elf"
           cp "build/UF4DigitalPower.hex" "build/UF4DP_Power_${{ steps.tag.outputs.date_mm_dd }}.hex"
           cp "build/UF4DigitalPower.bin" "build/UF4DP_Power_${{ steps.tag.outputs.date_mm_dd }}.bin"
