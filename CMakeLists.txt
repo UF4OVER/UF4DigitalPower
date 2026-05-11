@@ -57,12 +57,12 @@ include_directories(
         Drivers/STM32G4xx_HAL_Driver/Inc/Legacy
         Middlewares/ST/STM32_USB_Device_Library/Core/Inc
         Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
+        Middlewares/TVLCOM_V2_FULL/Inc
         Drivers/CMSIS/Device/ST/STM32G4xx/Include
         Drivers/CMSIS/Include
         APP/Inc
 #        DSP/Include
 #        DSP/Include/dsp
-        Middlewares/TVLCOM_V2_FULL/Inc
 )
 
 add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32G474xx)

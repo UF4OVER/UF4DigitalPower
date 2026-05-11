@@ -6,6 +6,7 @@
 #include "uf4_tvlcom.h"
 
 #include "hrtim.h"
+#include "tim.h"
 #include "uf4_power_main.h"
 #include "usbd_cdc_if.h"
 
