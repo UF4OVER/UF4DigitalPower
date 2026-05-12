@@ -6,132 +6,284 @@
 #  @System  : Windows
 #  @Author  : UF4
 # -------------------------------
-from typing import Union
+from typing import Callable, Optional, Union
 
-from siui.components import SiLabel as Label, SiMasonryContainer as MasonryContainer
-from siui.core import GlobalFont, Si, SiColor as Color, SiQuickEffect as QuickEffect
-from siui.gui import SiFont as Font
+from PyQt5.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QTimer, Qt, pyqtSignal
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-try:
-    from siui.templates.application.components.messagebox import SiSideMessageBox as SideMessageBox
-except Exception:
-    from siui.components import SiSideMessageBox as SideMessageBox
+from qfluentwidgets import FluentIcon, IconWidget, PrimaryPushButton, TransparentToolButton, isDarkTheme
 
 
-class MessageSidebar(MasonryContainer):
-    """右侧消息栏。
+class MessageCard(QFrame):
+    """qfluentwidgets 风格的右侧消息卡片。"""
 
-    DEBUG 阶段保持和 SIUI 模板一致：
-    - addWidget 交给 MasonryContainer 管理
-    - sendMessageBox 发送自定义卡片
-    - send 发送通用文本卡片
+    clicked = pyqtSignal()
+    closed = pyqtSignal(object)
+
+    def __init__(
+            self,
+            title: Optional[str],
+            text: str,
+            msg_type: int = 1,
+            icon: Union[FluentIcon, QIcon, str, None] = None,
+            slot: Optional[Callable] = None,
+            close_on_clicked: bool = True,
+            fold_after: Optional[int] = None,
+            parent: Optional[QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.msg_type = msg_type
+        self.fold_after = fold_after
+        self.close_on_clicked = close_on_clicked
+        self._closing = False
+
+        self.setObjectName("MessageCard")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setFixedWidth(380)
+
+        self.iconWidget = IconWidget(self)
+        self.iconWidget.setFixedSize(28, 28)
+        self.iconWidget.setIcon(self._icon(icon, msg_type))
+
+        self.titleLabel = QLabel(title or text, self)
+        self.titleLabel.setObjectName("MessageTitle")
+        self.titleLabel.setWordWrap(True)
+
+        self.textLabel = QLabel(text, self)
+        self.textLabel.setObjectName("MessageText")
+        self.textLabel.setWordWrap(True)
+        self.textLabel.setVisible(title is not None)
+
+        self.closeButton = TransparentToolButton(FluentIcon.CLOSE, self)
+        self.closeButton.setFixedSize(28, 28)
+        self.closeButton.clicked.connect(self.closeLater)
+
+        self.okButton = PrimaryPushButton("确认", self)
+        self.okButton.setFixedWidth(72)
+        self.okButton.clicked.connect(self._onConfirmClicked)
+
+        textLayout = QVBoxLayout()
+        textLayout.setContentsMargins(0, 0, 0, 0)
+        textLayout.setSpacing(4)
+        textLayout.addWidget(self.titleLabel)
+        textLayout.addWidget(self.textLabel)
+
+        headerLayout = QHBoxLayout()
+        headerLayout.setContentsMargins(0, 0, 0, 0)
+        headerLayout.setSpacing(12)
+        headerLayout.addWidget(self.iconWidget, 0, Qt.AlignmentFlag.AlignTop)
+        headerLayout.addLayout(textLayout, 1)
+        headerLayout.addWidget(self.closeButton, 0, Qt.AlignmentFlag.AlignTop)
+
+        bodyLayout = QVBoxLayout(self)
+        bodyLayout.setContentsMargins(16, 14, 16, 14)
+        bodyLayout.setSpacing(12)
+        bodyLayout.addLayout(headerLayout)
+        bodyLayout.addWidget(self.okButton, 0, Qt.AlignmentFlag.AlignRight)
+
+        if slot is not None:
+            self.clicked.connect(slot)
+
+        self.autoCloseTimer = QTimer(self)
+        self.autoCloseTimer.setSingleShot(True)
+        self.autoCloseTimer.timeout.connect(self.closeLater)
+
+        self._applyStyle()
+        self.adjustSize()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.fold_after is not None and self.fold_after > 0:
+            self.autoCloseTimer.start(self.fold_after)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            if self.close_on_clicked:
+                self.closeLater()
+
+    def closeLater(self):
+        if self._closing:
+            return
+        self._closing = True
+        self.closed.emit(self)
+
+    def _onConfirmClicked(self):
+        self.clicked.emit()
+        self.closeLater()
+
+    def _icon(self, icon, msg_type: int):
+        if icon is not None:
+            return icon
+        if msg_type == 0:
+            return FluentIcon.CANCEL
+        if msg_type == 2:
+            return FluentIcon.ACCEPT
+        if msg_type == 3:
+            return FluentIcon.INFO
+        return FluentIcon.INFO
+
+    def _applyStyle(self):
+        if isDarkTheme():
+            bg = "rgba(38, 38, 38, 245)"
+            border = "rgba(255, 255, 255, 26)"
+            title = "#FFFFFF"
+            text = "#C8C8C8"
+            shadow_color = Qt.GlobalColor.black
+        else:
+            bg = "rgba(255, 255, 255, 248)"
+            border = "rgba(0, 0, 0, 24)"
+            title = "#1F1F1F"
+            text = "#606060"
+            shadow_color = Qt.GlobalColor.gray
+
+        self.setStyleSheet(f"""
+            QFrame#MessageCard {{
+                background: {bg};
+                border: 1px solid {border};
+                border-radius: 12px;
+            }}
+            QLabel#MessageTitle {{
+                color: {title};
+                font-size: 15px;
+                font-weight: 600;
+            }}
+            QLabel#MessageText {{
+                color: {text};
+                font-size: 13px;
+            }}
+        """)
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(32)
+        shadow.setOffset(0, 6)
+        shadow.setColor(shadow_color)
+        self.setGraphicsEffect(shadow)
+
+
+class MessageSidebar(QWidget):
+    """右侧消息栏管理器。
+
+    行为类似 SIUI：
+    - sendMessageBox：发送自定义卡片
+    - send：发送普通消息
+    - 自动回收
+    - 移除后下方卡片自动上移
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("MessageSidebar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.setFixedWidth(420)
 
-        self.setColumns(1)
-        self.setColumnWidth(400)
-        self.setSpacing(horizontal=None, vertical=16)
+        self.spacing = 16
+        self.marginRight = 24
+        self.marginBottom = 24
+        self.cards = []
+        self.hide()
 
-        self.debug_label = Label(self)
-
-    def sendMessageBox(self, message_box):
-        self.addWidget(message_box)
-        message_box.setFixedWidth(self.width() - 20)
-        message_box.move(80, self.height() - message_box.height())
-        message_box.show()
+    def sendMessageBox(self, message_box: QWidget):
+        message_box.setParent(self.parentWidget())
+        message_box.setFixedWidth(380)
+        self._appendCard(message_box)
 
     def send(self,
              text: str,
              title: str = None,
-             msg_type: int = 0,
-             icon: Union[bytes, str] = None,
+             msg_type: int = 1,
+             icon: Union[FluentIcon, QIcon, str, None] = None,
              slot=None,
              close_on_clicked=True,
-             fold_after: int = None):
-        """创建普通消息卡片并发送到右侧消息栏。"""
-        message_box = SideMessageBox(self)
-        message_box.setMessageType(msg_type)
-        message_box.setFixedWidth(self.width() - 20)
+             fold_after: int = 5000):
+        message_box = MessageCard(
+            title=title,
+            text=text,
+            msg_type=msg_type,
+            icon=icon,
+            slot=slot,
+            close_on_clicked=close_on_clicked,
+            fold_after=fold_after,
+            parent=self.parentWidget(),
+        )
+        self._appendCard(message_box)
+        return message_box
 
-        if slot is not None:
-            message_box.clicked.connect(slot)
+    def removeCard(self, message_box: QWidget):
+        if message_box not in self.cards:
+            return
 
-        if close_on_clicked is True:
-            message_box.clicked.connect(message_box.closeLater)
+        self.cards.remove(message_box)
+        end = QPoint(self.parentWidget().width() + 40, message_box.y())
+        self._moveTo(message_box, end, finished=lambda: self._deleteCard(message_box))
+        self.updatePositions()
 
-        if title is None:
-            label = Label(self)
-            label.setFixedWidth(380 - message_box.content().theme_wing_width - 32)
-            label.setSiliconWidgetFlag(Si.AdjustSizeOnTextChanged)
-            label.setWordWrap(True)
-            label.setFont(Font.tokenized(GlobalFont.S_NORMAL))
-            label.setFixedStyleSheet(
-                "padding-top: 16px;"
-                "padding-bottom: 16px;"
-                "padding-left: 12px;"
-                "padding-right: 12px;"
-                "color: {}".format(self.getColor(Color.TEXT_D))
-            )
-            label.setText(text)
-            message_box.content().container().addWidget(label)
-        else:
-            message_box.content().container().setSpacing(0)
+    def clear(self):
+        for card in self.cards[:]:
+            self.removeCard(card)
 
-            title_label = Label(self)
-            title_label.setFixedWidth(380 - message_box.content().theme_wing_width - 32)
-            title_label.setSiliconWidgetFlag(Si.AdjustSizeOnTextChanged)
-            title_label.setWordWrap(True)
-            title_label.setFont(Font.tokenized(GlobalFont.S_BOLD))
-            title_label.setFixedStyleSheet(
-                "padding-top: 16px;"
-                "padding-bottom: 1px;"
-                "padding-left: 12px;"
-                "padding-right: 12px;"
-                "color: {}".format(self.getColor(Color.TEXT_B))
-            )
-            title_label.setText(title)
+    def updatePositions(self, animated: bool = True):
+        parent = self.parentWidget()
+        if parent is None:
+            return
 
-            description_label = Label(self)
-            description_label.setFixedWidth(380 - message_box.content().theme_wing_width - 32)
-            description_label.setSiliconWidgetFlag(Si.AdjustSizeOnTextChanged)
-            description_label.setWordWrap(True)
-            description_label.setFont(Font.tokenized(GlobalFont.S_NORMAL))
-            description_label.setFixedStyleSheet(
-                "padding-top: 1px;"
-                "padding-bottom: 16px;"
-                "padding-left: 12px;"
-                "padding-right: 12px;"
-                "color: {}".format(self.getColor(Color.TEXT_D))
-            )
-            description_label.setText(text)
+        x = parent.width() - self.marginRight - 380
+        y = parent.height() - self.marginBottom
 
-            message_box.content().container().addWidget(title_label)
-            message_box.content().container().addWidget(description_label)
+        for card in self.cards:
+            y -= card.height()
+            target = QPoint(x, y)
+            if animated:
+                self._moveTo(card, target)
+            else:
+                card.move(target)
+            y -= self.spacing
 
-        if fold_after is not None:
-            message_box.setFoldAfter(fold_after)
+    def resizeToParent(self):
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        self.setGeometry(parent.width() - self.width(), 0, self.width(), parent.height())
+        self.updatePositions(animated=False)
 
-        if icon is not None:
-            message_box.content().themeIcon().load(icon)
+    def _appendCard(self, message_box: QWidget):
+        parent = self.parentWidget()
+        if parent is None:
+            return
 
+        if hasattr(message_box, "closed"):
+            message_box.closed.connect(self.removeCard)
+
+        self.cards.append(message_box)
         message_box.adjustSize()
-        self.sendMessageBox(message_box)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.debug_label.resize(event.size())
+        start = QPoint(parent.width() + 40, parent.height() - self.marginBottom - message_box.height())
+        message_box.move(start)
+        message_box.show()
+        message_box.raise_()
+
+        self.updatePositions(animated=False)
+        self._moveTo(message_box, message_box.pos())
+        self.updatePositions(animated=True)
+
+    def _moveTo(self, widget: QWidget, target: QPoint, finished=None):
+        animation = QPropertyAnimation(widget, b"pos", widget)
+        animation.setDuration(220)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.setStartValue(widget.pos())
+        animation.setEndValue(target)
+        widget._messageMoveAnimation = animation
+        if finished is not None:
+            animation.finished.connect(finished)
+        animation.start()
+
+    def _deleteCard(self, card: QWidget):
+        card.close()
+        card.deleteLater()
 
 
 class RightMessageSidebar(MessageSidebar):
     """主窗口右侧消息层。"""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        QuickEffect.applyDropShadowOn(
-            self,
-            color=(28, 25, 31, 200),
-            blur_radius=64,
-        )
+    pass
