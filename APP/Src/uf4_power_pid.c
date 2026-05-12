@@ -28,15 +28,24 @@ volatile int32_t u0 = 0, u1 = 0;                  // 电压环输出量
 volatile int32_t i0 = 0, i1 = 0;                  // 电流环输出量
 volatile _CVCC_Mode CVCC_Mode = CV;               // 恒流恒压模式标志位
 
+volatile float UF4_DebugLoopImeas = 0.0F;         // 调试：内环反馈电流，单位 A
+volatile float UF4_DebugLoopIref = 0.0F;          // 调试：内环电流参考，单位 A
+volatile float UF4_DebugLoopIrefV = 0.0F;         // 调试：外环输出电流参考对应的电压环量，单位 A
+
 void PID_Init(void)
 {
     VErr0 = 0;
     VErr1 = 0;
     VErr2 = 0;
+    IErr0 = 0;
+    IErr1 = 0;
     u0 = 0;
     u1 = 0;
     i0 = 0;
-    IErr0 = 0;
+    i1 = 0;
+    UF4_DebugLoopImeas = 0.0F;
+    UF4_DebugLoopIref = 0.0F;
+    UF4_DebugLoopIrefV = 0.0F;
 }
 
 // 环路的参数buck输出-恒压-PID型补偿器
@@ -123,6 +132,9 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
         CtrValue.Ilimitout = 0;
         CtrValue.BuckDuty = MIN_BUKC_DUTY;
         CtrValue.BoostDuty = MIN_BOOST_DUTY;
+        UF4_DebugLoopImeas = 0.0F;
+        UF4_DebugLoopIref = 0.0F;
+        UF4_DebugLoopIrefV = 0.0F;
         UF4_UpdatePwmCompare();
         return;
     }
@@ -136,6 +148,8 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
     float duty_delta;
     float duty;
     float duty_max = UF4_DUTY_MAX;
+
+    UF4_DebugLoopImeas = iout;
 
     if (DF.SMFlag == Rise)
     {
@@ -184,6 +198,9 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
         current_ref = 0.0F;
         v_integral = 0.0F;
     }
+
+    UF4_DebugLoopIref = current_ref;
+    UF4_DebugLoopIrefV = current_ref;
 
     CVCC_Mode = (current_ref >= (ilimit - 0.05F)) ? CC : CV;
     CtrValue.I_Limit = (int32_t)UF4_CurrentToAdc(current_ref);
@@ -238,4 +255,9 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
         CtrValue.BoostDuty = MIN_BOOST_DUTY;
 
     UF4_UpdatePwmCompare();
+}
+
+CCMRAM void BuckBoostVILoopCtlIsr(void)
+{
+    BuckBoostVILoopCtlPID();
 }
