@@ -194,7 +194,20 @@ class WaterTankWidget(QWidget):
         painter.drawText(tank_rect, Qt.AlignCenter, f"{self._value:.0f}%")
 
 
-class BatteryCellCard(CardWidget):
+class BatteryCardWidget(CardWidget):
+    """Battery page card with transparent state colors to avoid hover mask flicker."""
+
+    def _normalBackgroundColor(self):
+        return QColor(0, 0, 0, 0)
+
+    def _hoverBackgroundColor(self):
+        return QColor(0, 0, 0, 0)
+
+    def _pressedBackgroundColor(self):
+        return QColor(0, 0, 0, 0)
+
+
+class BatteryCellCard(BatteryCardWidget):
     def __init__(self, index: int, parent=None):
         super().__init__(parent)
         self.index = index
@@ -276,7 +289,6 @@ class BatteryCellCard(CardWidget):
         self.refreshTheme()
 
     def refreshTheme(self) -> None:
-        self._applyCardColor()
         self.tank.refreshTheme()
         text = "#F5F7FA" if isDarkTheme() else "#111827"
         muted = "#A7B0BE" if isDarkTheme() else "#475569"
@@ -297,10 +309,6 @@ class BatteryCellCard(CardWidget):
             }}
             """)
         self._refreshStatusColor()
-
-    def _applyCardColor(self) -> None:
-        color = QColor(15, 23, 42, 128) if isDarkTheme() else QColor(255, 255, 255, 210)
-        self.setBackgroundColor(color)
 
     def _themeColor(self) -> QColor:
         color = getattr(cfg.themeColor, "value", None)
@@ -332,7 +340,7 @@ class BatteryCellCard(CardWidget):
         self.statusLabel.setStyleSheet(f"color: {color}; font-weight: 600;")
 
 
-class MetricTile(CardWidget):
+class MetricTile(BatteryCardWidget):
     def __init__(self, title: str, icon: FIF, parent=None):
         super().__init__(parent)
         self.setProperty("batteryCard", True)
@@ -387,6 +395,25 @@ class BatteryPage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("BatteryPage")
+        self._defaultSnapshot = BatterySnapshot(
+            cell_soc=(0.0, 0.0, 0.0, 0.0),
+            cell_voltage=(0.0, 0.0, 0.0, 0.0),
+            input_online=False,
+            output_online=False,
+            charge_state="idle",
+            charge_current_a=0.0,
+            discharge_current_a=0.0,
+            pack_soc=0.0,
+            pack_voltage_v=0.0,
+            pack_current_a=0.0,
+            nominal_capacity_ah=0.0,
+            remaining_capacity_ah=0.0,
+            health_percent=0.0,
+            remaining_discharge_minutes=0,
+            charged_in_ah=0.0,
+            energy_in_wh=0.0,
+            energy_out_wh=0.0,
+        )
 
         self.scrollWidget = QWidget(self)
         self.scrollWidget.setObjectName("batteryScrollWidget")
@@ -416,7 +443,7 @@ class BatteryPage(ScrollArea):
         StyleSheet.BATTERY_PAGE.apply(self)
 
     def _initSummaryCard(self) -> None:
-        self.summaryCard = CardWidget(self.scrollWidget)
+        self.summaryCard = BatteryCardWidget(self.scrollWidget)
         self.summaryCard.setObjectName("batterySummaryCard")
         self.summaryCard.setProperty("batteryCard", True)
         self.summaryCard.setBorderRadius(10)
@@ -457,7 +484,7 @@ class BatteryPage(ScrollArea):
         self.rootLayout.addWidget(self.summaryCard)
 
     def _initCellOverviewCard(self) -> None:
-        self.cellCard = CardWidget(self.scrollWidget)
+        self.cellCard = BatteryCardWidget(self.scrollWidget)
         self.cellCard.setObjectName("batteryCellOverviewCard")
         self.cellCard.setProperty("batteryCard", True)
         self.cellCard.setBorderRadius(10)
@@ -495,7 +522,7 @@ class BatteryPage(ScrollArea):
         self.rootLayout.addWidget(self.cellCard)
 
     def _initFlowCard(self) -> None:
-        self.flowCard = CardWidget(self.scrollWidget)
+        self.flowCard = BatteryCardWidget(self.scrollWidget)
         self.flowCard.setObjectName("batteryFlowCard")
         self.flowCard.setProperty("batteryCard", True)
         self.flowCard.setBorderRadius(10)
@@ -557,27 +584,42 @@ class BatteryPage(ScrollArea):
             tile.applyTexts()
 
     def _applyDemoSnapshot(self) -> None:
-        self.updateSnapshot(
-            BatterySnapshot(
-                cell_soc=(89.5, 88.1, 90.4, 87.8),
-                cell_voltage=(3.986, 3.974, 3.994, 3.968),
-                input_online=True,
-                output_online=True,
-                charge_state="discharging",
-                charge_current_a=0.0,
-                discharge_current_a=3.2,
-                pack_soc=88.9,
-                pack_voltage_v=15.92,
-                pack_current_a=-3.2,
-                nominal_capacity_ah=20.0,
-                remaining_capacity_ah=17.8,
-                health_percent=96.0,
-                remaining_discharge_minutes=333,
-                charged_in_ah=5.42,
-                energy_in_wh=86.1,
-                energy_out_wh=21.4,
-            )
-        )
+        self.updateSnapshot(self._defaultSnapshot)
+
+    # Public APIs for external modules to update battery page content.
+    def setDeviceName(self, device_name: str) -> None:
+        self.deviceLabel.setText(device_name.strip() if device_name else "--")
+
+    def setConnectionModes(self, modes: list[str], current_mode: str | None = None) -> None:
+        items = [item.strip() for item in modes if item and item.strip()]
+        if not items:
+            return
+
+        self.connectionModeCombo.blockSignals(True)
+        self.connectionModeCombo.clear()
+        self.connectionModeCombo.addItems(items)
+        self.connectionModeCombo.blockSignals(False)
+        if current_mode:
+            self.setConnectionMode(current_mode)
+        else:
+            self.connectionModeCombo.setCurrentIndex(0)
+
+    def setConnectionMode(self, mode: str) -> None:
+        text = (mode or "").strip()
+        if not text:
+            return
+        index = self.connectionModeCombo.findText(text)
+        if index >= 0:
+            self.connectionModeCombo.setCurrentIndex(index)
+
+    def setBatterySnapshot(self, snapshot: BatterySnapshot) -> None:
+        self.updateSnapshot(snapshot)
+
+    def resetContent(self) -> None:
+        self.connectionModeCombo.setCurrentIndex(0)
+        self._applyTexts()
+        self._applyDemoSnapshot()
+        self._refreshStateStyles()
 
     def updateSnapshot(self, snapshot: BatterySnapshot) -> None:
         soc_values = list(snapshot.cell_soc)[:4]

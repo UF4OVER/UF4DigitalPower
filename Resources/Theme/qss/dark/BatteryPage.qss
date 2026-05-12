@@ -17,7 +17,7 @@ QWidget#batteryScrollWidget StrongBodyLabel {
 
 QWidget#batteryScrollWidget BodyLabel,
 QWidget#batteryScrollWidget CaptionLabel {
-    color: #A7B0BE;
+    color: #9AA4B2;
 }
 
 QWidget#batteryScrollWidget CardWidget {
