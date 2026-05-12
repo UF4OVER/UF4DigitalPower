@@ -29,7 +29,7 @@ from App.Core import (
     showMessage,
     update_manager,
 )
-from Core.utility import showMessage
+from App.Core.utility import showMessage
 
 FIRMWARE_KIND_TEXT = {
     "Power": "电源",
