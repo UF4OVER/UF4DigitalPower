@@ -47,7 +47,6 @@ from PyQt5.QtCore import (
     QTimer,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QPainter, QPainterPath, QRegion
 from PyQt5.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from qfluentwidgets import (
@@ -98,6 +97,7 @@ _CARD_MIN_HEIGHT = 72
 _CARD_MARGIN = 10        # gap between stacked cards
 _PANEL_RIGHT_MARGIN = 16
 _PANEL_BOTTOM_MARGIN = 16
+_PANEL_LANE_PADDING = 12
 _SLIDE_IN_MS = 260
 _SLIDE_OUT_MS = 220
 _DEFAULT_DURATION_MS = 4000
@@ -315,8 +315,6 @@ class NotificationPanel(QWidget):
 
         self._repositionPanel()
         self.raise_()
-        # Start with an empty mask so the panel doesn't block any mouse events
-        self._updateMask()
 
     # ------------------------------------------------------------------
     # Geometry helpers
@@ -325,7 +323,15 @@ class NotificationPanel(QWidget):
         if self.parent() is None:
             return
         parentRect: QRect = self.parent().rect()  # type: ignore[union-attr]
-        self.setGeometry(parentRect)
+        if not self._cards:
+            self.setGeometry(parentRect.width(), parentRect.height(), 0, 0)
+            self.hide()
+            return
+
+        laneWidth = _CARD_WIDTH + _PANEL_RIGHT_MARGIN + _PANEL_LANE_PADDING
+        x = max(0, parentRect.width() - laneWidth)
+        self.setGeometry(x, 0, laneWidth, parentRect.height())
+        self.show()
         self.raise_()
         self._layoutCards()
 
@@ -346,23 +352,6 @@ class NotificationPanel(QWidget):
             y = bottom - card.height()
             card.move(x, y)
             bottom = y - _CARD_MARGIN
-        self._updateMask()
-
-    # ------------------------------------------------------------------
-    # Mouse-event mask helpers
-    # ------------------------------------------------------------------
-    def _updateMask(self, *_):
-        """Restrict mouse events to the union of all visible card regions.
-
-        Areas outside the mask are fully transparent to mouse events so
-        the underlying window (title bar, navigation, etc.) remains
-        fully interactive at all times.
-        """
-        region = QRegion()
-        for card in self._cards:
-            if card.isVisible():
-                region = region.united(QRegion(card.geometry()))
-        self.setMask(region)
 
     # ------------------------------------------------------------------
     # Public API (called by NotificationManager)
@@ -372,6 +361,9 @@ class NotificationPanel(QWidget):
         card.adjustSize()
         card.show()
 
+        self._cards.append(card)
+        self._repositionPanel()
+
         # New card always appears at the bottom-right corner
         startX = self._offscreenX()
         endX = self._cardX()
@@ -379,9 +371,8 @@ class NotificationPanel(QWidget):
 
         card.move(startX, endY)
 
-        # Push existing cards upward first, then append the new card
+        # Push existing cards upward first, then slide the new card in.
         self._animatePush(card)
-        self._cards.append(card)
 
         # Slide the new card in
         anim = QPropertyAnimation(card, b"pos", self)
@@ -389,7 +380,6 @@ class NotificationPanel(QWidget):
         anim.setEasingCurve(QEasingCurve.OutCubic)
         anim.setStartValue(QPoint(startX, endY))
         anim.setEndValue(QPoint(endX, endY))
-        anim.valueChanged.connect(self._updateMask)
         anim.start(QPropertyAnimation.DeleteWhenStopped)
 
     def _animatePush(self, newCard: NotificationCard):
@@ -398,14 +388,13 @@ class NotificationPanel(QWidget):
         # Start above where the new card will sit
         bottom = self.height() - _PANEL_BOTTOM_MARGIN - newCard.height() - _CARD_MARGIN
 
-        visibleCards = [c for c in self._cards if c not in self._closing]
+        visibleCards = [c for c in self._cards if c not in self._closing and c is not newCard]
         for card in reversed(visibleCards):
             bottom -= card.height()
             anim = QPropertyAnimation(card, b"pos", self)
             anim.setDuration(_SLIDE_IN_MS)
             anim.setEasingCurve(QEasingCurve.OutCubic)
             anim.setEndValue(QPoint(x, bottom))
-            anim.valueChanged.connect(self._updateMask)
             anim.start(QPropertyAnimation.DeleteWhenStopped)
             bottom -= _CARD_MARGIN
 
@@ -427,7 +416,6 @@ class NotificationPanel(QWidget):
         slideAnim.setDuration(_SLIDE_OUT_MS)
         slideAnim.setEasingCurve(QEasingCurve.InCubic)
         slideAnim.setEndValue(QPoint(self._offscreenX(), card.y()))
-        slideAnim.valueChanged.connect(self._updateMask)
 
         group = QSequentialAnimationGroup(self)
         group.addAnimation(slideAnim)
@@ -444,9 +432,8 @@ class NotificationPanel(QWidget):
         card.hide()
         card.setParent(None)
         card.deleteLater()
-        # Restack remaining cards and refresh the mask
-        QTimer.singleShot(0, self._layoutCards)
-        self._updateMask()
+        # Restack remaining cards in next event turn after removal.
+        QTimer.singleShot(0, self._repositionPanel)
 
     def clearAll(self):
         for card in list(self._cards):

@@ -34,6 +34,23 @@ class NotificationManagerTests(unittest.TestCase):
         self.assertEqual(len(self._manager.cards), before + 1)
         self._manager.closeCard(card)
 
+    def test_panelWidthStaysNarrowerThanWindow(self):
+        window = QWidget()
+        window.resize(800, 600)
+        manager = bindNotificationWindow(window)
+        window.show()
+        self._app.processEvents()
+
+        panel = manager._panel
+        self.assertFalse(panel.isVisible())
+        self.assertEqual(panel.width(), 0)
+
+        card = manager.showCard("width check", auto_recycle=False)
+        self._app.processEvents()
+        self.assertTrue(panel.isVisible())
+        self.assertLess(panel.width(), window.width())
+        manager.closeCard(card)
+
     def test_allLevelsAccepted(self):
         for level in ("info", "success", "warning", "error"):
             card = self._manager.showCard("Title", level=level, auto_recycle=False)
