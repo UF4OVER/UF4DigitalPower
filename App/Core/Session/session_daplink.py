@@ -35,7 +35,7 @@ PYOCD_PROGRESS_PHASE_RANGES = {
 }
 PYOCD_DEFAULT_PROGRESS_STEPS = 40
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-PYOCD_PROGRESS_FRAGMENT_RE = re.compile(r"^[\[\]=\-|\s]+$")
+PYOCD_PROGRESS_FRAGMENT_RE = re.compile(r"^[\[\]\-=|\s]+$")
 
 
 def _install_pyocd_probe_filter() -> None:
@@ -308,12 +308,18 @@ class DaplinkPyocdSession(QObject):
         self._process_timeout_timer = QTimer(self)
         self._process_timeout_timer.setSingleShot(True)
         self._process_timeout_timer.timeout.connect(self._kill_process_on_timeout)
+        self._process_start_timeout_timer = QTimer(self)
+        self._process_start_timeout_timer.setSingleShot(True)
+        self._process_start_timeout_timer.timeout.connect(
+            self._handle_process_start_timeout
+        )
         self._pack_paths: list[Path] = []
         self._target_items: list[DaplinkTargetInfo] = []
         self._last_progress_value = -1.0
         self._process_line_buffer = ""
         self._process_progress_phase: str | None = None
         self._process_progress_total_steps = PYOCD_DEFAULT_PROGRESS_STEPS
+        self._process_started = False
 
     def set_event_receiver(self, receiver: Optional[QObject]) -> None:
         if receiver is not None and not isinstance(receiver, QObject):
@@ -426,23 +432,33 @@ class DaplinkPyocdSession(QObject):
             return
 
         self._process = QProcess(self)
+        self._process_started = False
         self._process.setProgram(program)
         self._process.setArguments(process_args)
         self._process.setWorkingDirectory(str(DirPathsInstance.BaseDir))
         self._process.setProcessChannelMode(QProcess.MergedChannels)
+        self._process.started.connect(self._handle_process_started)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
         self._process.finished.connect(self._handle_process_finished)
         self._process.errorOccurred.connect(self._handle_process_error)
 
         command_text = " ".join([self._process.program(), *process_args])
         self._post_event(LogEvent(f"pyOCD: {command_text}", "command"))
-        self._process_timeout_timer.start(DAPLINK_FLASH_TIMEOUT_MS)
+        self._process_start_timeout_timer.start(3000)
         self._process.start()
 
-        if not self._process.waitForStarted(3000):
-            error_text = self._process.errorString()
-            self._process_timeout_timer.stop()
-            self._finish_process_action(False, 1, f"pyOCD 启动失败: {error_text}")
+    def _handle_process_started(self) -> None:
+        if self._process_action is None:
+            return
+        self._process_started = True
+        self._process_start_timeout_timer.stop()
+        self._process_timeout_timer.start(DAPLINK_FLASH_TIMEOUT_MS)
+
+    def _handle_process_start_timeout(self) -> None:
+        if self._process is None or self._process_action is None or self._process_started:
+            return
+        error_text = self._process.errorString() or "超时未启动"
+        self._finish_process_action(False, 1, f"pyOCD 启动失败: {error_text}")
 
     def _build_pyocd_flash_args(self, payload: DaplinkRequestPayload, target_info: DaplinkTargetInfo) -> list[str]:
         file_path = str(Path(payload.file_path or "").resolve())
@@ -579,6 +595,10 @@ class DaplinkPyocdSession(QObject):
         return ANSI_ESCAPE_RE.sub("", text)
 
     def _handle_process_finished(self, exit_code: int, exit_status) -> None:
+        if self._process_action is None:
+            return
+        self._process_started = False
+        self._process_start_timeout_timer.stop()
         self._process_timeout_timer.stop()
         self._flush_process_line_buffer()
         success = exit_code == 0
@@ -586,9 +606,14 @@ class DaplinkPyocdSession(QObject):
         self._finish_process_action(success, exit_code, message)
 
     def _handle_process_error(self, error) -> None:
-        if self._process is None:
+        if self._process is None or self._process_action is None:
             return
-        self._post_event(LogEvent(f"pyOCD process error: {self._process.errorString()}", "error"))
+        error_text = self._process.errorString()
+        self._post_event(LogEvent(f"pyOCD process error: {error_text}", "error"))
+        if not self._process_started:
+            self._process_start_timeout_timer.stop()
+            self._process_timeout_timer.stop()
+            self._finish_process_action(False, 1, f"pyOCD 启动失败: {error_text}")
 
     def _kill_process_on_timeout(self) -> None:
         if self._process is None:
@@ -598,6 +623,9 @@ class DaplinkPyocdSession(QObject):
 
     def _finish_process_action(self, success: bool, exit_code: int, message: str) -> None:
         action = self._process_action or "download"
+        self._process_started = False
+        self._process_start_timeout_timer.stop()
+        self._process_timeout_timer.stop()
         if self._process is not None:
             self._process.deleteLater()
             self._process = None

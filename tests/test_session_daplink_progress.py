@@ -1,4 +1,5 @@
 import unittest
+import inspect
 from unittest.mock import patch
 
 from PyQt5.QtCore import QCoreApplication
@@ -108,6 +109,15 @@ class DaplinkProcessOutputTests(unittest.TestCase):
 
         self.assertEqual(program, r"E:\PROJECT_DPOWER\F4CP\.venv\Scripts\python.exe")
         self.assertEqual(args, ["-m", "pyocd"])
+
+    def test_progress_fragment_regex_accepts_brackets_and_progress_chars(self):
+        self.assertTrue(self.session._looks_like_progress_fragment("[---|===|---]"))
+        self.assertTrue(self.session._looks_like_progress_fragment("[====]"))
+        self.assertFalse(self.session._looks_like_progress_fragment("[abc]"))
+
+    def test_download_startup_path_is_non_blocking(self):
+        source = inspect.getsource(DaplinkPyocdSession._start_download_process)
+        self.assertNotIn("waitForStarted", source)
 
 
 if __name__ == "__main__":

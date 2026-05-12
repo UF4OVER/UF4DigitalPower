@@ -24,6 +24,7 @@
 ## 常用命令
 - `uv sync`
 - `uv run python start.py`
+- `uv run python Script/demo_notification_manager.py`（NotificationManager 动画演示入口）
 - `./Script/package_exe.ps1`
 - `uv run python Script/upx_zip.py`（可选的打包后体积裁剪）
 ## 仓库特有编码约定

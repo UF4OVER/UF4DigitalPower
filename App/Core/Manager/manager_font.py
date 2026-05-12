@@ -113,7 +113,7 @@ def _system_font_option() -> FontOption:
     return FontOption(SYSTEM_FONT_KEY, "System Default", "")
 
 
-def load_saved_font(app: QApplication) -> list[str]:
+def loadSavedFont(app: QApplication) -> list[str]:
     selected_key = get_saved_font_key()
     if selected_key == SYSTEM_FONT_KEY:
         return apply_font_option(app, _system_font_option())

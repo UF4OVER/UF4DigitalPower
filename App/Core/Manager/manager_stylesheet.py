@@ -19,12 +19,12 @@ from qfluentwidgets import StyleSheetBase, Theme, qconfig
 class StyleSheet(StyleSheetBase, Enum):  # 重写 StyleSheetBase 以支持枚举成员
 
     # Core pages present in App/Pages
-    DAPLINK_FLASH_PAGE = "DaplinkFlashPage"
+    BATTERY_PAGE = "BatteryPage"
+    DAPLINK_PAGE = "DaplinkFlashPage"
     DEVICE_PAGE = "DevicePage"
     HOME_PAGE = "HomePage"
     POWER_PAGE = "PowerPage"
     SETTINGS_PAGE = "SettingsPage"
-    STM32_DOWNLOAD_PAGE = "Stm32DownloadPage"
     BASE_PAGE = "FluentAcrylicWindow"
 
     def path(self, theme=Theme.AUTO):

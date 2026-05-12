@@ -1,0 +1,26 @@
+QScrollArea#BatteryPage {
+    background: transparent;
+    border: none;
+}
+
+QWidget#batteryScrollWidget {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+QWidget#batteryScrollWidget SubtitleLabel[metricTileTitle="true"] {
+    color: #334155;
+}
+
+QWidget#batteryScrollWidget CardWidget {
+    border: none;
+    border-radius: 10px;
+}
+
+QWidget#batteryScrollWidget CardWidget[batteryCard="true"] {
+    border: none;
+    border-radius: 10px;
+}
+
+

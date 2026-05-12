@@ -2,7 +2,7 @@
 # -------------------------------
 #  @Project : F4CP
 #  @Time    : 2026 - 01-08 12:30
-#  @FileName: start.py.py
+#  @FileName: start.py
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
@@ -14,16 +14,17 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
 
-from qfluentwidgets import FluentIcon as FIF, MSFluentWindow
+from qfluentwidgets import MSFluentWindow
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
 
 from Config import AppIconPath, cfg
 
-from App.Core import StyleSheet, language_manager, logger, load_saved_font
-from App.Pages import DaplinkFlashPage, DevicePage, HomePage, PowerPage, SettingsPage
+from App.Core import StyleSheet, logger, loadSavedFont
+from App.Core import UF4Icon
 
+from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 class Window(MSFluentWindow):
     def __init__(self):
@@ -35,19 +36,22 @@ class Window(MSFluentWindow):
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
-        self.daplinkInterface = DaplinkFlashPage(self)
+        self.batteryInterface = BatteryPage(self)
+        self.daplinkInterface = DaplinkPage(self)
         self.settingInterface = SettingsPage(self)
 
         self.__initNavigation()
         self.__initWindow()
 
-        cfg.themeChanged.connect(self._onThemeChanged)
         self._onThemeChanged()
+
+        cfg.themeChanged.connect(self._onThemeChanged)
+
         StyleSheet.HOME_PAGE.apply(self.homeInterface)
         StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
+        StyleSheet.BATTERY_PAGE.apply(self.batteryInterface)
         StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.DAPLINK_FLASH_PAGE.apply(self.daplinkInterface)
-        self._applyTexts()
+        StyleSheet.DAPLINK_PAGE.apply(self.daplinkInterface)
 
         QTimer.singleShot(0, self._refreshStartupTheme)
         QTimer.singleShot(150, self._checkUpdateOnStartUp)
@@ -57,28 +61,47 @@ class Window(MSFluentWindow):
 
     def __initNavigation(self):
         self.homeNavItem = self.addSubInterface(
-            self.homeInterface, FIF.HOME, self.tr("Home"), FIF.HOME_FILL
+            self.homeInterface,
+            UF4Icon.GAUGE,
+            '引导',
+            UF4Icon.GAUGE_FILL
         )
         self.deviceNavItem = self.addSubInterface(
-            self.deviceInterface, FIF.DEVELOPER_TOOLS, self.tr("Serial")
+            self.deviceInterface,
+            UF4Icon.SERIAL_PORT,
+            '串口',
+            UF4Icon.SERIAL_PORT_FILL
         )
         self.powerNavItem = self.addSubInterface(
-            self.powerInterface, FIF.POWER_BUTTON, self.tr("Device")
+            self.powerInterface,
+            UF4Icon.DEVELOPER_BOARD,
+            '设备',
+            UF4Icon.DEVELOPER_BOARD_FILL
         )
+        # self.batteryNavItem = self.addSubInterface(
+        #     self.batteryInterface,
+        #     UF4Icon.BATTERY_SAVER,
+        #     '电池',
+        #     UF4Icon.BATTERY_SAVER_FILL
+        # )
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface, FIF.IOT, self.tr("DAPLink")
+            self.daplinkInterface,
+            UF4Icon.FLASH_SETTINGS,
+            '烧录',
+            UF4Icon.FLASH_SETTINGS_FILL
+
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
-            FIF.SETTING,
-            self.tr("Settings"),
-            FIF.SETTING,
+            UF4Icon.SERVER,
+            '设置',
+            UF4Icon.SERVER_FILL,
             NavigationItemPosition.BOTTOM,
         )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
-        self.resize(1200, 800)
+        self.resize(1400, 1100)
         # self.setTitleBar(FluentWidgetTitleBar(self))
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("Fluor4CellPower")
@@ -114,14 +137,6 @@ class Window(MSFluentWindow):
         if getattr(cfg.checkUpdateAtStartUp, "value", False):
             self.homeInterface.requestUpdateCheck(manual=False)
 
-    def _applyTexts(self):
-        self.homeNavItem.setText(self.tr("Home"))
-        self.deviceNavItem.setText(self.tr("Serial"))
-        self.powerNavItem.setText(self.tr("Device"))
-        self.daplinkNavItem.setText("DAPLink")
-        self.settingNavItem.setText(self.tr("Settings"))
-        self.setWindowTitle("Fluor4CellPower")
-
 
 if __name__ == "__main__":
     import sys
@@ -137,8 +152,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
 
         # setTheme(cfg.themeMode.value)
-        language_manager.apply_language(app)
-        load_saved_font(app)
+        loadSavedFont(app)
 
         w = Window()
         w.show()

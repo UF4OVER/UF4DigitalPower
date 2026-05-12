@@ -6,30 +6,41 @@
 #  @Software: PyCharm
 #  @System  : Windows 11 25H2
 #  @Author  : UF4
-#  @Contact : 
-#  @Python  : 
+#  @Contact :
+#  @Python  :
 # -------------------------------
-from PyQt5.QtCore import Qt
-from qfluentwidgets import InfoBar, InfoBarPosition
+from PyQt5.QtWidgets import QApplication
+from qfluentwidgets import InfoBar, InfoBarManager, InfoBarPosition
 
 
-def showMessage(parent, title: str, content: str, level: str = "info"):
+_INFOBAR_MANAGER_CONFIGURED = False
 
-    kwargs = dict(
-        title=title,
-        content=content,
-        orient=Qt.Orientation.Horizontal,
-        isClosable=True,
-        position=InfoBarPosition.TOP,
-        duration=3000,
-        parent=parent,
+
+def _ensure_info_bar_manager() -> None:
+    global _INFOBAR_MANAGER_CONFIGURED
+    if _INFOBAR_MANAGER_CONFIGURED:
+        return
+
+    manager = InfoBarManager.make(InfoBarPosition.TOP_RIGHT)
+    manager.margin = 24
+    manager.spacing = 12
+    _INFOBAR_MANAGER_CONFIGURED = True
+
+
+def showMessage(parent, title: str, content: str, level: str = "info", useSide: bool = True, autoCloseMs: int = 5000):
+    _ensure_info_bar_manager()
+
+    parent_widget = parent if parent is not None else QApplication.activeWindow()
+    method = {
+        "success": InfoBar.success,
+        "warning": InfoBar.warning,
+        "error": InfoBar.error,
+    }.get((level or "info").lower(), InfoBar.info)
+    return method(
+        title,
+        content,
+        duration=autoCloseMs,
+        position=InfoBarPosition.TOP_RIGHT,
+        parent=parent_widget,
     )
 
-    if level == "success":
-        InfoBar.success(**kwargs)
-    elif level == "warning":
-        InfoBar.warning(**kwargs)
-    elif level == "error":
-        InfoBar.error(**kwargs)
-    else:
-        InfoBar.info(**kwargs)

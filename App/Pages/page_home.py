@@ -29,6 +29,29 @@ from App.Core import (
     showMessage,
     update_manager,
 )
+from Core.utility import showMessage
+
+FIRMWARE_KIND_TEXT = {
+    "Power": "电源",
+    "Upper": "上位机",
+}
+
+FIRMWARE_CARD_TEXT = {
+    "Power firmware": "电源固件",
+    "Power Upper firmware": "电源上位机固件",
+    "Embedded power controller firmware for output control, protection, and telemetry acquisition.": "用于输出控制、保护策略和遥测采集的电源控制器嵌入式固件。",
+    "Desktop Upper firmware that provides power dashboard, parameter configuration, and device operations.": "提供电源仪表盘、参数配置和设备操作能力的上位机固件。",
+}
+
+UPDATE_MESSAGE_TEXT = {
+    "Update URL is not configured.": "未配置更新地址。",
+    "Failed to connect to the update server.": "连接更新服务器失败。",
+    "The update server returned invalid version data.": "更新服务器返回的版本数据无效。",
+    "App update URL is not configured.": "未配置软件更新地址。",
+    "Failed to check updates.": "检查更新失败。",
+    "Failed to check firmware updates.": "检查固件更新失败。",
+    "Failed to download firmware.": "下载固件失败。",
+}
 
 
 class StatisticsWidget(QWidget):
@@ -127,18 +150,15 @@ class AppInfoCard(SimpleCardWidget):
 
     def applyTexts(self):
         if not self.installButton.isEnabled():
-            self.installButton.setText(self.tr("Checking..."))
+            self.installButton.setText('检查中...')
         else:
-            self.installButton.setText(self.tr("Check Update"))
-        self.scoreWidget.setTitle(self.tr("Average"))
-        self.commentWidget.setTitle(self.tr("Reviews"))
+            self.installButton.setText('检查更新')
+        self.scoreWidget.setTitle('评分')
+        self.commentWidget.setTitle('评论数')
         self.descriptionLabel.setText(
-            self.tr(
-                "Fluor4CellPower is a multi-function host tool that provides serial communication, "
-                "data visualization, and device management for debugging and monitoring electronic devices."
-            )
+            "Fluor4CellPower 是一个多功能上位机工具，提供串口通信、数据可视化和设备管理能力，用于电子设备调试和监控。"
         )
-        self.tagButton.setText(self.tr("Dashboard"))
+        self.tagButton.setText('功能板')
 
     def setCheckInProgress(self, checking: bool) -> None:
         self.installButton.setEnabled(not checking)
@@ -168,7 +188,7 @@ class GalleryCard(HeaderCardWidget):
         self.applyTexts()
 
     def applyTexts(self):
-        self.setTitle(self.tr("Screenshots"))
+        self.setTitle('截图')
 
 
 class FirmwareInfoCard(SimpleCardWidget):
@@ -238,16 +258,16 @@ class FirmwareInfoCard(SimpleCardWidget):
         self.latestVersionLabel.setText(latestVersion or "--")
 
     def applyTexts(self):
-        self.titleLabel.setText(self.tr(self._title))
-        self.localVersionCaptionLabel.setText(self.tr("Local version"))
-        self.latestVersionCaptionLabel.setText(self.tr("Latest version"))
-        self.descriptionLabel.setText(self.tr(self._description))
-        self.downloadButton.setText(self.tr("Download firmware update"))
+        self.titleLabel.setText(FIRMWARE_CARD_TEXT.get(self._title, self._title))
+        self.localVersionCaptionLabel.setText('本地版本')
+        self.latestVersionCaptionLabel.setText('最新版本')
+        self.descriptionLabel.setText(FIRMWARE_CARD_TEXT.get(self._description, self._description))
+        self.downloadButton.setText('下载固件更新')
 
     def setDownloadInProgress(self, downloading: bool) -> None:
         self.downloadButton.setEnabled(not downloading)
         self.downloadButton.setText(
-            self.tr("Downloading...") if downloading else self.tr("Download firmware update")
+            '下载中...' if downloading else '下载固件更新'
         )
 
     def setUpdateAvailable(self, available: bool) -> None:
@@ -293,8 +313,8 @@ class FirmwareUpdateCard(HeaderCardWidget):
         self.viewLayout.addLayout(self.cardLayout)
 
     def applyTexts(self):
-        self.setTitle(self.tr("Firmware updates"))
-        self.checkFirmwareButton.setText(self.tr("Check firmware updates"))
+        self.setTitle('固件更新')
+        self.checkFirmwareButton.setText('检查固件更新')
         self.powerFirmwareCard.applyTexts()
         self.powerUpperCard.applyTexts()
 
@@ -324,7 +344,7 @@ class FirmwareUpdateCard(HeaderCardWidget):
     def setFirmwareCheckInProgress(self, checking: bool) -> None:
         self.checkFirmwareButton.setEnabled(not checking)
         self.checkFirmwareButton.setText(
-            self.tr("Checking...") if checking else self.tr("Check firmware updates")
+            '检查中...' if checking else '检查固件更新'
         )
 
 
@@ -401,9 +421,11 @@ class HomePage(ScrollArea):
             if manual:
                 showMessage(
                     self,
-                    self.tr("Checking..."),
-                    self.tr("A software update check is already in progress."),
+                    '检查中...',
+                    '已有软件更新检查正在进行中。',
                     "warning",
+                    True,
+                    3000
                 )
             return
 
@@ -418,9 +440,12 @@ class HomePage(ScrollArea):
         if self._isCheckingFirmware or firmware_check_manager.is_checking:
             showMessage(
                 self,
-                self.tr("Checking..."),
-                self.tr("A firmware update check is already in progress."),
+                '检查中...',
+                '已有固件更新检查正在进行中。',
                 "warning",
+                True,
+                3000
+
             )
             return
 
@@ -435,18 +460,22 @@ class HomePage(ScrollArea):
         if not self._firmwareUpdateAvailable.get(kind, False):
             showMessage(
                 self,
-                self.tr("No firmware update"),
-                self.tr("Check firmware updates first. If no update is available, download is skipped."),
+                '无固件更新',
+                '请先检查固件更新。没有可用更新时会跳过下载。',
                 "info",
+                True,
+                3000
             )
             return
 
         if firmware_download_manager.is_downloading(kind):
             showMessage(
                 self,
-                self.tr("Downloading..."),
-                self.tr("A firmware download is already in progress."),
+                '下载中...',
+                '已有固件下载正在进行中。',
                 "warning",
+                True,
+                3000
             )
             return
 
@@ -472,16 +501,16 @@ class HomePage(ScrollArea):
         if result.success:
             showMessage(
                 self,
-                self.tr("Update check completed"),
-                self.tr("Latest app version has been refreshed."),
+                '更新检查完成',
+                '最新软件版本已刷新。',
                 "success",
             )
             return
 
         showMessage(
             self,
-            self.tr("Update check failed"),
-            self.tr(result.message),
+            '更新检查失败',
+            UPDATE_MESSAGE_TEXT.get(result.message, result.message),
             "warning",
         )
 
@@ -489,9 +518,9 @@ class HomePage(ScrollArea):
         if result.success and result.release is not None:
             showMessage(
                 self,
-                self.tr("Firmware download completed"),
-                self.tr("{kind} firmware has been downloaded: {version}").format(
-                    kind=self.tr(result.kind),
+                '固件下载完成',
+                '{kind}固件已下载：{version}'.format(
+                    kind=FIRMWARE_KIND_TEXT.get(result.kind, result.kind),
                     version=result.release.version,
                 ),
                 "success",
@@ -500,8 +529,8 @@ class HomePage(ScrollArea):
 
         showMessage(
             self,
-            self.tr("Firmware download failed"),
-            self.tr(result.message),
+            '固件下载失败',
+            UPDATE_MESSAGE_TEXT.get(result.message, result.message),
             "warning",
         )
 
@@ -509,8 +538,8 @@ class HomePage(ScrollArea):
         if not result.success:
             showMessage(
                 self,
-                self.tr("Update check failed"),
-                self.tr(result.message),
+                '更新检查失败',
+                UPDATE_MESSAGE_TEXT.get(result.message, result.message),
                 "warning",
             )
             return
@@ -525,16 +554,16 @@ class HomePage(ScrollArea):
         if any(self._firmwareUpdateAvailable.values()):
             showMessage(
                 self,
-                self.tr("Firmware update available"),
-                self.tr("New firmware is available. Download manually from the firmware cards."),
+                '发现固件更新',
+                '发现新固件，请在固件卡片中手动下载。',
                 "success",
             )
             return
 
         showMessage(
             self,
-            self.tr("No firmware update"),
-            self.tr("Local firmware is already up to date."),
+            '无固件更新',
+            '本地固件已是最新版本。',
             "info",
         )
 

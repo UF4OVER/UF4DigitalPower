@@ -89,6 +89,7 @@ class PowerDataType(IntEnum):
 class PowerValueType(IntEnum):
     U8 = 1
     U32 = 4
+    I32 = 4
 
 
 class PowerAccess(IntEnum):
@@ -104,6 +105,7 @@ class PowerDataMeta:
     access: PowerAccess
     unit: str
     label: str
+    signed: bool = False
 
     @property
     def length(self) -> int:
@@ -121,13 +123,13 @@ class FaultFlag(IntEnum):
 
 
 FAULT_NAMES = {
-    FaultFlag.INPUT_UNDER_VOLTAGE: "Input Under Voltage",
-    FaultFlag.INPUT_OVER_VOLTAGE: "Input Over Voltage",
-    FaultFlag.OUTPUT_UNDER_VOLTAGE: "Output Under Voltage",
-    FaultFlag.OUTPUT_OVER_VOLTAGE: "Output Over Voltage",
-    FaultFlag.OUTPUT_OVER_CURRENT: "Output Over Current",
-    FaultFlag.OUTPUT_SHORT_CIRCUIT: "Output Short Circuit",
-    FaultFlag.OVER_TEMPERATURE_PROTECTION: "Over Temperature Protection",
+    FaultFlag.INPUT_UNDER_VOLTAGE: "输入欠压",
+    FaultFlag.INPUT_OVER_VOLTAGE: "输入过压",
+    FaultFlag.OUTPUT_UNDER_VOLTAGE: "输出欠压",
+    FaultFlag.OUTPUT_OVER_VOLTAGE: "输出过压",
+    FaultFlag.OUTPUT_OVER_CURRENT: "输出过流",
+    FaultFlag.OUTPUT_SHORT_CIRCUIT: "输入短路",
+    FaultFlag.OVER_TEMPERATURE_PROTECTION: "过温保护",
 }
 
 STATE_FLAG_NAMES = {
@@ -151,15 +153,17 @@ CC_CV_NAMES = {
 }
 
 SOF = b"\xAA\x55"
+
 WRITE_IDLE_RETRY_MS = 25
-WRITE_IDLE_WAIT_TIMEOUT_MS = 1500
-WRITE_POLL_RESUME_DELAY_MS = 500
+WRITE_IDLE_WAIT_TIMEOUT_MS = 2500
+WRITE_POLL_RESUME_DELAY_MS = 800
+WRITE_FAILURE_DISCONNECT_THRESHOLD = 3
 
 POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Input Voltage"),
-    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Input Current"),
+    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.I32, PowerAccess.READ, "mA", "Input Current", signed=True),
     PowerDataType.OUTPUT_VOLTAGE: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Output Voltage"),
-    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Output Current"),
+    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.I32, PowerAccess.READ, "mA", "Output Current", signed=True),
     PowerDataType.CORE_TEMPERATURE: PowerDataMeta(PowerDataType.CORE_TEMPERATURE, PowerValueType.U32, PowerAccess.READ, "mC", "Core Temperature"),
     PowerDataType.BOARD_TEMPERATURE: PowerDataMeta(PowerDataType.BOARD_TEMPERATURE, PowerValueType.U32, PowerAccess.READ, "mC", "Board Temperature"),
     PowerDataType.SET_VOLTAGE_LIMIT: PowerDataMeta(PowerDataType.SET_VOLTAGE_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "Set Voltage Limit"),
@@ -305,7 +309,8 @@ def decode_tlvs(payload: bytes, *, strict: bool = True) -> dict[PowerDataType, i
                 f"Unexpected length {length} for {data_type.name}, expected {expected_length}"
             )
 
-        items[data_type] = int.from_bytes(value, "little", signed=False)
+        meta = POWER_DATA_META.get(data_type)
+        items[data_type] = int.from_bytes(value, "little", signed=bool(meta and meta.signed))
 
     return items
 
@@ -520,6 +525,7 @@ class F4CPPowerClient(QObject):
     outputLimitsWritten = pyqtSignal()
     protectionValuesWritten = pyqtSignal()
     powerStateWritten = pyqtSignal(bool)
+    writeFailureLimitReached = pyqtSignal()
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -537,6 +543,7 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer.timeout.connect(self._resume_polling_if_ready)
         self._poll_requested_interval_ms: int | None = None
         self._poll_resume_interval_ms: int | None = None
+        self._consecutive_write_failures = 0
 
     @property
     def is_connected(self) -> bool:
@@ -554,6 +561,7 @@ class F4CPPowerClient(QObject):
         self._pending = None
         self._last_values.clear()
         self._last_status = None
+        self._consecutive_write_failures = 0
         session.set_event_receiver(self)
         self.connectionChanged.emit(session.is_open)
         self.log.emit(f"Attached to serial session on {session.cfg.port}")
@@ -572,6 +580,7 @@ class F4CPPowerClient(QObject):
         self._pending = None
         self._last_values.clear()
         self._last_status = None
+        self._consecutive_write_failures = 0
         self.connectionChanged.emit(False)
 
     @pyqtSlot()
@@ -629,10 +638,10 @@ class F4CPPowerClient(QObject):
                     PowerDataType.SET_CURRENT_LIMIT: _u32(current_ma),
                     PowerDataType.POWER_STATE: _u8(1 if enabled else 0),
                 },
-                timeout_ms=1000,
+                timeout_ms=2000,
             )
             self.outputLimitsWritten.emit()
-            self._refresh_status_after_write(timeout_ms=1000)
+            self._refresh_status_after_write(timeout_ms=2000)
 
         self._run_write_transaction("output write", _write)
 
@@ -646,19 +655,19 @@ class F4CPPowerClient(QObject):
                     PowerDataType.OTP_SET_VALUE: _u32(otp_mc),
                     PowerDataType.FAN_SET_VALUE: _u32(fan_value),
                 },
-                timeout_ms=1000,
+                timeout_ms=2000,
             )
             self.protectionValuesWritten.emit()
-            self._refresh_status_after_write(timeout_ms=1000)
+            self._refresh_status_after_write(timeout_ms=2000)
 
         self._run_write_transaction("protection write", _write)
 
     @pyqtSlot(bool)
     def request_set_power_state(self, enabled: bool) -> None:
         def _write() -> None:
-            self.set_power_state(enabled, timeout_ms=1000)
+            self.set_power_state(enabled, timeout_ms=2000)
             self.powerStateWritten.emit(enabled)
-            self._refresh_status_after_write(timeout_ms=1000)
+            self._refresh_status_after_write(timeout_ms=2000)
 
         self._run_write_transaction("power state write", _write)
 
@@ -845,7 +854,11 @@ class F4CPPowerClient(QObject):
         if self.is_busy:
             waited_ms = int((time.monotonic() - started_at) * 1000)
             if waited_ms >= WRITE_IDLE_WAIT_TIMEOUT_MS:
-                self.error.emit(f"Timed out waiting for polling to finish; {description} was not sent")
+                self._record_write_failure(
+                    PowerClientTimeoutError(
+                        f"Timed out waiting for polling to finish; {description} was not sent"
+                    )
+                )
                 self._schedule_polling_resume()
                 return
 
@@ -857,10 +870,22 @@ class F4CPPowerClient(QObject):
 
         try:
             write_action()
+            self._consecutive_write_failures = 0
         except Exception as exc:
-            self.error.emit(str(exc))
+            self._record_write_failure(exc)
         finally:
             self._schedule_polling_resume()
+
+    def _record_write_failure(self, exc: Exception) -> None:
+        self._consecutive_write_failures += 1
+        self.error.emit(
+            f"{exc} (写入失败 {self._consecutive_write_failures}/"
+            f"{WRITE_FAILURE_DISCONNECT_THRESHOLD})"
+        )
+        if self._consecutive_write_failures >= WRITE_FAILURE_DISCONNECT_THRESHOLD:
+            self.log.emit("连续写入失败 3 次，准备断开串口")
+            self._consecutive_write_failures = 0
+            self.writeFailureLimitReached.emit()
 
     def _pause_polling_for_write(self) -> None:
         self._poll_resume_timer.stop()
@@ -1062,6 +1087,8 @@ class F4CPPowerClient(QObject):
         message = event.payload.message
         self._fail_pending(PowerClientError(message))
         self.error.emit(message)
+        if event.payload.fatal:
+            self._handle_serial_connection_lost(message)
 
     def _handle_state(self, event: StateEvent) -> None:
         state = event.payload.state
@@ -1071,7 +1098,15 @@ class F4CPPowerClient(QObject):
             self.stop_polling()
             self._fail_pending(PowerClientError("Serial port closed"))
         elif state == SerialState.ERROR:
-            self._fail_pending(PowerClientError(event.payload.info or "Serial port error"))
+            self._handle_serial_connection_lost(event.payload.info or "Serial port error")
+
+    def _handle_serial_connection_lost(self, message: str) -> None:
+        self.stop_polling()
+        self._poll_resume_timer.stop()
+        self._poll_requested_interval_ms = None
+        self._poll_resume_interval_ms = None
+        self._fail_pending(PowerClientError(message))
+        self.connectionChanged.emit(False)
 
     def _extract_frame(self) -> dict[str, int | bytes] | None:
         while len(self._buffer) >= 2 and self._buffer[:2] != SOF:

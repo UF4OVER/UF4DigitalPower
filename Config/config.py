@@ -106,14 +106,6 @@ class _DirPaths:
         """
         return self._ensureSubDir(self.ToolsDir, "Pack")
 
-
-    @cached_property
-    def LanguageDir(self) -> Path:
-        """
-        return: Language目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Language")
-
     @cached_property
     def FirmwarePowerDir(self) -> Path:
         """
@@ -212,6 +204,9 @@ class Config(QConfig):
     checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
 
     enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
+
+class F4CP_GLOBAL:
+    MAIN_WINDOW = {}
 
 
 VERSION_LOCAL_SECTION = "OldVersion"
