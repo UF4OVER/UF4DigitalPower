@@ -205,6 +205,9 @@ class Config(QConfig):
 
     enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
 
+class F4CP_GLOBAL:
+    MAIN_WINDOW = {}
+
 
 VERSION_LOCAL_SECTION = "OldVersion"
 VERSION_REMOTE_SECTION = "NewVersion"

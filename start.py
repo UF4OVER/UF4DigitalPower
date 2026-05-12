@@ -22,17 +22,14 @@ from qfluentwidgets import setTheme
 from Config import AppIconPath, cfg
 
 from App.Core import StyleSheet, logger, loadSavedFont
-from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
-from Core import UF4Icon
-from Core.utility import bindNotificationWindow
+from App.Core import UF4Icon
 
+from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
         self.setObjectName("FluentAcrylicWindow")
-
-        MAIN_WINDOW = {}
 
         # self.setFixedSize(1200, 800)
 
@@ -45,11 +42,6 @@ class Window(MSFluentWindow):
 
         self.__initNavigation()
         self.__initWindow()
-
-        MAIN_WINDOW["main_window"] = self
-
-
-
 
         self._onThemeChanged()
 

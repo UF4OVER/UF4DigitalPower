@@ -29,7 +29,7 @@ from App.Core import (
     showMessage,
     update_manager,
 )
-from Core.utility import showSideMessage
+from Core.utility import showMessage
 
 FIRMWARE_KIND_TEXT = {
     "Power": "电源",
@@ -419,12 +419,12 @@ class HomePage(ScrollArea):
     def requestUpdateCheck(self, manual: bool = False) -> None:
         if self._isCheckingUpdate or update_manager.is_checking:
             if manual:
-                showSideMessage(
+                showMessage(
                     self,
                     '检查中...',
                     '已有软件更新检查正在进行中。',
                     "warning",
-                    FluentIcon.CHECKBOX,
+                    True,
                     3000
                 )
             return
@@ -438,12 +438,12 @@ class HomePage(ScrollArea):
 
     def requestFirmwareCheck(self) -> None:
         if self._isCheckingFirmware or firmware_check_manager.is_checking:
-            showSideMessage(
+            showMessage(
                 self,
                 '检查中...',
                 '已有固件更新检查正在进行中。',
                 "warning",
-                FluentIcon.CHECKBOX,
+                True,
                 3000
 
             )
@@ -458,23 +458,23 @@ class HomePage(ScrollArea):
 
     def requestFirmwareDownload(self, kind: str) -> None:
         if not self._firmwareUpdateAvailable.get(kind, False):
-            showSideMessage(
+            showMessage(
                 self,
                 '无固件更新',
                 '请先检查固件更新。没有可用更新时会跳过下载。',
                 "info",
-                FluentIcon.PASTE,
+                True,
                 3000
             )
             return
 
         if firmware_download_manager.is_downloading(kind):
-            showSideMessage(
+            showMessage(
                 self,
                 '下载中...',
                 '已有固件下载正在进行中。',
                 "warning",
-                FluentIcon.DOWNLOAD,
+                True,
                 3000
             )
             return
