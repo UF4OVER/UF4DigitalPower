@@ -78,12 +78,12 @@ class Window(MSFluentWindow):
             '设备',
             UF4Icon.DEVELOPER_BOARD_FILL
         )
-        self.batteryNavItem = self.addSubInterface(
-            self.batteryInterface,
-            UF4Icon.BATTERY_SAVER,
-            '电池',
-            UF4Icon.BATTERY_SAVER_FILL
-        )
+        # self.batteryNavItem = self.addSubInterface(
+        #     self.batteryInterface,
+        #     UF4Icon.BATTERY_SAVER,
+        #     '电池',
+        #     UF4Icon.BATTERY_SAVER_FILL
+        # )
         self.daplinkNavItem = self.addSubInterface(
             self.daplinkInterface,
             UF4Icon.FLASH_SETTINGS,
