@@ -8,12 +8,12 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
-            "Blender Pro Book",
+            "Bender",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
         ],
-        "ThemeColor": "#ff2dff73",
+        "ThemeColor": "#ffff1010",
         "ThemeMode": "Dark"
     }
 }

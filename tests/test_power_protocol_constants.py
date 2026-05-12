@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from App.Core.Session.session_powert import PowerCommand, PowerDataType
+from App.Core.Session.session_power import PowerCommand, PowerDataType
 
 
 ROOT = Path(__file__).resolve().parents[2]

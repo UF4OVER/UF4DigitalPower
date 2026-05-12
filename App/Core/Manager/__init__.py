@@ -15,3 +15,4 @@ from .manager_stylesheet import *
 from .manager_font import *
 from .manage_firmware import *
 from .manager_update import *
+from .manager_notification import *

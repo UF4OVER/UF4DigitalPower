@@ -14,14 +14,14 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QCloseEvent, QIcon
 from PyQt5.QtWidgets import QApplication
 
-from qfluentwidgets import FluentIcon as FIF, MSFluentWindow
+from qfluentwidgets import MSFluentWindow
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
 
 from Config import AppIconPath, cfg
 
-from App.Core import StyleSheet, logger, load_saved_font
+from App.Core import StyleSheet, bindNotificationWindow, logger, load_saved_font
 from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
 from Core import UF4Icon
 
@@ -42,6 +42,7 @@ class Window(MSFluentWindow):
 
         self.__initNavigation()
         self.__initWindow()
+        self.notificationManager = bindNotificationWindow(self)
 
         self._onThemeChanged()
 
@@ -61,7 +62,10 @@ class Window(MSFluentWindow):
 
     def __initNavigation(self):
         self.homeNavItem = self.addSubInterface(
-            self.homeInterface, FIF.HOME, '主页', FIF.HOME_FILL
+            self.homeInterface,
+            UF4Icon.GAUGE,
+            '引导',
+            UF4Icon.GAUGE_FILL
         )
         self.deviceNavItem = self.addSubInterface(
             self.deviceInterface,
@@ -90,9 +94,9 @@ class Window(MSFluentWindow):
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
-            FIF.SETTING,
+            UF4Icon.SERVER,
             '设置',
-            FIF.SETTING,
+            UF4Icon.SERVER_FILL,
             NavigationItemPosition.BOTTOM,
         )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())

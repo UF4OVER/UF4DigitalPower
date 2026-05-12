@@ -69,6 +69,8 @@ POWER_SERIAL_BAUD_RATE = 921600
 WRITE_POLL_RESTART_DELAY_MS = 600
 PLOT_Y_MIN = 0
 PLOT_Y_MAX = 45
+PLOT_CURRENT_Y_MIN = 0
+PLOT_CURRENT_Y_MAX = 12
 
 POWER_TEXT = {
     "Core Temperature": "核心温度",
@@ -225,28 +227,20 @@ class TrendPlotCard(CardWidget):
         self.plotPanel.setObjectName("trendPlotPanel")
         self._viewInitialized = False
 
-        self.plotWidget = pg.PlotWidget(self)
-        self.plotWidget.setObjectName("trendPlotWidget")
-        self.plotWidget.setFrameShape(QFrame.NoFrame)
-        self.plotWidget.setStyleSheet("background: transparent; border: none;")
-        self.plotWidget.setMouseEnabled(x=True, y=True)
-        self.plotWidget.showGrid(x=True, y=True, alpha=0.16)
-        self.plotWidget.setAntialiasing(True)
-        self.plotWidget.setMenuEnabled(False)
-        self.plotWidget.setMinimumHeight(360)
-        self.plotWidget.getPlotItem().hideButtons()
-        self.plotWidget.getViewBox().setMouseEnabled(x=True, y=True)
-        self.plotWidget.getViewBox().setMenuEnabled(False)
-        self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
-        self.plotWidget.enableAutoRange(x=False, y=False)
-        self.legend = self.plotWidget.addLegend(offset=(12, 12))
+        self.voltagePlotWidget = self._createPlotWidget("voltageTrendPlotWidget")
+        self.currentPlotWidget = self._createPlotWidget("currentTrendPlotWidget")
+        self.voltagePlotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
+        self.currentPlotWidget.setYRange(PLOT_CURRENT_Y_MIN, PLOT_CURRENT_Y_MAX, padding=0)
 
-        self.voltageInCurve = self.plotWidget.plot(name="VIN", pen=pg.mkPen(width=2))
-        self.voltageOutCurve = self.plotWidget.plot(name="VOUT", pen=pg.mkPen(width=2))
-        self.currentInCurve = self.plotWidget.plot(
+        self.voltageLegend = self.voltagePlotWidget.addLegend(offset=(12, 12))
+        self.currentLegend = self.currentPlotWidget.addLegend(offset=(12, 12))
+
+        self.voltageInCurve = self.voltagePlotWidget.plot(name="VIN", pen=pg.mkPen(width=2))
+        self.voltageOutCurve = self.voltagePlotWidget.plot(name="VOUT", pen=pg.mkPen(width=2))
+        self.currentInCurve = self.currentPlotWidget.plot(
             name="IIN", pen=pg.mkPen(width=2, style=Qt.DashLine)
         )
-        self.currentOutCurve = self.plotWidget.plot(
+        self.currentOutCurve = self.currentPlotWidget.plot(
             name="IOUT", pen=pg.mkPen(width=2, style=Qt.DotLine)
         )
 
@@ -255,10 +249,11 @@ class TrendPlotCard(CardWidget):
         self.currentInCurve.setClipToView(True)
         self.currentOutCurve.setClipToView(True)
 
-        plotPanelLayout = QVBoxLayout(self.plotPanel)
+        plotPanelLayout = QHBoxLayout(self.plotPanel)
         plotPanelLayout.setContentsMargins(14, 14, 14, 14)
-        plotPanelLayout.setSpacing(0)
-        plotPanelLayout.addWidget(self.plotWidget)
+        plotPanelLayout.setSpacing(12)
+        plotPanelLayout.addWidget(self.voltagePlotWidget, 1)
+        plotPanelLayout.addWidget(self.currentPlotWidget, 1)
 
         headerLayout = QHBoxLayout()
         headerLayout.setContentsMargins(0, 0, 0, 0)
@@ -278,9 +273,25 @@ class TrendPlotCard(CardWidget):
         self.applyTexts()
         self.refreshTheme()
 
+    def _createPlotWidget(self, objectName: str) -> pg.PlotWidget:
+        plotWidget = pg.PlotWidget(self)
+        plotWidget.setObjectName(objectName)
+        plotWidget.setFrameShape(QFrame.NoFrame)
+        plotWidget.setStyleSheet("background: transparent; border: none;")
+        plotWidget.setMouseEnabled(x=True, y=True)
+        plotWidget.showGrid(x=True, y=True, alpha=0.16)
+        plotWidget.setAntialiasing(True)
+        plotWidget.setMenuEnabled(False)
+        plotWidget.setMinimumHeight(360)
+        plotWidget.getPlotItem().hideButtons()
+        plotWidget.getViewBox().setMouseEnabled(x=True, y=True)
+        plotWidget.getViewBox().setMenuEnabled(False)
+        plotWidget.enableAutoRange(x=False, y=False)
+        return plotWidget
+
     def applyTexts(self) -> None:
         self.titleLabel.setText('电压 / 电流趋势')
-        self.tipLabel.setText('拖动平移，滚轮缩放；实时刷新会保持当前视图')
+        self.tipLabel.setText('左侧电压，右侧电流；拖动平移，滚轮缩放')
         self.saveButton.setText('保存图片')
 
     def saveImage(self) -> None:
@@ -293,7 +304,7 @@ class TrendPlotCard(CardWidget):
             return
 
         path = Path(folder) / f"power-trend-{time.strftime('%Y%m%d-%H%M%S')}.png"
-        if not self.plotWidget.grab().save(str(path), "PNG"):
+        if not self.plotPanel.grab().save(str(path), "PNG"):
             showMessage(
                 self,
                 '操作失败',
@@ -339,22 +350,22 @@ class TrendPlotCard(CardWidget):
         self.titleLabel.setStyleSheet(f"color: {titleColor};")
         self.tipLabel.setStyleSheet(f"color: {tipColor};")
 
-        self.plotWidget.setBackground((0, 0, 0, 0))
-        plotItem = self.plotWidget.getPlotItem()
-        plotItem.setTitle("")
-        plotItem.getAxis("left").setTextPen(axis)
-        plotItem.getAxis("bottom").setTextPen(axis)
-        plotItem.getAxis("left").setPen(pg.mkPen(axis))
-        plotItem.getAxis("bottom").setPen(pg.mkPen(axis))
-        plotItem.getAxis("left").setLabel('电压 / 电流', color=axis, units="V / A")
-        plotItem.getAxis("bottom").setLabel('采样点', color=axis)
-        plotItem.getViewBox().setBorder(pg.mkPen(borderPenColor))
-        plotItem.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
-
-        for axisName in ("left", "bottom"):
-            axisItem = plotItem.getAxis(axisName)
-            axisItem.setTickPen(pg.mkPen(axis))
-            axisItem.setStyle(tickTextOffset=10)
+        self._stylePlot(
+            self.voltagePlotWidget,
+            axis,
+            borderPenColor,
+            "电压",
+            "V",
+            dark,
+        )
+        self._stylePlot(
+            self.currentPlotWidget,
+            axis,
+            borderPenColor,
+            "电流",
+            "A",
+            dark,
+        )
 
         self.voltageInCurve.setPen(pg.mkPen(QColor("#2F80ED"), width=2))
         self.voltageOutCurve.setPen(pg.mkPen(QColor("#27AE60"), width=2))
@@ -365,11 +376,42 @@ class TrendPlotCard(CardWidget):
             pg.mkPen(QColor("#EB5757"), width=2, style=Qt.DotLine)
         )
 
-        if self.legend is not None:
-            self.legend.setBrush(legendBackground)
-            self.legend.setPen(legendBorder)
-            self.legend.setLabelTextColor(axis)
-            self.legend.setLabelTextSize("9pt")
+        for legend in (self.voltageLegend, self.currentLegend):
+            if legend is not None:
+                legend.setBrush(legendBackground)
+                legend.setPen(legendBorder)
+                legend.setLabelTextColor(axis)
+                legend.setLabelTextSize("9pt")
+        for plotWidget in (self.voltagePlotWidget, self.currentPlotWidget):
+            plotItem = plotWidget.getPlotItem()
+            plotItem.getAxis("left").setGrid(64)
+            plotItem.getAxis("bottom").setGrid(64)
+
+    def _stylePlot(
+        self,
+        plotWidget: pg.PlotWidget,
+        axis: str,
+        borderPenColor: QColor,
+        axisLabel: str,
+        unit: str,
+        dark: bool,
+    ) -> None:
+        plotWidget.setBackground((0, 0, 0, 0))
+        plotItem = plotWidget.getPlotItem()
+        plotItem.setTitle("")
+        plotItem.getAxis("left").setTextPen(axis)
+        plotItem.getAxis("bottom").setTextPen(axis)
+        plotItem.getAxis("left").setPen(pg.mkPen(axis))
+        plotItem.getAxis("bottom").setPen(pg.mkPen(axis))
+        plotItem.getAxis("left").setLabel(axisLabel, color=axis, units=unit)
+        plotItem.getAxis("bottom").setLabel('采样点', color=axis)
+        plotItem.getViewBox().setBorder(pg.mkPen(borderPenColor))
+        plotItem.showGrid(x=True, y=True, alpha=0.22 if dark else 0.18)
+
+        for axisName in ("left", "bottom"):
+            axisItem = plotItem.getAxis(axisName)
+            axisItem.setTickPen(pg.mkPen(axis))
+            axisItem.setStyle(tickTextOffset=10)
         plotItem.getAxis("left").setGrid(64)
         plotItem.getAxis("bottom").setGrid(64)
 
@@ -390,9 +432,14 @@ class TrendPlotCard(CardWidget):
             x_max = xValues[-1]
             if x_max <= x_min:
                 x_max = x_min + 1
-            self.plotWidget.setXRange(x_min, x_max, padding=0.02)
-            self.plotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
-            self.plotWidget.enableAutoRange(x=False, y=False)
+            self.voltagePlotWidget.setXRange(x_min, x_max, padding=0.02)
+            self.currentPlotWidget.setXRange(x_min, x_max, padding=0.02)
+            self.voltagePlotWidget.setYRange(PLOT_Y_MIN, PLOT_Y_MAX, padding=0)
+            self.currentPlotWidget.setYRange(
+                PLOT_CURRENT_Y_MIN, PLOT_CURRENT_Y_MAX, padding=0
+            )
+            self.voltagePlotWidget.enableAutoRange(x=False, y=False)
+            self.currentPlotWidget.enableAutoRange(x=False, y=False)
             self._viewInitialized = True
 
 

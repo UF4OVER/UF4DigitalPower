@@ -232,7 +232,7 @@ wheels = [
 
 [[package]]
 name = "f4cp"
-version = "0.2.4"
+version = "0.2.6"
 source = { virtual = "." }
 dependencies = [
     { name = "cx-freeze" },

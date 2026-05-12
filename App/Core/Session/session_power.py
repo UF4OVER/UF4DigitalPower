@@ -123,13 +123,13 @@ class FaultFlag(IntEnum):
 
 
 FAULT_NAMES = {
-    FaultFlag.INPUT_UNDER_VOLTAGE: "Input Under Voltage",
-    FaultFlag.INPUT_OVER_VOLTAGE: "Input Over Voltage",
-    FaultFlag.OUTPUT_UNDER_VOLTAGE: "Output Under Voltage",
-    FaultFlag.OUTPUT_OVER_VOLTAGE: "Output Over Voltage",
-    FaultFlag.OUTPUT_OVER_CURRENT: "Output Over Current",
-    FaultFlag.OUTPUT_SHORT_CIRCUIT: "Output Short Circuit",
-    FaultFlag.OVER_TEMPERATURE_PROTECTION: "Over Temperature Protection",
+    FaultFlag.INPUT_UNDER_VOLTAGE: "输入欠压",
+    FaultFlag.INPUT_OVER_VOLTAGE: "输入过压",
+    FaultFlag.OUTPUT_UNDER_VOLTAGE: "输出欠压",
+    FaultFlag.OUTPUT_OVER_VOLTAGE: "输出过压",
+    FaultFlag.OUTPUT_OVER_CURRENT: "输出过流",
+    FaultFlag.OUTPUT_SHORT_CIRCUIT: "输入短路",
+    FaultFlag.OVER_TEMPERATURE_PROTECTION: "过温保护",
 }
 
 STATE_FLAG_NAMES = {
@@ -153,6 +153,7 @@ CC_CV_NAMES = {
 }
 
 SOF = b"\xAA\x55"
+
 WRITE_IDLE_RETRY_MS = 25
 WRITE_IDLE_WAIT_TIMEOUT_MS = 2500
 WRITE_POLL_RESUME_DELAY_MS = 800
