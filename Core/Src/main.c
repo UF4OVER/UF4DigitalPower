@@ -135,6 +135,7 @@ int main(void) {
   UF4_TvlcomInit();                         // TVLCOM通信初始化
 
   HAL_Delay(200);                                        // 延时100ms，等待供电稳定
+
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED); // 校准ADC1
   HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED); // 校准ADC2
   HAL_ADCEx_Calibration_Start(&hadc5, ADC_SINGLE_ENDED); // 校准ADC5

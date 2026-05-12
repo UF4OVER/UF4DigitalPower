@@ -61,16 +61,18 @@ void PID_Init(void)
 #define ILOOP_KI 3 // 电流环PID补偿器I值
 #define ILOOP_KD 1 // 电流环PID补偿器D值
 
-#define UF4_VLOOP_DIVIDER 50U
+#define UF4_VILOOP_ISR_DIVIDER 8U
+#define UF4_VLOOP_DIVIDER 6U
 #define UF4_VLOOP_KP 0.70F
-#define UF4_VLOOP_KI 0.0030F
+#define UF4_VLOOP_KI (0.0030F * (float)UF4_VILOOP_ISR_DIVIDER)
 #define UF4_VLOOP_IREF_MIN 0.0F
 #define UF4_ILIMIT_MARGIN 0.02F
 
 #define UF4_ILOOP_KP 0.018F
-#define UF4_ILOOP_KI 0.00012F
+#define UF4_ILOOP_KI (0.00012F * (float)UF4_VILOOP_ISR_DIVIDER)
 #define UF4_ILOOP_INTEGRAL_MIN (-0.25F)
 #define UF4_ILOOP_INTEGRAL_MAX 0.25F
+
 
 #define UF4_DUTY_MIN ((float)MIN_BUKC_DUTY / (float)PERIOD)
 #define UF4_DUTY_MAX ((float)MAX_BUCK_DUTY / (float)PERIOD)
@@ -259,5 +261,11 @@ CCMRAM void BuckBoostVILoopCtlPID(void)
 
 CCMRAM void BuckBoostVILoopCtlIsr(void)
 {
+    static uint8_t isr_divider = 0U;
+
+    if (++isr_divider < UF4_VILOOP_ISR_DIVIDER)
+        return;
+
+    isr_divider = 0U;
     BuckBoostVILoopCtlPID();
 }
