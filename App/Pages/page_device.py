@@ -16,20 +16,15 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-try:
-    from PyQt5.QtBluetooth import (
-        QBluetoothAddress,
-        QBluetoothDeviceDiscoveryAgent,
-        QBluetoothLocalDevice,
-        QBluetoothSocket,
-        QBluetoothUuid,
-    )
-except Exception:
-    QBluetoothAddress = None
-    QBluetoothDeviceDiscoveryAgent = None
-    QBluetoothLocalDevice = None
-    QBluetoothSocket = None
-    QBluetoothUuid = None
+
+from PyQt5.QtBluetooth import (
+    QBluetoothAddress,
+    QBluetoothDeviceDiscoveryAgent,
+    QBluetoothLocalDevice,
+    QBluetoothSocket,
+    QBluetoothUuid,
+)
+
 
 from qfluentwidgets import (
     BodyLabel,
