@@ -16,20 +16,15 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-try:
-    from PyQt5.QtBluetooth import (
-        QBluetoothAddress,
-        QBluetoothDeviceDiscoveryAgent,
-        QBluetoothLocalDevice,
-        QBluetoothSocket,
-        QBluetoothUuid,
-    )
-except Exception:
-    QBluetoothAddress = None
-    QBluetoothDeviceDiscoveryAgent = None
-    QBluetoothLocalDevice = None
-    QBluetoothSocket = None
-    QBluetoothUuid = None
+
+from PyQt5.QtBluetooth import (
+    QBluetoothAddress,
+    QBluetoothDeviceDiscoveryAgent,
+    QBluetoothLocalDevice,
+    QBluetoothSocket,
+    QBluetoothUuid,
+)
+
 
 from qfluentwidgets import (
     BodyLabel,
@@ -64,13 +59,13 @@ from App.Core import (
     listSerialPorts,
     logger,
 )
-from Core.TVLCOMV2_FULL import (
+from App.Core.TVLCOMV2_FULL import (
     Dispatcher as V2Dispatcher,
     FrameBuilder as V2FrameBuilder,
     FrameParser as V2FrameParser,
 )
-from Core.TVLCOMV2_FULL import Payload as V2Payload, TYPE_REGISTRY
-from Core.TVLCOMV2_FULL.dataType import DataFloat, DataInt, DataString, TypeBase
+from App.Core.TVLCOMV2_FULL import Payload as V2Payload, TYPE_REGISTRY
+from App.Core.TVLCOMV2_FULL.dataType import DataFloat, DataInt, DataString, TypeBase
 
 
 class DeviceTransport(Protocol):

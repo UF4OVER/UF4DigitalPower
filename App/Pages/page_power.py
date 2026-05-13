@@ -11,20 +11,15 @@ import pyqtgraph as pg
 from PyQt5.QtCore import QCoreApplication, QIODevice, QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QFileDialog, QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
-try:
-    from PyQt5.QtBluetooth import (
-        QBluetoothAddress,
-        QBluetoothDeviceDiscoveryAgent,
-        QBluetoothLocalDevice,
-        QBluetoothSocket,
-        QBluetoothUuid,
-    )
-except Exception:
-    QBluetoothAddress = None
-    QBluetoothDeviceDiscoveryAgent = None
-    QBluetoothLocalDevice = None
-    QBluetoothSocket = None
-    QBluetoothUuid = None
+
+from PyQt5.QtBluetooth import (
+    QBluetoothAddress,
+    QBluetoothDeviceDiscoveryAgent,
+    QBluetoothLocalDevice,
+    QBluetoothSocket,
+    QBluetoothUuid,
+)
+
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
