@@ -12,3 +12,4 @@
 from .session_serial import *
 from .session_daplink import *
 from .session_power import *
+from .session_bluetooth import *

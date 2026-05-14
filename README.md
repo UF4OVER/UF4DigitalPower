@@ -1,187 +1,153 @@
-## 项目概览
-- `F4CP` 是一个以 Windows 为优先平台的 PyQt5 桌面应用，基于 `qfluentwidgets` 构建；真实入口在 `start.py`，它会把五个页面组装进 `Window(UMainWindow)`。
-- UI 外壳位于 `app/Pages/main_window.py`；`app/Pages/` 下的各页面模块同时负责界面组件和大部分页面级行为。
-- 运行时路径的唯一事实来源是 `Config/config.py:DirPaths`；它通过 `getattr(sys, 'frozen', False)` 在源码目录与冻结后的 exe 目录之间切换。
-## 主要子系统
-- **Home / Settings UI**：以展示层为主，外加主题、语言、字体管理（`app/Pages/page_home.py`、`app/Pages/page_settings.py`、`app/Core/Manager/*`）。
-- **串口控制台页面**：`app/Pages/page_device.py` 使用 `app/Core/Session/session_serial.py`，并结合 `app/TVLCOMV2_FULL/*` 处理原始串口流量与 TVLCOM V2 的帧/TLV 解析。
-- **电源仪表盘**：`app/Pages/page_power.py` 会从 `Resources/Config/config.ini` 中读取 VID/PID 自动发现目标串口设备，然后把该会话挂接到 `app/Core/Session/session_powert.py` 中的 `F4CPPowerClient`。
-- **DAPLink 烧录**：`app/Pages/page_daplink.py` 通过自定义事件把请求投递给 `DaplinkPyocdSession`（`app/Core/Session/session_daplink.py`）；后者在后台 Python 线程中执行 pyOCD 工作，并从 `Resources/Tools/Pack` 加载 CMSIS Pack。
-## 必须保持的通信模式
-- 这个仓库把 **自定义 Qt 事件作为跨组件边界**，而不是在工作线程里直接操作 UI。例子见 `session_serial.py` 里的 `SerialEventType`、`session_daplink.py` 里的 `DaplinkProgrammerEventType`。
-- 页面通常通过重写 `event()` 来消费这些事件（如 `DevicePage.event`、`DaplinkFlashPage.event`、`F4CPPowerClient.event`）。如果你新增异步能力，沿用这一模式，不要从 worker 线程直接触碰控件。
-- `PowerPage` 将 `F4CPPowerClient` 放在独立 `QThread` 中，并且只通过 `attachSessionRequested`、`readStatusRequested`、`outputLimitsRequested` 这类信号进行通信。
-- `DevicePage` 会缓冲 RX 字节、记录原始流量日志，并可选地在其上叠加 TVLCOM V2 解析；修改 V2 解析时不要破坏原始模式行为。
-## 关键协议细节
-- `session_powert.py` 中的电源设备协议 **不是** `app/TVLCOMV2_FULL` 的同一套实现；它拥有自己的 `SOF = b"\xAA\x55"`、Modbus CRC16、请求/ACK/NACK 流程，以及专用 TLV 类型。
-- 电源仪表盘依赖若干固定 type ID，例如输出电压 `12`、输出原始电压 `27`、OVP 设定值 `32`；参见 `PowerDataType` 与 `_diagnose_debug_snapshot()`。
-- 串口页显示的 TVLCOM V2 类型名来自 `TYPE_REGISTRY`，并辅以 `app/Core/const.py` 中的别名映射（`SESSION_PAGE_V2_TYPE_ALIAS_TO_ID`）。
-## 配置、资源与生成文件
-- 持久化设置分散在 `Resources/Config/config.ini`（自定义 `QSettings` 值，例如端口 VID/PID、语言、字体）和 `Resources/Config/config.json`（`qfluentwidgets` 主题配置）中。
-- 主题 QSS 位于 `Resources/Theme/qss/{dark,light}/`；`StyleSheet` 枚举名必须与页面 `objectName` / QSS 文件名对应（`HomePage`、`PowerPage`、`DaplinkFlashPage`、`SettingsPage`）。
-- 翻译文件是 `Resources/Language/` 下的 JSON 字典；`language_manager` 只会为 `zh_CN` 加载 JSON，英文则回退到源码原文。
-- 将 `build/exe/`、`Logs/` 与 `__pycache__/` 视为生成/运行时产物，而不是源码。
-## 常用命令
-- `uv sync`
-- `uv run python start.py`
-- `uv run python Script/demo_notification_manager.py`（NotificationManager 动画演示入口）
-- `./Script/package_exe.ps1`
-- `uv run python Script/upx_zip.py`（可选的打包后体积裁剪）
-## 仓库特有编码约定
-- 所有面向用户的 UI 文案都应包在 `self.tr(...)` 中；页面依赖 `LanguageChange` 事件重新执行 `_retranslate_ui()`。
-- 顶部提示条统一复用 `app/Core/utility.py` 中的 `showMessage(...)`，不要随意改成自定义弹窗。
-- 新增设置项应走 `SettingMangerInstance` / `QSettings`，不要写成硬编码模块全局变量。
-- 如果新增页面样式，记得在 `StyleSheet` 中注册，并保持控件 `objectName` 与 QSS 文件名一致。
-- 处理 DAPLink 支持时，要默认 `Resources/Tools/Pack` 里的本地 `.pack` 文件是必需输入；目标芯片选择与过滤都依赖它们。
-## 修改行为前应优先查看
-- 应用外壳/导航：`start.py`、`app/Pages/main_window.py`
-- 串口页与 TVLCOM V2：`app/Pages/page_device.py`、`app/TVLCOMV2_FULL/*`
-- 电源协议与仪表盘：`app/Pages/page_power.py`、`app/Core/scan_connect_device.py`、`app/Core/Session/session_powert.py`
-- DAPLink 烧录：`app/Pages/page_daplink.py`、`app/Core/Session/session_daplink.py`
-- 设置/主题/语言/字体：`app/Pages/page_settings.py`、`Config/config.py`、`app/Core/Manager/*`
+# F4CP 上位机
 
+F4CP 是 `UF4DigitalPower` 数字电源的 PC 上位机，面向 Windows 桌面使用，基于 Python、PyQt5 与 qfluentwidgets 构建。它负责设备发现、串口连接、运行状态监控、输出参数设置、保护阈值配置、协议调试和 DAPLink/pyOCD 烧录辅助。
 
-# F4CP / UF4DigitalPower 通信命令表
+真实入口是 `start.py`，主窗口类 `Window(MSFluentWindow)` 也定义在这里，并负责组装各功能页面。
 
-本文档是上位机 `F4CP` 与功率固件 `UF4DigitalPower` 之间 TVLCOM 通信命令的统一契约。修改通信命令、数据类型、单位或访问权限时，先改这份表，再同步：
+## 主要功能
 
-- 上位机：`F4CP/App/Core/Session/session_powert.py`
-- 固件：`UF4DigitalPower/USER/Inc/user_tvlcom.h`
-- 固件处理：`UF4DigitalPower/USER/Src/user_tvlcom.c`
-- 示例：`UF4DigitalPower/Docs/tvl_host_example.py`
+- 电源仪表盘：显示输入/输出电压、电流、温度、CV/CC 状态、故障位、状态机、PWM 比较值、风扇值等运行数据。
+- 输出控制：设置输出电压、电流限制，并控制电源输出开关。
+- 保护参数：设置 OVP、OCP、OTP 与风扇设定值。
+- 串口控制台：支持原始串口收发、日志记录，以及 TVLCOM V2 帧/TLV 解析查看。
+- DAPLink 烧录：通过 pyOCD 调用本地 CMSIS Pack 完成目标芯片烧录流程。
+- 设置页面：支持主题、字体和应用配置管理。
+- 电池页面：提供电池相关信息展示与后续功能扩展入口。
 
-## 帧格式
+## 快速开始
 
-```text
-SOF(2) + Length(2, little-endian) + CMD(1) + SEQ(1) + Payload(N) + CRC16(2, little-endian)
+### 环境要求
+
+- Python `3.10+`
+- `uv`
+- Windows 10/11 优先
+- DAPLink 烧录功能需要可用的 CMSIS Pack，默认从 `Resources/Tools/Pack/` 读取
+
+### 安装依赖
+
+```powershell
+uv sync
 ```
 
-- `SOF`: `0xAA 0x55`
-- `Length`: `CMD + SEQ + Payload` 的字节数
-- `SEQ`: 请求方递增序号；固件响应必须回同一个 `SEQ`
-- `CRC16`: Modbus CRC16，初值 `0xFFFF`，多项式 `0xA001`，little-endian
-- `Payload`: TLV 列表，格式为 `Type(1) + Length(2, little-endian) + Value(N)`
+### 启动应用
 
-## 命令码
-
-| 名称 | 值 | 方向 | Payload | 说明 |
-| --- | ---: | --- | --- | --- |
-| `ACK` | `0x00` | 固件 -> 上位机 | TLV 列表或空 | 请求成功响应。`READ` 成功时返回请求的数据；`WRITE` 成功时为空。 |
-| `READ` | `0x01` | 上位机 -> 固件 | TLV 查询列表 | 每个 TLV 只填 `Type`，`Length=0`。 |
-| `WRITE` | `0x02` | 上位机 -> 固件 | TLV 写入列表 | 每个 TLV 填 `Type`、长度和 little-endian 值。 |
-| `REPORT` | `0x03` | 双向 | 请求空载荷；响应 TLV 列表 | 上位机发送空 payload 请求状态组，固件返回一帧 `REPORT`。 |
-| `NACK` | `0xFF` | 固件 -> 上位机 | 空 | 命令、类型、长度、权限或载荷错误。 |
-
-## 访问权限
-
-| 名称 | 值 | 说明 |
-| --- | ---: | --- |
-| `READ` | `0x01` | 可读 |
-| `WRITE` | `0x02` | 可写 |
-| `READ_WRITE` | `0x03` | 可读可写 |
-
-## 数据类型
-
-| 名称 | Type | 长度 | 权限 | 单位 | 说明 |
-| --- | ---: | ---: | --- | --- | --- |
-| `INPUT_VOLTAGE` | `10` | 4 | READ | mV | 输入电压 |
-| `INPUT_CURRENT` | `11` | 4 | READ | mA | 输入电流 |
-| `OUTPUT_VOLTAGE` | `12` | 4 | READ | mV | 输出电压 |
-| `OUTPUT_CURRENT` | `13` | 4 | READ | mA | 输出电流 |
-| `CORE_TEMPERATURE` | `14` | 4 | READ | mC | 核心温度，摄氏度 x1000 |
-| `BOARD_TEMPERATURE` | `15` | 4 | READ | mC | 板载温度，摄氏度 x1000 |
-| `SET_VOLTAGE_LIMIT` | `17` | 4 | READ_WRITE | mV | 输出电压设定 |
-| `SET_CURRENT_LIMIT` | `18` | 4 | READ_WRITE | mA | 输出电流设定 |
-| `CC_CV_MODE` | `20` | 1 | READ | enum | `0=CC`, `1=CV` |
-| `POWER_STATE` | `21` | 1 | READ_WRITE | bool | `0=OFF`, `1=ON` |
-| `FAULT_STATE` | `22` | 4 | READ | bitmask | 故障位图 |
-| `STATE_MACHINE_FLAG_BITS` | `23` | 1 | READ | bitmask | `0x01=INIT`, `0x02=WAIT`, `0x04=RISE`, `0x08=RUN`, `0x0F=ERR` |
-| `STATE_MACHINE_STATE` | `24` | 1 | READ | enum | 当前功率拓扑：`0=NA`, `1=BUCK`, `2=BOOST`, `3=MIX` |
-| `INPUT_VOLTAGE_RAW` | `25` | 4 | READ | adc | 输入电压 ADC 原始值 |
-| `INPUT_CURRENT_RAW` | `26` | 4 | READ | adc | 输入电流 ADC 原始值 |
-| `OUTPUT_VOLTAGE_RAW` | `27` | 4 | READ | adc | 输出电压 ADC 原始值 |
-| `OUTPUT_CURRENT_RAW` | `28` | 4 | READ | adc | 输出电流 ADC 原始值 |
-| `OTP_VALUE` | `29` | 4 | READ | mC | 当前过温保护参考值 |
-| `OTP_SET_VALUE` | `30` | 4 | READ_WRITE | mC | 过温保护设定 |
-| `OVP_VALUE` | `31` | 4 | READ | mV | 当前过压保护参考值 |
-| `OVP_SET_VALUE` | `32` | 4 | READ_WRITE | mV | 过压保护设定 |
-| `OCP_VALUE` | `33` | 4 | READ | mA | 当前过流保护参考值 |
-| `OCP_SET_VALUE` | `34` | 4 | READ_WRITE | mA | 过流保护设定 |
-| `FAN_SPEED` | `38` | 4 | READ | permille | 风扇当前值，0 到 1000 |
-| `FAN_SET_VALUE` | `39` | 4 | READ_WRITE | permille | 风扇设定值，0 到 1000 |
-| `DEBUG_SNAPSHOT` | `40` | 0 | READ | virtual | 虚拟读取项。请求 `Type=40, Length=0`；响应返回 `OUTPUT_VOLTAGE_RAW`、`OUTPUT_VOLTAGE`、`OVP_SET_VALUE` 三个 TLV。 |
-
-## 状态组上报
-
-上位机发送：
-
-```text
-CMD=REPORT, Payload = empty
+```powershell
+uv run python start.py
 ```
 
-固件返回：
+### 运行测试
 
-```text
-CMD=REPORT, Payload =
-  TLV(INPUT_VOLTAGE)
-  TLV(INPUT_CURRENT)
-  TLV(OUTPUT_VOLTAGE)
-  TLV(OUTPUT_CURRENT)
-  TLV(CORE_TEMPERATURE)
-  TLV(BOARD_TEMPERATURE)
-  TLV(SET_VOLTAGE_LIMIT)
-  TLV(SET_CURRENT_LIMIT)
-  TLV(CC_CV_MODE)
-  TLV(POWER_STATE)
-  TLV(FAULT_STATE)
-  TLV(STATE_MACHINE_FLAG_BITS)
-  TLV(STATE_MACHINE_STATE)
-  TLV(OTP_VALUE)
-  TLV(OTP_SET_VALUE)
-  TLV(OVP_VALUE)
-  TLV(OVP_SET_VALUE)
-  TLV(OCP_VALUE)
-  TLV(OCP_SET_VALUE)
-  TLV(DUTY_CMD)
-  TLV(PWM_A_COMPARE)
-  TLV(PWM_D_COMPARE)
-  TLV(FAN_SPEED)
-  TLV(FAN_SET_VALUE)
+```powershell
+uv run python -m unittest discover -s tests
 ```
 
-## 常用请求
+### 打包
 
-读取状态：
-
-```text
-CMD=READ, Payload = TLV(Type=10, Len=0) + TLV(Type=11, Len=0) + ...
+```powershell
+.\Script\package_exe.ps1
 ```
 
-写输出设定并开机：
+打包输出位于 `Build/exe/`。如需进一步裁剪体积，可在打包后运行：
 
-```text
-CMD=WRITE
-Payload =
-  TLV(Type=17, Len=4, Value=set_voltage_mv)
-  TLV(Type=18, Len=4, Value=set_current_ma)
-  TLV(Type=21, Len=1, Value=1)
+```powershell
+uv run python Script/upx_zip.py
 ```
 
-读取调试快照：
+## 项目结构
 
 ```text
-CMD=READ
-Payload = TLV(Type=40, Len=0)
-Response ACK Payload =
-  TLV(Type=27, Len=4, Value=output_voltage_raw)
-  TLV(Type=12, Len=4, Value=output_voltage_mv)
-  TLV(Type=32, Len=4, Value=ovp_set_value_mv)
+F4CP/
+├─ App/
+│  ├─ Pages/                 # 主窗口和各页面
+│  └─ Core/
+│     ├─ Session/            # 串口、电源协议、DAPLink 会话
+│     ├─ TVLCOMV2_FULL/      # 通用 TVLCOM V2 帧/TLV 工具
+│     ├─ Manager/            # 样式、字体、固件、更新等管理器
+│     └─ utility.py          # 通用 UI 辅助函数
+├─ Config/                   # 运行路径、配置管理、日志初始化
+├─ Resources/
+│  ├─ Assets/                # 图标与静态资源
+│  ├─ Config/                # config.ini / config.json
+│  ├─ Firmware/              # 本地固件目录
+│  ├─ Theme/qss/             # 页面 QSS
+│  └─ Tools/Pack/            # CMSIS Pack
+├─ Script/                   # 打包、演示、资源生成脚本
+├─ tests/                    # unittest 测试
+├─ start.py                  # 应用入口
+└─ pyproject.toml            # 依赖与 cx_Freeze 配置
 ```
 
-## 同步检查清单
+## 页面与核心模块
 
-1. 新增 `CMD` 时，同时更新上位机 `PowerCommand`、固件 `user_tvl_cmd_t` 和本文档。
-2. 新增数据 `Type` 时，同时更新上位机 `PowerDataType`、固件 `user_tvl_data_type_t`、元数据表和读写处理。
-3. 改单位或长度时，同时更新 `POWER_DATA_META`、`g_user_tvl_data_descriptors` 和本文档。
-4. 改写权限时，同时更新上位机 `_ensure_writable` 依赖的元数据和固件 `user_tvlcom_handle_write` 分支。
-5. `REPORT` 状态组字段变更时，需同步上位机 `REPORT_STATUS_TYPES` 与固件 `report_types`。
+| 页面/模块 | 说明 | 主要文件 |
+| --- | --- | --- |
+| Home | 首页与概览 | `App/Pages/page_home.py` |
+| Power | 电源控制、状态监控、保护参数设置 | `App/Pages/page_power.py` |
+| Device | 串口控制台与 TVLCOM V2 调试 | `App/Pages/page_device.py` |
+| Daplink | DAPLink/pyOCD 烧录 | `App/Pages/page_daplink.py` |
+| Battery | 电池相关页面 | `App/Pages/page_battery.py` |
+| Settings | 主题、字体等设置 | `App/Pages/page_settings.py` |
+| Power Client | 专用电源协议客户端 | `App/Core/Session/session_power.py` |
+| Serial Session | 通用串口会话与跨线程事件 | `App/Core/Session/session_serial.py` |
+| DAPLink Session | pyOCD 后台烧录会话 | `App/Core/Session/session_daplink.py` |
+
+## 电源连接与配置
+
+Power 页面会从 `Resources/Config/config.ini` 读取目标设备 VID/PID：
+
+```ini
+[port]
+vid=2001
+pid=8738
+```
+
+自动发现成功后，页面会创建串口会话并挂接到 `F4CPPowerClient`。该客户端运行在独立 `QThread` 中，通过 Qt 信号与页面通信，避免后台串口回调直接操作 UI。
+
+## 通信协议
+
+Power 页面使用 `App/Core/Session/session_power.py` 中的专用电源协议客户端。协议摘要：
+
+- 帧头：`0xAA 0x55`
+- 长度：`CMD + SEQ + Payload` 的字节数，little-endian
+- 校验：Modbus CRC16，little-endian
+- 载荷：TLV 列表，格式为 `Type(1) + Length(2) + Value(N)`
+- 命令：`ACK(0x00)`、`READ(0x01)`、`WRITE(0x02)`、`REPORT(0x03)`、`NACK(0xFF)`
+
+常用数据类型在 `PowerDataType` 与 `POWER_DATA_META` 中维护。修改协议时需要同步：
+
+- 上位机：`App/Core/Session/session_power.py`
+- 下位机：`UF4DigitalPower/APP/Src/uf4_tvlcom.c`
+- 协议文档：项目根目录 `COMMUNICATION_COMMANDS.md` 与固件目录 `UF4DigitalPower/COMMUNICATION_COMMANDS.md`
+- 示例脚本：`UF4DigitalPower/Docs/tvl_host_example.py`
+
+注意：`App/Core/TVLCOMV2_FULL/` 是串口调试页使用的通用 TVLCOM V2 工具；Power 页面使用的是 `session_power.py` 中的专用实现，两者不要混为一套状态机。
+
+## 运行时数据
+
+- `Resources/Config/config.ini`：端口 VID/PID、版本信息、固件远程仓库、更新 URL、字体等应用设置。
+- `Resources/Config/config.json`：qfluentwidgets 主题配置。
+- `Resources/Theme/qss/{dark,light}/`：页面样式表。新增页面样式时，需要同步 `StyleSheet` 枚举、页面 `objectName` 与 QSS 文件名。
+- `Logs/`：运行日志。
+- `Build/exe/`：打包产物。
+
+`Build/exe/`、`Logs/`、`__pycache__/` 与 `.pytest_cache/` 都属于生成或运行时产物，不应当作为源码维护。
+
+## 开发约定
+
+- 顶部提示统一使用 `App/Core/utility.py` 中的 `showMessage(...)`。
+- 新增持久化设置优先走 `SettingMangerInstance` / `QSettings`。
+- 异步任务与页面通信应沿用自定义 Qt 事件或 Qt 信号，不要从 worker 线程直接操作控件。
+- 修改 Power 协议前，先更新协议表，再同步上下位机枚举、元数据、读写处理和测试。
+- DAPLink 相关逻辑默认依赖 `Resources/Tools/Pack/` 中的本地 `.pack` 文件。
+
+## 常用定位入口
+
+- 应用入口与主窗口导航：`start.py`
+- 电源页面：`App/Pages/page_power.py`
+- 电源协议：`App/Core/Session/session_power.py`
+- 串口页：`App/Pages/page_device.py`
+- 通用串口会话：`App/Core/Session/session_serial.py`
+- DAPLink 页面：`App/Pages/page_daplink.py`
+- DAPLink 会话：`App/Core/Session/session_daplink.py`
+- 配置与路径：`Config/config.py`
+- 样式管理：`App/Core/Manager/manager_stylesheet.py`

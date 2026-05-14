@@ -84,6 +84,9 @@ class PowerDataType(IntEnum):
     FAN_SET_VALUE = 39
     DEBUG_SNAPSHOT = 40
     APP_TVL_DEBUG_SNAPSHOT = 40  # Legacy alias; use DEBUG_SNAPSHOT in new code.
+    LOOP_CURRENT_FEEDBACK = 41
+    LOOP_CURRENT_REFERENCE = 42
+    VOLTAGE_LOOP_CURRENT_REFERENCE = 43
 
 
 class PowerValueType(IntEnum):
@@ -188,6 +191,9 @@ POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.PWM_D_COMPARE: PowerDataMeta(PowerDataType.PWM_D_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM D Compare"),
     PowerDataType.FAN_SPEED: PowerDataMeta(PowerDataType.FAN_SPEED, PowerValueType.U32, PowerAccess.READ, "permille", "Fan Speed"),
     PowerDataType.FAN_SET_VALUE: PowerDataMeta(PowerDataType.FAN_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "permille", "Fan Set Value"),
+    PowerDataType.LOOP_CURRENT_FEEDBACK: PowerDataMeta(PowerDataType.LOOP_CURRENT_FEEDBACK, PowerValueType.U32, PowerAccess.READ, "mA", "Loop Current Feedback"),
+    PowerDataType.LOOP_CURRENT_REFERENCE: PowerDataMeta(PowerDataType.LOOP_CURRENT_REFERENCE, PowerValueType.U32, PowerAccess.READ, "mA", "Loop Current Reference"),
+    PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE: PowerDataMeta(PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE, PowerValueType.U32, PowerAccess.READ, "mV", "Voltage Loop Reference"),
 }
 
 TYPE_LENGTHS = {type_id: meta.length for type_id, meta in POWER_DATA_META.items()}
@@ -496,14 +502,23 @@ class PowerStatus:
 class DebugSnapshot:
     output_voltage_raw: int
     output_voltage_mv: int
-    ovp_set_value_mv: int
+    ovp_set_value_mv: int | None = None
+    input_current_raw: int | None = None
+    output_current_raw: int | None = None
+    input_current_ma: int | None = None
+    output_current_ma: int | None = None
+    loop_current_feedback_ma: int | None = None
+    loop_current_reference_ma: int | None = None
+    voltage_loop_reference_mv: int | None = None
 
     @property
     def output_voltage_v(self) -> float:
         return self.output_voltage_mv / 1000.0
 
     @property
-    def ovp_set_value_v(self) -> float:
+    def ovp_set_value_v(self) -> float | None:
+        if self.ovp_set_value_mv is None:
+            return None
         return self.ovp_set_value_mv / 1000.0
 
 
@@ -747,7 +762,6 @@ class F4CPPowerClient(QObject):
             for type_id in (
                 PowerDataType.OUTPUT_VOLTAGE_RAW,
                 PowerDataType.OUTPUT_VOLTAGE,
-                PowerDataType.OVP_SET_VALUE,
             )
             if type_id not in result
         ]
@@ -757,7 +771,14 @@ class F4CPPowerClient(QObject):
         return DebugSnapshot(
             output_voltage_raw=result[PowerDataType.OUTPUT_VOLTAGE_RAW],
             output_voltage_mv=result[PowerDataType.OUTPUT_VOLTAGE],
-            ovp_set_value_mv=result[PowerDataType.OVP_SET_VALUE],
+            ovp_set_value_mv=result.get(PowerDataType.OVP_SET_VALUE),
+            input_current_raw=result.get(PowerDataType.INPUT_CURRENT_RAW),
+            output_current_raw=result.get(PowerDataType.OUTPUT_CURRENT_RAW),
+            input_current_ma=result.get(PowerDataType.INPUT_CURRENT),
+            output_current_ma=result.get(PowerDataType.OUTPUT_CURRENT),
+            loop_current_feedback_ma=result.get(PowerDataType.LOOP_CURRENT_FEEDBACK),
+            loop_current_reference_ma=result.get(PowerDataType.LOOP_CURRENT_REFERENCE),
+            voltage_loop_reference_mv=result.get(PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE),
         )
 
     def set_voltage_limit_mv(self, value_mv: int, timeout_ms: int = 1000) -> None:
@@ -808,12 +829,28 @@ class F4CPPowerClient(QObject):
 
     @staticmethod
     def pretty_print_debug_snapshot(snapshot: DebugSnapshot) -> str:
-        return (
+        parts = [
             "DEBUG_SNAPSHOT "
             f"raw27={snapshot.output_voltage_raw}, "
-            f"vout12={snapshot.output_voltage_mv} mV ({snapshot.output_voltage_v:.3f} V), "
-            f"ovp32={snapshot.ovp_set_value_mv} mV ({snapshot.ovp_set_value_v:.3f} V)"
-        )
+            f"vout12={snapshot.output_voltage_mv} mV ({snapshot.output_voltage_v:.3f} V)"
+        ]
+        if snapshot.ovp_set_value_mv is not None and snapshot.ovp_set_value_v is not None:
+            parts.append(f"ovp32={snapshot.ovp_set_value_mv} mV ({snapshot.ovp_set_value_v:.3f} V)")
+        if snapshot.input_current_raw is not None:
+            parts.append(f"iin_raw26={snapshot.input_current_raw}")
+        if snapshot.output_current_raw is not None:
+            parts.append(f"iout_raw28={snapshot.output_current_raw}")
+        if snapshot.input_current_ma is not None:
+            parts.append(f"iin11={snapshot.input_current_ma} mA")
+        if snapshot.output_current_ma is not None:
+            parts.append(f"iout13={snapshot.output_current_ma} mA")
+        if snapshot.loop_current_feedback_ma is not None:
+            parts.append(f"loop_i_fb41={snapshot.loop_current_feedback_ma} mA")
+        if snapshot.loop_current_reference_ma is not None:
+            parts.append(f"loop_i_ref42={snapshot.loop_current_reference_ma} mA")
+        if snapshot.voltage_loop_reference_mv is not None:
+            parts.append(f"loop_v_ref43={snapshot.voltage_loop_reference_mv} mV")
+        return ", ".join(parts)
 
     @staticmethod
     def decode_fault_flags(mask: int) -> list[str]:
