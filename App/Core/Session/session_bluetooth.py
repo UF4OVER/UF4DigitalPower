@@ -11,7 +11,7 @@
 # -------------------------------
 from types import SimpleNamespace
 
-from PyQt5.QtBluetooth import QBluetoothSocket, QBluetoothAddress, QBluetoothUuid
+from PyQt5.QtBluetooth import QBluetoothSocket, QBluetoothAddress, QBluetoothServiceInfo, QBluetoothUuid
 from PyQt5.QtCore import QObject, QIODevice, QCoreApplication
 
 from .session_serial import SerialState, StateEvent,TxEvent, SerialEventType, ErrorEvent, RxEvent
@@ -36,11 +36,16 @@ class PowerBluetoothSession(QObject):
     def open(self) -> None:
         if self.is_open:
             return
-        if QBluetoothSocket is None or QBluetoothAddress is None or QBluetoothUuid is None:
+        if (
+            QBluetoothSocket is None
+            or QBluetoothAddress is None
+            or QBluetoothUuid is None
+            or QBluetoothServiceInfo is None
+        ):
             raise RuntimeError("当前环境不支持 Qt Bluetooth")
 
         self._postEvent(StateEvent(SerialState.OPENING))
-        self._socket = QBluetoothSocket(QBluetoothSocket.RfcommProtocol)
+        self._socket = QBluetoothSocket(QBluetoothServiceInfo.RfcommProtocol)
         self._socket.readyRead.connect(self._onReadyRead)
         self._socket.error.connect(self._onError)
         self._socket.connected.connect(lambda: self._postEvent(StateEvent(SerialState.OPEN)))
