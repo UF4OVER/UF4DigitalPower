@@ -93,17 +93,6 @@ F4CP/
 | `App/Core/Session/session_daplink.py` | pyOCD 后台烧录会话 |
 | `App/Core/utility.py` | 统一通知入口 `showMessage(...)` |
 
-## 电源连接配置
-
-Power 页面从 `Resources/Config/config.ini` 读取目标设备 VID/PID：
-
-```ini
-[port]
-vid=2001
-pid=8738
-```
-
-自动发现成功后，页面会创建串口会话并挂接到 `F4CPPowerClient`。该客户端运行在独立 `QThread` 中，通过 Qt 信号和页面通信，避免后台串口回调直接操作 UI。
 
 ## 通信协议
 

@@ -21,12 +21,15 @@ from enum import IntEnum
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, QTimer, pyqtSignal
 
 from Config import DirPathsInstance, logger
+
+if TYPE_CHECKING:
+    from Config import DirPaths
 
 DAPLINK_FLASH_TIMEOUT_MS = 5 * 60 * 1000
 PYOCD_PROGRESS_PHASE_RANGES = {
@@ -298,6 +301,17 @@ class DaplinkActionThread(QThread):
 
 
 class DaplinkPyocdSession(QObject):
+    _dirs: DirPaths | None = None
+
+    @classmethod
+    def set_dirs(cls, dirs: DirPaths | None):
+        """Inject DirPaths for test isolation; None reverts to default singleton."""
+        cls._dirs = dirs
+
+    @classmethod
+    def _resolve_dirs(cls) -> DirPaths:
+        return cls._dirs if cls._dirs is not None else DirPathsInstance
+
     def __init__(self, _event_receiver: Optional[QObject] = None, parent: QObject | None = None):
         super().__init__(parent)
         self._event_receiver = _event_receiver
@@ -435,7 +449,7 @@ class DaplinkPyocdSession(QObject):
         self._process_started = False
         self._process.setProgram(program)
         self._process.setArguments(process_args)
-        self._process.setWorkingDirectory(str(DirPathsInstance.BaseDir))
+        self._process.setWorkingDirectory(str(self._resolve_dirs().BaseDir))
         self._process.setProcessChannelMode(QProcess.MergedChannels)
         self._process.started.connect(self._handle_process_started)
         self._process.readyReadStandardOutput.connect(self._read_process_output)
@@ -820,7 +834,7 @@ class DaplinkPyocdSession(QObject):
 
     @classmethod
     def pack_dir(cls) -> Path:
-        return Path(DirPathsInstance.McuPackDir)
+        return Path(cls._resolve_dirs().McuPackDir)
 
     @classmethod
     def discover_pack_targets(cls) -> tuple[list[Path], list[DaplinkTargetInfo]]:
