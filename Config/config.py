@@ -231,12 +231,12 @@ YEAR = 2026
 AUTHOR = "UF4OVER"
 VERSION = "1.4.0423"
 HELP_URL = "https://hepi.ng"
-REPO_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets"
-EXAMPLE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/tree/master/examples"
-FEEDBACK_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/issues"
-RELEASE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/releases/latest"
-ZH_SUPPORT_URL = "https://qfluentwidgets.com/zh/price/"
-EN_SUPPORT_URL = "https://qfluentwidgets.com/price/"
+REPO_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+EXAMPLE_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+FEEDBACK_URL = "https://github.com/UF4OVER/UF4DigitalPower/issues"
+RELEASE_URL = "https://github.com/UF4OVER/UF4DigitalPower/releases/latest"
+ZH_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+EN_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
 
 # -------------------------------config of application-------------------------------
 APP_CONFIG_PATH = _dirPaths.ConfigDir / "config.ini"
