@@ -25,12 +25,7 @@ def _install_pyocd_filters():
     _allowed_rtos: set[str] = set()  # F4CP doesn't need RTOS plugins
 
     def _filtered(*args, **kwargs):
-        groups = kwargs.pop("groups", None)
         group = kwargs.get("group")
-        if group is None and groups:
-            group = groups[0] if isinstance(groups, (list, tuple, set)) else groups
-            kwargs["group"] = group
-
         eps = _original(*args, **kwargs)
         if group == "pyocd.probe":
             eps = [e for e in eps if e.name.lower() in _allowed_probes]
