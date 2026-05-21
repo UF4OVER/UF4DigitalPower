@@ -13,19 +13,15 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
 
-from Config import DirPathsInstance
+from Config import CTX
 from qfluentwidgets import StyleSheetBase, Theme, qconfig
 
-if TYPE_CHECKING:
-    from Config import DirPaths
-
 # Mutable override for test isolation (Enum classes can't have class attrs reassigned).
-_stylesheet_dirs: DirPaths | None = None
+_stylesheet_dirs: "DirPaths | None" = None
 
 
-def set_stylesheet_dirs(dirs: DirPaths | None):
+def set_stylesheet_dirs(dirs: "DirPaths | None"):
     """Inject DirPaths for StyleSheet.path() (test isolation).
 
     Pass ``None`` to revert to the default ``DirPathsInstance`` singleton.
@@ -50,5 +46,5 @@ class StyleSheet(StyleSheetBase, Enum):
 
     def path(self, theme=Theme.AUTO):
         theme = qconfig.theme if theme == Theme.AUTO else theme
-        dirs = _stylesheet_dirs if _stylesheet_dirs is not None else DirPathsInstance
+        dirs = _stylesheet_dirs if _stylesheet_dirs is not None else CTX.dirs
         return str(dirs.ThemeDir / "qss" / theme.name.lower() / f"{self.value}.qss")

@@ -10,16 +10,43 @@
 #  @Python  :
 # -------------------------------
 
-from .config import *  # noqa: F403 — re-exports all legacy names + new API
-
-# Explicit re-exports for discoverability (these ARE exported by the * above,
-# but explicit imports help IDEs and linters):
 from .config import (  # noqa: F401
+    # ---- core context ----
+    CTX,
     AppContext,
     DirPaths,
     F4CPConfig,
     SettingsManager,
+    # ---- convenience shortcuts ----
+    cfg,
+    AppIconPath,
+    logger,
+    # ---- context helpers ----
     get_default_context,
-    reset_app_context,
     set_app_context,
+    reset_app_context,
+    # ---- application constants ----
+    VERSION,
+    YEAR,
+    AUTHOR,
+    HELP_URL,
+    REPO_URL,
+    EXAMPLE_URL,
+    FEEDBACK_URL,
+    RELEASE_URL,
+    ZH_SUPPORT_URL,
+    EN_SUPPORT_URL,
+    VERSION_LOCAL_SECTION,
+    VERSION_REMOTE_SECTION,
+    UPDATE_SECTION,
+    FIRMWARE_REMOTE_SECTION,
+    LOCAL_APP_VERSION_OPTION,
+    LOCAL_UPPER_VERSION_OPTION,
+    LOCAL_LOWER_VERSION_OPTION,
+    LATEST_APP_VERSION_OPTION,
+    LATEST_UPPER_VERSION_OPTION,
+    LATEST_LOWER_VERSION_OPTION,
+    UPDATE_URL_OPTION,
+    FIRMWARE_GITHUB_OWNER_OPTION,
+    FIRMWARE_GITHUB_REPO_OPTION,
 )

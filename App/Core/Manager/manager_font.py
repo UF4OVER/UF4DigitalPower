@@ -9,7 +9,7 @@ from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import qconfig
 
-from Config import DirPathsInstance, SettingMangerInstance, logger
+from Config import CTX, logger
 
 if TYPE_CHECKING:
     from Config import AppContext
@@ -33,14 +33,14 @@ class FontOption:
     file_name: str | None = None
 
 
-def _resolve_dirs(ctx: AppContext | None = None):
-    """Resolve DirPaths from context or fall back to legacy singleton."""
-    return ctx.dirs if ctx is not None else DirPathsInstance
+def _resolve_dirs(ctx: "AppContext | None" = None):
+    """Resolve DirPaths from context or fall back to CTX."""
+    return ctx.dirs if ctx is not None else CTX.dirs
 
 
-def _resolve_settings(ctx: AppContext | None = None):
-    """Resolve SettingsManager from context or fall back to legacy singleton."""
-    return ctx.settings if ctx is not None else SettingMangerInstance
+def _resolve_settings(ctx: "AppContext | None" = None):
+    """Resolve SettingsManager from context or fall back to CTX."""
+    return ctx.settings if ctx is not None else CTX.settings
 
 
 def _iter_font_files(ctx: AppContext | None = None):

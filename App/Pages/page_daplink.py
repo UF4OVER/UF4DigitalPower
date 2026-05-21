@@ -23,7 +23,7 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
-from Config import DirPathsInstance, logger
+from Config import CTX, logger
 from App.Core.Manager import firmware_manager
 from App.Core.utility import showMessage
 from App.Core.Session import session_daplink as daplink_pyocd
@@ -489,7 +489,7 @@ class DaplinkPage(ScrollArea):
 
     def _formatInternalFirmwareItem(self, path: Path) -> str:
         try:
-            relative = path.relative_to(DirPathsInstance.FirmwareDir)
+            relative = path.relative_to(CTX.dirs.FirmwareDir)
         except ValueError:
             relative = path
         return str(relative)
@@ -554,7 +554,7 @@ class DaplinkPage(ScrollArea):
         self.log('日志已清空。', "#888888")
 
     def saveLog(self):
-        defaultFile = str(Path(DirPathsInstance.LogDir) / "daplink_pyocd_ui.log")
+        defaultFile = str(Path(CTX.dirs.LogDir) / "daplink_pyocd_ui.log")
         filePath, _ = QFileDialog.getSaveFileName(
             self,
             '保存日志',

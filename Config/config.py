@@ -311,20 +311,14 @@ def reset_app_context():
 
 
 # ============================================================================
-#  Eager module-level singletons (backward compatible)
-#  These concrete objects live in __dict__ so `from Config import X` works.
+#  CTX — module-level singleton, the one thing you need to import
 # ============================================================================
 
-_default_ctx = get_default_context()  # create eagerly
+CTX: AppContext = get_default_context()
 
-_dirPaths             = _default_ctx.dirs
-DirPathsInstance      = _default_ctx.dirs
-SettingMangerInstance = _default_ctx.settings
-cfg                   = _default_ctx.qcfg
-AppIconPath           = _default_ctx.app_icon_path
-APP_CONFIG_PATH       = _default_ctx.dirs.ConfigIniPath
-LOG_DIR               = _default_ctx.dirs.LogDir
-LOG_PATH              = _default_ctx.dirs.LogDir
+# Convenience shortcuts derived from CTX
+cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
+AppIconPath = CTX.app_icon_path  # str — path to app icon
 
 
 # ============================================================================
