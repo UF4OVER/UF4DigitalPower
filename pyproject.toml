@@ -25,7 +25,8 @@ constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
 
 [tool.cxfreeze]
 executables = [
-    { script = "start.py",base = "gui", target_name = "F4CP", icon = "Resources/Assets/F4CP_ICO_256.ico" }
+    { script = "start.py", base = "gui", target_name = "F4CP", icon = "Resources/Assets/F4CP_ICO_256.ico" },
+    { script = "Script/pyocd_launcher.py", base = "console", target_name = "pyocd" },
 ]
 
 [tool.cxfreeze.build_exe]
@@ -83,6 +84,30 @@ excludes = [
     "unittest",
     "pylink",
     "pyocd.probe.jlink_probe",
+    # --- capstone disassembly (~7 MB, not needed) ---
+    "capstone",
+    "capstone.lib",
+    # --- QtQuick / QML (not used) ---
+    "PyQt5.QtQuick",
+    "PyQt5.QtQml",
+    "PyQt5.QtQuickWidgets",
+    # --- Qt WebEngine (not used) ---
+    "PyQt5.QtWebEngine",
+    "PyQt5.QtWebEngineCore",
+    "PyQt5.QtWebEngineWidgets",
+    "PyQt5.QtWebChannel",
+    # --- Other unused Qt modules ---
+    "PyQt5.QtPrintSupport",
+    "PyQt5.QtSql",
+    "PyQt5.QtTest",
+##    "PyQt5.QtOpenGL",
+    "PyQt5.QtHelp",
+    "PyQt5.QtMultimedia",
+    "PyQt5.QtMultimediaWidgets",
+    "PyQt5.QtPositioning",
+    "PyQt5.QtSensors",
+    "PyQt5.QtTextToSpeech",
+    "PyQt5.QtWinExtras",
 ]
 
 optimize = 2

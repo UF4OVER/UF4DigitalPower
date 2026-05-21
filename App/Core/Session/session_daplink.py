@@ -659,6 +659,13 @@ class DaplinkPyocdSession(QObject):
         if python_executable.name.lower() in {"python.exe", "pythonw.exe", "python"}:
             return str(python_executable), ["-m", "pyocd"]
 
+        # frozen (cx_Freeze): use the bundled pyocd console launcher
+        # so that F4CP GUI is not re-spawned as a side-effect.
+        if getattr(sys, "frozen", False):
+            launcher = python_executable.with_name("pyocd.exe")
+            if launcher.exists():
+                return str(launcher), []
+
         executable = Path(sys.executable).with_name("pyocd.exe")
         if executable.exists():
             return str(executable), []
