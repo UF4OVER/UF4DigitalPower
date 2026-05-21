@@ -3,12 +3,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import qconfig
 
-from Config import DirPathsInstance, SettingMangerInstance, logger
+from Config import CTX, logger
+
+if TYPE_CHECKING:
+    from Config import AppContext
 
 FONT_SECTION = "Appearance"
 FONT_FILE_OPTION = "FontFile"
@@ -29,8 +33,19 @@ class FontOption:
     file_name: str | None = None
 
 
-def _iter_font_files():
-    for path in sorted(DirPathsInstance.FontDir.iterdir(), key=lambda item: item.name.lower()):
+def _resolve_dirs(ctx: "AppContext | None" = None):
+    """Resolve DirPaths from context or fall back to CTX."""
+    return ctx.dirs if ctx is not None else CTX.dirs
+
+
+def _resolve_settings(ctx: "AppContext | None" = None):
+    """Resolve SettingsManager from context or fall back to CTX."""
+    return ctx.settings if ctx is not None else CTX.settings
+
+
+def _iter_font_files(ctx: AppContext | None = None):
+    dirs = _resolve_dirs(ctx)
+    for path in sorted(dirs.FontDir.iterdir(), key=lambda item: item.name.lower()):
         if path.is_file() and path.suffix.lower() in FONT_EXTENSIONS:
             yield path
 
@@ -63,14 +78,15 @@ def _merge_font_families(primary_family: str | None) -> list[str]:
     return families
 
 
-def discover_font_options() -> list[FontOption]:
+def discover_font_options(ctx: AppContext | None = None) -> list[FontOption]:
     global _FONT_OPTION_CACHE
     if _FONT_OPTION_CACHE is not None:
         return list(_FONT_OPTION_CACHE)
 
+    dirs = _resolve_dirs(ctx)
     options = [FontOption(SYSTEM_FONT_KEY, "System Default", "")]
 
-    for path in _iter_font_files():
+    for path in _iter_font_files(ctx):
         families = _load_font_file(path)
         family = families[0] if families else path.stem
         label = f"{family} ({path.name})"
@@ -82,19 +98,22 @@ def discover_font_options() -> list[FontOption]:
     return list(options)
 
 
-def _default_font_key() -> str:
-    default_font_path = DirPathsInstance.FontDir / DEFAULT_FONT_FILE_NAME
+def _default_font_key(ctx: AppContext | None = None) -> str:
+    dirs = _resolve_dirs(ctx)
+    default_font_path = dirs.FontDir / DEFAULT_FONT_FILE_NAME
     return DEFAULT_FONT_FILE_NAME if default_font_path.exists() else SYSTEM_FONT_KEY
 
 
-def get_saved_font_key() -> str:
-    default_key = _default_font_key()
-    return SettingMangerInstance.get(FONT_SECTION, FONT_FILE_OPTION, default_key) or default_key
+def get_saved_font_key(ctx: AppContext | None = None) -> str:
+    default_key = _default_font_key(ctx)
+    settings = _resolve_settings(ctx)
+    return settings.get(FONT_SECTION, FONT_FILE_OPTION, default_key) or default_key
 
 
-def save_font_selection(option: FontOption):
-    SettingMangerInstance.set(FONT_SECTION, FONT_FILE_OPTION, option.key)
-    SettingMangerInstance.set(FONT_SECTION, FONT_FAMILY_OPTION, option.family)
+def save_font_selection(option: FontOption, ctx: AppContext | None = None):
+    settings = _resolve_settings(ctx)
+    settings.set(FONT_SECTION, FONT_FILE_OPTION, option.key)
+    settings.set(FONT_SECTION, FONT_FAMILY_OPTION, option.family)
 
 
 def apply_font_option(app: QApplication, option: FontOption) -> list[str]:
@@ -113,12 +132,15 @@ def _system_font_option() -> FontOption:
     return FontOption(SYSTEM_FONT_KEY, "System Default", "")
 
 
-def loadSavedFont(app: QApplication) -> list[str]:
-    selected_key = get_saved_font_key()
+def loadSavedFont(app: QApplication, ctx: AppContext | None = None) -> list[str]:
+    dirs = _resolve_dirs(ctx)
+    settings = _resolve_settings(ctx)
+
+    selected_key = get_saved_font_key(ctx)
     if selected_key == SYSTEM_FONT_KEY:
         return apply_font_option(app, _system_font_option())
 
-    font_path = DirPathsInstance.FontDir / selected_key
+    font_path = dirs.FontDir / selected_key
     if not font_path.exists():
         logger.warning(f"Saved font file does not exist: {font_path}")
         return apply_font_option(app, _system_font_option())
@@ -127,6 +149,6 @@ def loadSavedFont(app: QApplication) -> list[str]:
     if not families:
         return apply_font_option(app, _system_font_option())
 
-    saved_family = SettingMangerInstance.get(FONT_SECTION, FONT_FAMILY_OPTION, families[0]) or families[0]
+    saved_family = settings.get(FONT_SECTION, FONT_FAMILY_OPTION, families[0]) or families[0]
     primary_family = saved_family if saved_family in families else families[0]
     return apply_font_option(app, FontOption(selected_key, primary_family, primary_family, selected_key))

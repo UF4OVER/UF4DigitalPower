@@ -10,3 +10,6 @@ Logs/
 
 # Virtual environments
 .venv
+
+# Runtime config (contains device-specific settings)
+Resources/Config/

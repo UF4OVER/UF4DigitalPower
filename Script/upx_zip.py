@@ -1,63 +1,183 @@
 # -*- coding: utf-8 -*-
-# -------------------------------
-#  @Project : F4CP
-#  @Time    : 2026 - 02-02 17:22
-#  @FileName: upx_zip.py
-#  @Software: PyCharm 2024.1.6 (Professional Edition)
-#  @System  : Windows 11 23H2
-#  @Author  : UF4
-#  @Contact : 
-#  @Python  : 
-# -------------------------------
+"""Post-build cleanup and UPX compression for cx_Freeze output.
+
+Run after ``Script/package_exe.ps1``::
+
+    uv run python Script/upx_zip.py
+
+What it does:
+1. Deletes unused Qt5 translations (5.2 MB)
+2. Deletes QtQuick / QML DLLs (7.8 MB)
+3. Deletes unused Qt5 platform/plugin DLLs (~2 MB)
+4. Deletes pyOCD SVD debug data (14.5 MB)
+5. Deletes capstone disassembly DLL (7.2 MB)
+6. Strips CMSIS Pack files — keep at most one recent pack
+7. UPX-compresses remaining .exe / .dll / .pyd files
+"""
 
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+# ── files / subdirs to delete ──────────────────────────────────────────────
 
-TRIM_PATHS = [
-    os.path.join("lib", "pyocd", "debug", "svd", "svd_data.zip"),
+QT5_BIN_EXCLUDES = [
+    "Qt5Quick.dll",
+    "Qt5Qml.dll",
+    "Qt5QmlModels.dll",
+    "Qt5QmlWorkerScript.dll",
 ]
 
+QT5_PLUGIN_EXCLUDES = [
+    "generic/qtuiotouchplugin.dll",
+    "platforms/qminimal.dll",
+    "platforms/qoffscreen.dll",
+    "platforms/qwebgl.dll",
+    "platformthemes/qxdgdesktopportal.dll",
+    "imageformats/qicns.dll",
+    "imageformats/qtga.dll",
+    "imageformats/qwbmp.dll",
+]
 
-def trim_known_unused_files(directory):
-    for relative_path in TRIM_PATHS:
-        target_path = os.path.join(directory, relative_path)
-        if os.path.isfile(target_path):
-            os.remove(target_path)
-            print(f"Deleted {target_path}")
+LIB_EXCLUDES = [
+    os.path.join("pyocd", "debug", "svd", "svd_data.zip"),
+]
+
+LIB_DLL_EXCLUDES = [
+    "capstone.dll",
+]
+
+MAX_CMSIS_PACKS = 2
 
 
-def compress_with_upx(directory):
-    trim_known_unused_files(directory)
+def _delete(path: Path) -> bool:
+    try:
+        if path.is_file():
+            path.unlink()
+            print(f"  DEL file  {path}")
+            return True
+        if path.is_dir():
+            shutil.rmtree(path)
+            print(f"  DEL dir   {path}")
+            return True
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        print(f"  SKIP      {path} ({exc})")
+    return False
 
-    for root, dirs, files in os.walk(directory):
-        if 'lib' in dirs and 'PyQt5' in dirs and 'Qt5' in dirs and 'translations' in dirs:
-            translations_path = os.path.join(root, 'translations')
-            shutil.rmtree(translations_path)
-            print(f"Deleted translations folder at {translations_path}")
-            dirs.remove('translations')  # 删除翻译插件
 
-        # 排除指定目录，防止发生PyQt5平台错误
-        if 'lib' in root and 'PyQt5' in root and 'Qt5' in root and 'plugins' in root:
+def delete_qt_translations(exe_dir: Path):
+    translations_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "translations"
+    if translations_dir.is_dir():
+        size_mb = sum(f.stat().st_size for f in translations_dir.rglob("*.qm")) / (1024 * 1024)
+        shutil.rmtree(translations_dir)
+        print(f"[translations] deleted {size_mb:.1f} MB ({translations_dir})")
+
+
+def delete_qt_quick_dlls(exe_dir: Path):
+    bin_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "bin"
+    total = 0
+    for name in QT5_BIN_EXCLUDES:
+        path = bin_dir / name
+        if path.is_file():
+            total += path.stat().st_size
+            path.unlink()
+            print(f"  DEL DLL   {path}")
+    if total:
+        print(f"[Qt5 bin]    deleted {total / (1024 * 1024):.1f} MB of QtQuick/QML DLLs")
+
+
+def delete_unused_qt_plugins(exe_dir: Path):
+    plugins_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "plugins"
+    total = 0
+    for rel in QT5_PLUGIN_EXCLUDES:
+        path = plugins_dir / rel
+        if path.is_file():
+            total += path.stat().st_size
+            path.unlink()
+            print(f"  DEL plug  {path}")
+    if total:
+        print(f"[plugins]    deleted {total / (1024 * 1024):.1f} MB of unused Qt plugins")
+
+
+def delete_lib_excludes(exe_dir: Path):
+    for rel in LIB_EXCLUDES:
+        _delete(exe_dir / "lib" / rel)
+    for name in LIB_DLL_EXCLUDES:
+        for found in (exe_dir / "lib").rglob(name):
+            _delete(found)
+
+
+def trim_cmsis_packs(exe_dir: Path):
+    pack_dir = exe_dir / "Resources" / "Tools" / "Pack"
+    if not pack_dir.is_dir():
+        return
+    packs = sorted(pack_dir.glob("*.pack"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if len(packs) <= MAX_CMSIS_PACKS:
+        print(f"[CMSIS Pack] {len(packs)} pack(s), no trimming needed")
+        return
+    for old in packs[MAX_CMSIS_PACKS:]:
+        size_mb = old.stat().st_size / (1024 * 1024)
+        old.unlink()
+        print(f"[CMSIS Pack] removed {old.name} ({size_mb:.1f} MB)")
+    print(f"[CMSIS Pack] kept {MAX_CMSIS_PACKS} of {len(packs)}")
+
+
+def compress_with_upx(exe_dir: Path):
+    exe_files = list(exe_dir.rglob("*.exe"))
+    dll_files = []
+    pyd_files = []
+    for root, dirs, files in os.walk(exe_dir):
+        if "plugins" in str(root).split(os.sep):
             continue
+        for f in files:
+            fp = Path(root) / f
+            if f.lower().endswith(".dll"):
+                dll_files.append(fp)
+            elif f.lower().endswith(".pyd"):
+                pyd_files.append(fp)
 
-        for file in files:
-            if file.lower().endswith(('.exe', '.dll', '.pyd')):  # 规范大小写
-                file_path = os.path.join(root, file)
-                try:
-                    subprocess.run(['upx.exe', '--best', file_path], check=True)
-                    print(f"Compressed: {file_path}")
-                except subprocess.CalledProcessError as e:
-                    print(f"Failed to compress {file_path}: {e}")
+    upx_exe = shutil.which("upx.exe") or "upx.exe"
+    all_targets = exe_files + dll_files + pyd_files
+    print(f"[UPX] compressing {len(all_targets)} files ({len(exe_files)} exe, {len(dll_files)} dll, {len(pyd_files)} pyd)...")
+
+    compressed = 0
+    for fp in all_targets:
+        try:
+            subprocess.run([upx_exe, "--best", str(fp)], check=True, capture_output=True, timeout=120)
+            compressed += 1
+        except Exception as exc:
+            print(f"  SKIP UPX  {fp.name}: {exc}")
+    print(f"[UPX] compressed {compressed}/{len(all_targets)} files")
+
+
+def main():
+    repo_root = Path(__file__).resolve().parent.parent
+    exe_dir = repo_root / "Build" / "exe"
+    if not exe_dir.is_dir():
+        print(f"[ERROR] {exe_dir} does not exist. Run package_exe.ps1 first.")
+        sys.exit(1)
+
+    print("=" * 60)
+    print("F4CP post-build optimiser")
+    print("=" * 60)
+
+    delete_qt_translations(exe_dir)
+    delete_qt_quick_dlls(exe_dir)
+    delete_unused_qt_plugins(exe_dir)
+    delete_lib_excludes(exe_dir)
+    trim_cmsis_packs(exe_dir)
+    compress_with_upx(exe_dir)
+
+    total = sum(f.stat().st_size for f in exe_dir.rglob("*") if f.is_file())
+    file_count = sum(1 for f in exe_dir.rglob("*") if f.is_file())
+    print("=" * 60)
+    print(f"Done. {file_count} files, {total / (1024 * 1024):.1f} MB")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
-    repo_root = Path(__file__).resolve().parent.parent
-    target_directory = repo_root / "Build" / "exe"
-
-    if target_directory.exists():
-        compress_with_upx(str(target_directory))
-    else:
-        print(f"{target_directory} does not exist")
+    main()

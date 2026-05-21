@@ -18,7 +18,7 @@ from qfluentwidgets import (
     setFont, ScrollArea,
 )
 
-from Config.config import AppIconPath, DirPathsInstance
+from Config import CTX, AppIconPath
 from App.Core import (
     FirmwareCheckFinishedEvent,
     FirmwareDownloadFinishedEvent,
@@ -173,7 +173,7 @@ class GalleryCard(HeaderCardWidget):
         self.expandButton.setFixedSize(32, 32)
         self.expandButton.setIconSize(QSize(12, 12))
 
-        imgPath = DirPathsInstance.AssetsDir / "F4CP_2x1_1200x600.png"
+        imgPath = CTX.dirs.AssetsDir / "F4CP_2x1_1200x600.png"
         self.flipView.addImages([QImage(str(imgPath))])
         self.flipView.setBorderRadius(8)
         self.flipView.setSpacing(10)

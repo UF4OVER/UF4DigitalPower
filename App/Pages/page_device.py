@@ -21,6 +21,7 @@ from PyQt5.QtBluetooth import (
     QBluetoothAddress,
     QBluetoothDeviceDiscoveryAgent,
     QBluetoothLocalDevice,
+    QBluetoothServiceInfo,
     QBluetoothSocket,
     QBluetoothUuid,
 )
@@ -100,11 +101,16 @@ class BluetoothSession(QObject):
     def open(self):
         if self.is_open:
             return
-        if QBluetoothSocket is None or QBluetoothAddress is None or QBluetoothUuid is None:
+        if (
+            QBluetoothSocket is None
+            or QBluetoothAddress is None
+            or QBluetoothUuid is None
+            or QBluetoothServiceInfo is None
+        ):
             raise RuntimeError("当前环境不支持 Qt Bluetooth")
 
         self._post_event(StateEvent(SerialState.OPENING))
-        self._socket = QBluetoothSocket(QBluetoothSocket.RfcommProtocol)
+        self._socket = QBluetoothSocket(QBluetoothServiceInfo.RfcommProtocol)
         self._socket.readyRead.connect(self._on_ready_read)
         self._socket.error.connect(self._on_error)
         self._socket.connected.connect(lambda: self._post_event(StateEvent(SerialState.OPEN)))

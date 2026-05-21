@@ -12,19 +12,17 @@ from urllib.request import urlopen
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
 from Config import (
-	APP_CONFIG_PATH,
+	CTX,
 	LATEST_APP_VERSION_OPTION,
 	LATEST_LOWER_VERSION_OPTION,
 	LATEST_UPPER_VERSION_OPTION,
 	LOCAL_APP_VERSION_OPTION,
 	LOCAL_LOWER_VERSION_OPTION,
 	LOCAL_UPPER_VERSION_OPTION,
-	SettingMangerInstance,
 	UPDATE_SECTION,
 	UPDATE_URL_OPTION,
 	VERSION_LOCAL_SECTION,
 	VERSION_REMOTE_SECTION,
-	SettingsManager,
 	logger,
 )
 from .manage_firmware import firmware_manager
@@ -85,19 +83,15 @@ class UpdateCheckThread(QThread):
 
 
 class UpdateManager:
-	def __init__(self, config_path: Path):
-		self._config_path = Path(config_path)
+	def __init__(self):
 		self._worker: UpdateCheckThread | None = None
 
 	@property
 	def is_checking(self) -> bool:
 		return bool(self._worker and self._worker.isRunning())
 
-	def _settings(self) -> SettingsManager:
-		return SettingMangerInstance
-
 	def get_cached_versions(self) -> FirmwareVersionSnapshot:
-		settings = self._settings()
+		settings = CTX.settings
 		local_upper = firmware_manager.get_latest_local_release("Upper")
 		local_lower = firmware_manager.get_latest_local_release("Power")
 		return FirmwareVersionSnapshot(
@@ -142,7 +136,7 @@ class UpdateManager:
 
 	def _perform_check(self, manual: bool) -> UpdateCheckResult:
 		snapshot_before = self.get_cached_versions()
-		settings = self._settings()
+		settings = CTX.settings
 		update_url = str(settings.get(UPDATE_SECTION, UPDATE_URL_OPTION, "") or "").strip()
 
 		if not update_url:
@@ -290,4 +284,4 @@ class UpdateManager:
 		}
 
 
-update_manager = UpdateManager(APP_CONFIG_PATH)
+update_manager = UpdateManager()

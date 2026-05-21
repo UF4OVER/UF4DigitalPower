@@ -5,20 +5,12 @@ import collections
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
 
 import pyqtgraph as pg
+from PyQt5.QtBluetooth import QBluetoothLocalDevice, QBluetoothDeviceDiscoveryAgent
 from PyQt5.QtCore import QCoreApplication, QIODevice, QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QFileDialog, QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
-
-from PyQt5.QtBluetooth import (
-    QBluetoothAddress,
-    QBluetoothDeviceDiscoveryAgent,
-    QBluetoothLocalDevice,
-    QBluetoothSocket,
-    QBluetoothUuid,
-)
 
 from qfluentwidgets import (
     BodyLabel,
@@ -42,20 +34,13 @@ from qfluentwidgets import (
 
 from Config import cfg, logger
 from App.Core import (
-    ErrorEvent,
-    RxEvent,
-    SendEvent,
     SerialConfig,
-    SerialEventType,
     SerialSession,
-    SerialState,
-    StateEvent,
     StyleSheet,
-    TxEvent,
     listSerialPorts,
     showMessage,
 )
-from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults
+from App.Core import DebugSnapshot, F4CPPowerClient, PowerStatus, pretty_faults, PowerBluetoothSession
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
@@ -317,31 +302,17 @@ class TrendPlotCard(CardWidget):
 
     def refreshTheme(self) -> None:
         dark = isDarkTheme()
-        cardBorder = "rgba(255,255,255,0.08)" if dark else "rgba(0,0,0,0.08)"
-        panelBackground = (
-            "rgba(15, 23, 42, 0.72)" if dark else "rgba(248, 250, 252, 0.98)"
-        )
-        panelBorder = "rgba(255,255,255,0.10)" if dark else "rgba(15,23,42,0.08)"
         axis = "#DCE3EA" if dark else "#334155"
         titleColor = "#F5F7FA" if dark else "#111827"
         tipColor = "#9AA4B2" if dark else "#6B7280"
         legendBackground = (
-            QColor(9, 14, 24, 188) if dark else QColor(255, 255, 255, 232)
+            QColor(30, 30, 30, 188) if dark else QColor(255, 255, 255, 232)
         )
         legendBorder = QColor(255, 255, 255, 28) if dark else QColor(15, 23, 42, 22)
         borderPenColor = QColor(255, 255, 255, 24) if dark else QColor(15, 23, 42, 24)
 
-        self.setStyleSheet(f"""
-            #trendPlotCard {{
-                border: 1px solid {cardBorder};
-                border-radius: 18px;
-            }}
-            #trendPlotPanel {{
-                background: {panelBackground};
-                border: 1px solid {panelBorder};
-                border-radius: 14px;
-            }}
-            """)
+        # Card and plot panel surface colors come from theme QSS.
+        self.setStyleSheet("")
         self.titleLabel.setStyleSheet(f"color: {titleColor};")
         self.tipLabel.setStyleSheet(f"color: {tipColor};")
 
@@ -438,82 +409,7 @@ class TrendPlotCard(CardWidget):
             self._viewInitialized = True
 
 
-class PowerBluetoothSession(QObject):
-    def __init__(self, name: str, address: str, parent=None):
-        super().__init__(parent)
-        self.name = name
-        self.address = address
-        self.cfg = SimpleNamespace(port=name)
-        self._eventReceiver = None
-        self._socket = None
 
-    def set_event_receiver(self, receiver) -> None:
-        self._eventReceiver = receiver
-
-    @property
-    def is_open(self) -> bool:
-        return bool(self._socket) and self._socket.isOpen()
-
-    def open(self) -> None:
-        if self.is_open:
-            return
-        if QBluetoothSocket is None or QBluetoothAddress is None or QBluetoothUuid is None:
-            raise RuntimeError("当前环境不支持 Qt Bluetooth")
-
-        self._postEvent(StateEvent(SerialState.OPENING))
-        self._socket = QBluetoothSocket(QBluetoothSocket.RfcommProtocol)
-        self._socket.readyRead.connect(self._onReadyRead)
-        self._socket.error.connect(self._onError)
-        self._socket.connected.connect(lambda: self._postEvent(StateEvent(SerialState.OPEN)))
-        self._socket.disconnected.connect(lambda: self._postEvent(StateEvent(SerialState.CLOSED)))
-        self._socket.connectToService(
-            QBluetoothAddress(self.address),
-            QBluetoothUuid(QBluetoothUuid.SerialPort),
-            QIODevice.OpenModeFlag.ReadWrite,
-        )
-
-    def close(self) -> None:
-        if self._socket:
-            self._socket.close()
-            self._socket.deleteLater()
-            self._socket = None
-        self._postEvent(StateEvent(SerialState.CLOSED))
-
-    def write(self, data: bytes) -> int:
-        if not self.is_open:
-            raise RuntimeError("蓝牙设备未连接")
-        written = int(self._socket.write(data))
-        self._postEvent(TxEvent(data))
-        return written
-
-    def event(self, event) -> bool:
-        if event.type() == int(SerialEventType.SEND):
-            payload = getattr(event, "payload", None)
-            data = getattr(payload, "data", b"") if payload is not None else b""
-            if data:
-                try:
-                    self.write(data)
-                except Exception as exc:
-                    self._postEvent(ErrorEvent(code=-1, message=str(exc), fatal=False))
-            return True
-        return super().event(event)
-
-    def _postEvent(self, event) -> None:
-        if self._eventReceiver is not None:
-            QCoreApplication.postEvent(self._eventReceiver, event)
-
-    def _onReadyRead(self) -> None:
-        if not self._socket:
-            return
-        raw = self._socket.readAll()
-        data = raw.data() if hasattr(raw, "data") else bytes(raw)
-        if data:
-            self._postEvent(RxEvent(data))
-
-    def _onError(self, error) -> None:
-        message = self._socket.errorString() if self._socket else str(error)
-        self._postEvent(ErrorEvent(code=int(error), message=message, fatal=True))
-        self._postEvent(StateEvent(SerialState.ERROR, info=message))
 
 
 class PowerPage(ScrollArea):
@@ -1194,10 +1090,13 @@ class PowerPage(ScrollArea):
         if snapshot.output_voltage_raw >= 4090:
             return "调试判断: type27 接近 4095，请优先检查 MCU ADC 或前端电路。"
         if (
-            snapshot.ovp_set_value_mv == DEFAULT_OVP_SET_VALUE_MV
+            snapshot.ovp_set_value_mv is not None
+            and snapshot.ovp_set_value_mv == DEFAULT_OVP_SET_VALUE_MV
             and abs(snapshot.output_voltage_mv - snapshot.ovp_set_value_mv) <= 5
         ):
             return "调试判断: type32=44000 与 type12 重叠，主机字段映射可能有误。"
+        if snapshot.loop_current_reference_ma is not None:
+            return "调试判断: 已收到控制环调试量；带载时重点看 type41/type42 是否跟随，以及 type43 是否顶到设定电压。"
         return "调试判断: type27 数值合理；如果界面仍异常，请检查主机解析和绑定。"
 
     def _applyDisconnectedState(self) -> None:

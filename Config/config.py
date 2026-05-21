@@ -6,112 +6,106 @@
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 
-#  @Python  : 
+#  @Contact :
+#  @Python  :
 # -------------------------------
+from __future__ import annotations
+
 import logging
 import sys
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
+
 from PyQt5.QtCore import QSettings
-from qfluentwidgets import qconfig, QConfig, ConfigItem, BoolValidator
+from qfluentwidgets import ConfigItem, BoolValidator, QConfig, qconfig
 
 
-class _DirPaths:
+# ============================================================================
+#  Private helpers
+# ============================================================================
 
-    def _ensureDir(self, *parts: str) -> Path:
-        """根据基础目录创建并返回目标目录。"""
-        directory = self.BaseDir.joinpath(*parts)
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory
+def _detect_base_dir() -> Path:
+    """Return the project root, respecting frozen (cx_Freeze) layouts."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
 
-    def _ensureSubDir(self, baseDir: Path, *parts: str) -> Path:
-        """根据已有目录创建并返回子目录。"""
-        directory = baseDir.joinpath(*parts)
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory
 
-    @cached_property
+# ============================================================================
+#  DirPaths — path resolver
+# ============================================================================
+
+class DirPaths:
+    """Resolves and ensures existence of canonical application directories.
+
+    Uses *cached_property* so each directory is created on first access.
+    """
+
+    def __init__(self, base_dir: Path | None = None):
+        self._base = base_dir if base_dir is not None else _detect_base_dir()
+
+    @property
+    def base_dir(self) -> Path:
+        return self._base
+
+    @property
     def BaseDir(self) -> Path:
-        """
-        return: 应用程序的基础目录Path对象
-        """
-        if getattr(sys, 'frozen', False):
-            return Path(sys.executable).resolve().parent
-        else:
-            return Path(__file__).resolve().parent.parent
+        """Backward-compatible alias for base_dir."""
+        return self._base
 
-    @cached_property
-    def AssetsDir(self) -> Path:
-        """
-        return: Assets目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Assets")
+    def _ensure_dir(self, *parts: str) -> Path:
+        directory = self._base.joinpath(*parts)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
 
-    @cached_property
-    def ConfigDir(self) -> Path:
-        """
-        return: Config目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Config")
+    def _ensure_sub_dir(self, parent: Path, *parts: str) -> Path:
+        directory = parent.joinpath(*parts)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
 
-    @cached_property
-    def ThemeDir(self) -> Path:
-        """
-        return: Theme目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Theme")
-
-    @cached_property
-    def FontDir(self) -> Path:
-        """
-        return: Font目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Font")
-
-    @cached_property
-    def LogDir(self) -> Path:
-        """
-        return: Logs目录的Path对象
-        """
-        return self._ensureDir("Logs")
+    # ---- public cached properties ----
 
     @cached_property
     def ResourcesDir(self) -> Path:
-        """
-        return: Resources目录的Path对象
-        """
-        return self._ensureDir("Resources")
+        return self._ensure_dir("Resources")
+
+    @cached_property
+    def AssetsDir(self) -> Path:
+        return self._ensure_sub_dir(self.ResourcesDir, "Assets")
+
+    @cached_property
+    def ConfigDir(self) -> Path:
+        return self._ensure_sub_dir(self.ResourcesDir, "Config")
+
+    @cached_property
+    def ThemeDir(self) -> Path:
+        return self._ensure_sub_dir(self.ResourcesDir, "Theme")
+
+    @cached_property
+    def FontDir(self) -> Path:
+        return self._ensure_sub_dir(self.ResourcesDir, "Font")
+
+    @cached_property
+    def LogDir(self) -> Path:
+        return self._ensure_dir("Logs")
 
     @cached_property
     def ToolsDir(self) -> Path:
-        """
-        return: Tools目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Tools")
+        return self._ensure_sub_dir(self.ResourcesDir, "Tools")
 
     @cached_property
     def FirmwareDir(self) -> Path:
-        """
-        return: Firmware目录的Path对象
-        """
-        return self._ensureSubDir(self.ResourcesDir, "Firmware")
+        return self._ensure_sub_dir(self.ResourcesDir, "Firmware")
 
     @cached_property
     def McuPackDir(self) -> Path:
-        """
-        return: Pack目录的Path对象
-        """
-        return self._ensureSubDir(self.ToolsDir, "Pack")
+        return self._ensure_sub_dir(self.ToolsDir, "Pack")
 
     @cached_property
     def FirmwarePowerDir(self) -> Path:
-        """
-        return: Power固件目录的Path对象
-        """
-        return self._ensureSubDir(self.FirmwareDir, "Power")
+        return self._ensure_sub_dir(self.FirmwareDir, "Power")
 
     @cached_property
     def FirmwarePower(self) -> Path:
@@ -119,94 +113,217 @@ class _DirPaths:
 
     @cached_property
     def FirmwareUpperDir(self) -> Path:
-        """
-        return: Upper固件目录的Path对象
-        """
-        return self._ensureSubDir(self.FirmwareDir, "Upper")
+        return self._ensure_sub_dir(self.FirmwareDir, "Upper")
 
     @cached_property
     def FirmwareUpper(self) -> Path:
         return self.FirmwareUpperDir
 
+    @cached_property
+    def AppIconPath(self) -> str:
+        return str(self.AssetsDir / "F4CP_ICO_256.ico")
 
-_dirPaths = _DirPaths()
-DirPathsInstance = _dirPaths
+    @cached_property
+    def ConfigIniPath(self) -> Path:
+        return self.ConfigDir / "config.ini"
 
-# 日志文件夹路径
-LOG_DIR = _dirPaths.LogDir
+    @cached_property
+    def ConfigJsonPath(self) -> Path:
+        return self.ConfigDir / "config.json"
 
-# 按年月日_时分生成文件名
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-LOG_PATH = LOG_DIR / f"{timestamp}.log"
 
-# 创建日志器
+# ============================================================================
+#  Logger factory
+# ============================================================================
+
+_logger_initialized: bool = False
 logger = logging.getLogger("F4CP")
 logger.setLevel(logging.DEBUG)
 
-# 控制台输出
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
 
-# 文件输出
-file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
-file_handler.setLevel(logging.DEBUG)
+def _init_logger_once(log_dir: Path):
+    global _logger_initialized
+    if _logger_initialized:
+        return
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    log_path = log_dir / f"{timestamp}.log"
 
-# 日志格式
-formatter = logging.Formatter(
-    "[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
-console_handler.setFormatter(formatter)
-file_handler.setFormatter(formatter)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
 
-if not logger.hasHandlers():
-    logger.addHandler(console_handler)
-    logger.addHandler(file_handler)
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
 
+    formatter = logging.Formatter(
+        "[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+
+    if not logger.hasHandlers():
+        logger.addHandler(console_handler)
+        logger.addHandler(file_handler)
+
+    _logger_initialized = True
+
+
+# ============================================================================
+#  SettingsManager
+# ============================================================================
 
 class SettingsManager:
+    """Thin wrapper around QSettings with typed get/set."""
+
     def __init__(self, config_path: Path):
-        self.config_path = str(config_path.resolve())
-        self.settings = QSettings(self.config_path, QSettings.Format.IniFormat)
+        self._config_path = str(config_path.resolve())
+        self._settings = QSettings(self._config_path, QSettings.Format.IniFormat)
 
-        # QTimer.singleShot(0, self.loadFontToWidget)
+    @property
+    def config_path(self) -> str:
+        return self._config_path
 
-    def get(self, section: str, option: str, fallback: Union[str, int, bool] = None) -> Union[str, int, bool]:
+    def get(self, section: str, option: str, fallback: Any = None) -> Any:
         key = f"{section}/{option}"
-        if self.settings.contains(key):
-            value = self.settings.value(key)
+        if self._settings.contains(key):
+            value = self._settings.value(key)
             if isinstance(fallback, bool):
-                logger.info(f"{self.__class__.__name__} Fallback value: {fallback}")
-                return value.lower() == 'true' if isinstance(value, str) else bool(value)
+                return value.lower() == "true" if isinstance(value, str) else bool(value)
             if isinstance(fallback, int):
                 try:
                     return int(value)
-                except ValueError:
+                except (ValueError, TypeError):
                     return fallback
             return value
         return fallback
 
-    def set(self, section: str, option: str, value: Union[str, int, bool]):
+    def set(self, section: str, option: str, value: Any):
         key = f"{section}/{option}"
-        logger.info(f"{self.__class__.__name__} Setting {key} to {value}")
-        self.settings.setValue(key, value)
-        self.settings.sync()
+        logger.info(f"SettingsManager: {key} = {value}")
+        self._settings.setValue(key, value)
+        self._settings.sync()
+
+    def contains(self, section: str, option: str) -> bool:
+        key = f"{section}/{option}"
+        return self._settings.contains(key)
 
 
-def isWin11():
-    return sys.platform == 'win32' and sys.getwindowsversion().build >= 22000
+# ============================================================================
+#  F4CP QConfig (qfluentwidgets)
+# ============================================================================
 
 
-class Config(QConfig):
-    """ Config of application """
+def _is_win11() -> bool:
+    return sys.platform == "win32" and sys.getwindowsversion().build >= 22000
 
-    micaEnabled = ConfigItem("MainWindow", "MicaEnabled", isWin11(), BoolValidator())
 
+class F4CPConfig(QConfig):
+    micaEnabled = ConfigItem("MainWindow", "MicaEnabled", _is_win11(), BoolValidator())
     checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
-
     enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
 
-class F4CP_GLOBAL:
-    MAIN_WINDOW = {}
+
+# ============================================================================
+#  AppContext — injectable dependency container
+# ============================================================================
+
+class AppContext:
+    """Injectable application context replacing global singletons.
+
+    Usage::
+
+        # Production — context built from the real filesystem
+        ctx = AppContext()
+
+        # Testing — inject a temporary directory
+        ctx = AppContext(base_dir=tmp_path)
+
+        # Access
+        ctx.dirs.FontDir
+        ctx.settings.get("section", "key")
+        ctx.qcfg.themeMode.value
+    """
+
+    def __init__(self, *, base_dir: Path | None = None):
+        self._dirs = DirPaths(base_dir)
+        _init_logger_once(self._dirs.LogDir)
+
+        self._settings = SettingsManager(self._dirs.ConfigIniPath)
+        self._qconfig = F4CPConfig()
+
+        json_path = self._dirs.ConfigJsonPath
+        if json_path.exists():
+            qconfig.load(str(json_path), self._qconfig)
+
+    # ---- properties ----
+
+    @property
+    def dirs(self) -> DirPaths:
+        """Path resolver for canonical directories."""
+        return self._dirs
+
+    @property
+    def settings(self) -> SettingsManager:
+        """Typed QSettings wrapper."""
+        return self._settings
+
+    @property
+    def qcfg(self) -> F4CPConfig:
+        """qfluentwidgets application config."""
+        return self._qconfig
+
+    @property
+    def app_icon_path(self) -> str:
+        return self._dirs.AppIconPath
+
+    # ---- lifecycle ----
+
+    def reload(self):
+        """Reload QConfig from disk (e.g. after external changes)."""
+        json_path = self._dirs.ConfigJsonPath
+        if json_path.exists():
+            qconfig.load(str(json_path), self._qconfig)
+
+
+# ============================================================================
+#  Default context
+# ============================================================================
+
+_default_ctx: AppContext | None = None
+
+def get_default_context() -> AppContext:
+    """Return the singleton default AppContext, creating it on first call."""
+    global _default_ctx
+    if _default_ctx is None:
+        _default_ctx = AppContext()
+    return _default_ctx
+
+
+def set_app_context(ctx: AppContext):
+    """Override the default context (intended for testing)."""
+    global _default_ctx
+    _default_ctx = ctx
+
+
+def reset_app_context():
+    """Reset the default context to None so the next call rebuilds it."""
+    global _default_ctx
+    _default_ctx = None
+
+
+# ============================================================================
+#  CTX — module-level singleton, the one thing you need to import
+# ============================================================================
+
+CTX: AppContext = get_default_context()
+
+# Convenience shortcuts derived from CTX
+cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
+AppIconPath = CTX.app_icon_path  # str — path to app icon
+
+
+# ============================================================================
+#  Application constants (stateless — no DI needed)
+# ============================================================================
 
 
 VERSION_LOCAL_SECTION = "OldVersion"
@@ -226,30 +343,13 @@ UPDATE_URL_OPTION = "UpdateUrl"
 FIRMWARE_GITHUB_OWNER_OPTION = "GithubOwner"
 FIRMWARE_GITHUB_REPO_OPTION = "GithubRepo"
 
-
 YEAR = 2026
 AUTHOR = "UF4OVER"
 VERSION = "1.4.0423"
 HELP_URL = "https://hepi.ng"
-REPO_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets"
-EXAMPLE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/tree/master/examples"
-FEEDBACK_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/issues"
-RELEASE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/releases/latest"
-ZH_SUPPORT_URL = "https://qfluentwidgets.com/zh/price/"
-EN_SUPPORT_URL = "https://qfluentwidgets.com/price/"
-
-# -------------------------------config of application-------------------------------
-APP_CONFIG_PATH = _dirPaths.ConfigDir / "config.ini"
-
-SettingMangerInstance = SettingsManager(APP_CONFIG_PATH)
-logger.info(f"SettingsManager initialized with config path: {APP_CONFIG_PATH}")
-
-# -------------------------------config of qfluentwidgets-------------------------------
-cfg = Config()
-# cfg.themeMode.value = Theme.AUTO
-_config_json_path = _dirPaths.ConfigDir / "config.json"
-qconfig.load(_config_json_path, cfg)
-
-logger.info(f"Config loaded from {_config_json_path}")
-
-AppIconPath = str(_dirPaths.AssetsDir / "F4CP_ICO_256.ico")
+REPO_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+EXAMPLE_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+FEEDBACK_URL = "https://github.com/UF4OVER/UF4DigitalPower/issues"
+RELEASE_URL = "https://github.com/UF4OVER/UF4DigitalPower/releases/latest"
+ZH_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+EN_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"

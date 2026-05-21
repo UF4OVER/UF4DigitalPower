@@ -25,7 +25,8 @@ from urllib.request import Request, urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
-from Config.config import (
+from Config import (
+    CTX,
     FIRMWARE_GITHUB_OWNER_OPTION,
     FIRMWARE_GITHUB_REPO_OPTION,
     FIRMWARE_REMOTE_SECTION,
@@ -35,8 +36,6 @@ from Config.config import (
     LOCAL_UPPER_VERSION_OPTION,
     VERSION_LOCAL_SECTION,
     VERSION_REMOTE_SECTION,
-    SettingMangerInstance,
-    _dirPaths as DirPaths,
     logger,
 )
 
@@ -149,7 +148,7 @@ class FirmwareManager:
 
     @property
     def firmware_dir(self) -> Path:
-        return DirPaths.FirmwareDir
+        return CTX.dirs.FirmwareDir
 
     @property
     def api_root(self) -> str:
@@ -157,7 +156,7 @@ class FirmwareManager:
             return self._apiRoot
 
         owner = str(
-            SettingMangerInstance.get(
+            CTX.settings.get(
                 FIRMWARE_REMOTE_SECTION,
                 FIRMWARE_GITHUB_OWNER_OPTION,
                 "",
@@ -165,7 +164,7 @@ class FirmwareManager:
             or ""
         ).strip()
         repo = str(
-            SettingMangerInstance.get(
+            CTX.settings.get(
                 FIRMWARE_REMOTE_SECTION,
                 FIRMWARE_GITHUB_REPO_OPTION,
                 "",
@@ -304,16 +303,16 @@ class FirmwareManager:
             local_option = LOCAL_LOWER_VERSION_OPTION
             latest_option = LATEST_LOWER_VERSION_OPTION
 
-        SettingMangerInstance.set(VERSION_LOCAL_SECTION, local_option, release.version)
-        SettingMangerInstance.set(VERSION_REMOTE_SECTION, latest_option, release.version)
+        CTX.settings.set(VERSION_LOCAL_SECTION, local_option, release.version)
+        CTX.settings.set(VERSION_REMOTE_SECTION, latest_option, release.version)
 
     def write_latest_versions(self, latest: dict[str, FirmwareRelease]) -> None:
         upper = latest.get("Upper")
         power = latest.get("Power")
         if upper is not None:
-            SettingMangerInstance.set(VERSION_REMOTE_SECTION, LATEST_UPPER_VERSION_OPTION, upper.version)
+            CTX.settings.set(VERSION_REMOTE_SECTION, LATEST_UPPER_VERSION_OPTION, upper.version)
         if power is not None:
-            SettingMangerInstance.set(VERSION_REMOTE_SECTION, LATEST_LOWER_VERSION_OPTION, power.version)
+            CTX.settings.set(VERSION_REMOTE_SECTION, LATEST_LOWER_VERSION_OPTION, power.version)
 
     def build_update_flags(self, latest: dict[str, FirmwareRelease]) -> dict[str, bool]:
         flags: dict[str, bool] = {}

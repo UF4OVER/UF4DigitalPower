@@ -31,6 +31,13 @@ def showMessage(parent, title: str, content: str, level: str = "info", useSide: 
     _ensure_info_bar_manager()
 
     parent_widget = parent if parent is not None else QApplication.activeWindow()
+    host_window = parent_widget.window() if parent_widget is not None else QApplication.activeWindow()
+    if hasattr(host_window, "showDynamicIsland"):
+        try:
+            host_window.showDynamicIsland(title, content, level, min(autoCloseMs, 4200))
+        except Exception:
+            pass
+
     method = {
         "success": InfoBar.success,
         "warning": InfoBar.warning,
