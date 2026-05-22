@@ -316,6 +316,7 @@ def reset_app_context():
 
 CTX: AppContext = get_default_context()
 
+# CTX: AppContext  = AppContext(base_dir=Path(__file__).resolve().parent.parent / ".config")
 # Convenience shortcuts derived from CTX
 cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
 AppIconPath = CTX.app_icon_path  # str — path to app icon
@@ -342,11 +343,12 @@ LATEST_LOWER_VERSION_OPTION = "NewLowerVersion"
 UPDATE_URL_OPTION = "UpdateUrl"
 FIRMWARE_GITHUB_OWNER_OPTION = "GithubOwner"
 FIRMWARE_GITHUB_REPO_OPTION = "GithubRepo"
+FIRMWARE_BASE_URL_OPTION = "BaseUrl"  # FastAPI firmware update server base URL
 
 YEAR = 2026
 AUTHOR = "UF4OVER"
 VERSION = "1.4.0423"
-HELP_URL = "https://hepi.ng"
+HELP_URL = "https://hepi.ng/docs/help"
 REPO_URL = "https://github.com/UF4OVER/UF4DigitalPower"
 EXAMPLE_URL = "https://github.com/UF4OVER/UF4DigitalPower"
 FEEDBACK_URL = "https://github.com/UF4OVER/UF4DigitalPower/issues"

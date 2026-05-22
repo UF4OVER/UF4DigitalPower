@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -27,6 +28,7 @@ from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
 from Config import (
     CTX,
+    FIRMWARE_BASE_URL_OPTION,
     FIRMWARE_GITHUB_OWNER_OPTION,
     FIRMWARE_GITHUB_REPO_OPTION,
     FIRMWARE_REMOTE_SECTION,
@@ -48,9 +50,15 @@ class FirmwareRelease:
     tag: str
     version: str
     date: str
-    suffix: int
+    suffix: int = 0
     asset_name: str = ""
     download_url: str = ""
+    sha256: str = ""
+    size: int = 0
+    channel: str = "stable"
+    device: str = ""
+    hardware: str = ""
+    changelog_url: str = ""
     path: Path | None = None
 
 
@@ -139,41 +147,28 @@ class FirmwareDownloadThread(QThread):
 
 
 class FirmwareManager:
+    # Legacy tag/asset patterns for old GitHub-Releases-style firmware
     _tagPattern = re.compile(r"^(Power|Upper)_(\d{2})_(\d{2})_(\d{3})$", re.IGNORECASE)
     _assetPattern = re.compile(r"^UF4DP_(Power|Upper)_(\d{2})_(\d{2})\.(hex|bin|elf|axf)$", re.IGNORECASE)
     _datedDirPattern = re.compile(r"^(?:(\d{4})[-_])?(\d{2})(\d{2})(?:[-_](\d{3}))?$")
 
+    # New semver-style patterns: F4CP-Power-v0.1.3.bin
+    _newAssetPattern = re.compile(
+        r"^F4CP-(Power|Upper)-v(\d+)\.(\d+)\.(\d+)\.(hex|bin|elf|axf)$",
+        re.IGNORECASE,
+    )
+    _semverDirPattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+
     def __init__(self, api_root: str = ""):
         self._apiRoot = api_root.rstrip("/")
+
+    # ------------------------------------------------------------------
+    # Directory helpers
+    # ------------------------------------------------------------------
 
     @property
     def firmware_dir(self) -> Path:
         return CTX.dirs.FirmwareDir
-
-    @property
-    def api_root(self) -> str:
-        if self._apiRoot:
-            return self._apiRoot
-
-        owner = str(
-            CTX.settings.get(
-                FIRMWARE_REMOTE_SECTION,
-                FIRMWARE_GITHUB_OWNER_OPTION,
-                "",
-            )
-            or ""
-        ).strip()
-        repo = str(
-            CTX.settings.get(
-                FIRMWARE_REMOTE_SECTION,
-                FIRMWARE_GITHUB_REPO_OPTION,
-                "",
-            )
-            or ""
-        ).strip()
-        if not owner or not repo:
-            raise RuntimeError("Firmware GitHub owner/repo is not configured.")
-        return f"https://api.github.com/repos/{owner}/{repo}"
 
     @property
     def power_dir(self) -> Path:
@@ -188,16 +183,20 @@ class FirmwareManager:
         firmwareDir.mkdir(parents=True, exist_ok=True)
         return firmwareDir
 
+    def _kind_dir(self, kind: str) -> Path:
+        normalized = self._normalize_kind(kind)
+        return self.power_dir if normalized == "Power" else self.upper_dir
+
+    # ------------------------------------------------------------------
+    # Public firmware file listing (used by DAPLink page)
+    # ------------------------------------------------------------------
+
     def GetUpperFirmware(self) -> list[Path]:
-        """
-        return: 上位机固件文件Path对象列表
-        """
+        """Return list of all local Upper firmware file paths."""
         return self.list_firmware_files("Upper")
 
     def GetLowerFirmware(self) -> list[Path]:
-        """
-        return: 下位机电源板固件Path对象列表
-        """
+        """Return list of all local Power firmware file paths."""
         return self.list_firmware_files("Power")
 
     def list_firmware_files(self, kind: str) -> list[Path]:
@@ -209,24 +208,147 @@ class FirmwareManager:
         ]
         return sorted(files, key=self._local_sort_key, reverse=True)
 
+    # ------------------------------------------------------------------
+    # Local release inspection
+    # ------------------------------------------------------------------
+
     def get_latest_local_release(self, kind: str) -> FirmwareRelease | None:
         releases = [
             release
             for release in (self._release_from_local_file(path) for path in self.list_firmware_files(kind))
             if release is not None and release.kind.lower() == kind.lower()
         ]
-        return max(releases, key=lambda item: (item.date, item.suffix, item.path.stat().st_mtime if item.path else 0), default=None)
+        return max(releases, key=self._release_sort_key, default=None)
+
+    # ------------------------------------------------------------------
+    # Remote release fetching — routes to API server or GitHub fallback
+    # ------------------------------------------------------------------
 
     def get_latest_remote_releases(self) -> dict[str, FirmwareRelease]:
-        releases = self.fetch_releases()
+        base_url = self._get_base_url()
+        if base_url:
+            return self._fetch_from_api(base_url)
+        # Fall back to the legacy GitHub Releases API
+        logger.info("FirmwareManager: BaseUrl not configured, falling back to GitHub Releases")
+        return self._fetch_from_github()
+
+    def _get_base_url(self) -> str:
+        url = str(
+            CTX.settings.get(FIRMWARE_REMOTE_SECTION, FIRMWARE_BASE_URL_OPTION, "") or ""
+        ).strip().rstrip("/")
+        return url
+
+    # --- FastAPI server path ---
+
+    def _fetch_from_api(self, base_url: str) -> dict[str, FirmwareRelease]:
+        """Fetch latest firmware info from the F4CP update server."""
         latest: dict[str, FirmwareRelease] = {}
-        for release in releases:
-            current = latest.get(release.kind)
-            if current is None or (release.date, release.suffix) > (current.date, current.suffix):
-                latest[release.kind] = release
+        errors: list[str] = []
+
+        for kind in ("Power", "Upper"):
+            kind_lower = kind.lower()
+            try:
+                latest_data = self._api_get_json(f"{base_url}/api/v1/firmware/{kind_lower}/latest")
+                if not isinstance(latest_data, dict):
+                    errors.append(f"{kind}: invalid /latest response")
+                    continue
+                version = str(latest_data.get("latest") or "").strip()
+                if not version:
+                    errors.append(f"{kind}: 'latest' field missing in /latest response")
+                    continue
+                manifest_data = self._api_get_json(
+                    f"{base_url}/api/v1/firmware/{kind_lower}/versions/{version}"
+                )
+                if not isinstance(manifest_data, dict):
+                    errors.append(f"{kind}: invalid manifest response for {version}")
+                    continue
+                release = self._release_from_manifest(kind, base_url, manifest_data)
+                if release is not None:
+                    latest[kind] = release
+                else:
+                    errors.append(f"{kind}: could not parse manifest for {version}")
+            except Exception as exc:
+                logger.warning(f"FirmwareManager failed to fetch {kind} firmware info: {exc}")
+                errors.append(f"{kind}: {exc}")
+
+        if not latest and errors:
+            raise RuntimeError(f"Failed to fetch firmware info from update server: {'; '.join(errors)}")
+
         return latest
 
+    def _release_from_manifest(
+        self,
+        kind: str,
+        base_url: str,
+        manifest_data: dict,
+    ) -> FirmwareRelease | None:
+        """Build a FirmwareRelease from a manifest JSON dict returned by the API."""
+        version = str(manifest_data.get("version") or "").strip()
+        if not version:
+            return None
+
+        files = manifest_data.get("files") or {}
+        # Prefer .bin, fall back to .hex
+        file_info = files.get("bin") or files.get("hex")
+        if not file_info or not isinstance(file_info, dict):
+            return None
+
+        rel_url = str(file_info.get("download_url") or "").strip()
+        if not rel_url:
+            return None
+        download_url = (base_url + rel_url) if rel_url.startswith("/") else rel_url
+
+        sha256 = str(file_info.get("sha256") or "").strip()
+        size = int(file_info.get("size") or 0)
+        asset_name = str(file_info.get("name") or "").strip()
+
+        rel_changelog = str(manifest_data.get("changelog_url") or "").strip()
+        changelog_url = (base_url + rel_changelog) if rel_changelog.startswith("/") else rel_changelog
+
+        return FirmwareRelease(
+            kind=kind,
+            tag=version,
+            version=version,
+            date=str(manifest_data.get("date") or ""),
+            suffix=0,
+            asset_name=asset_name,
+            download_url=download_url,
+            sha256=sha256,
+            size=size,
+            channel=str(manifest_data.get("channel") or "stable"),
+            device=str(manifest_data.get("device") or ""),
+            hardware=str(manifest_data.get("hardware") or ""),
+            changelog_url=changelog_url,
+        )
+
+    # --- Legacy GitHub Releases path ---
+
+    def _fetch_from_github(self) -> dict[str, FirmwareRelease]:
+        releases = self.fetch_releases()
+        gh_latest: dict[str, FirmwareRelease] = {}
+        for release in releases:
+            current = gh_latest.get(release.kind)
+            if current is None or (release.date, release.suffix) > (current.date, current.suffix):
+                gh_latest[release.kind] = release
+        return gh_latest
+
+    @property
+    def api_root(self) -> str:
+        """Legacy GitHub API root — only used when BaseUrl is not configured."""
+        if self._apiRoot:
+            return self._apiRoot
+        owner = str(
+            CTX.settings.get(FIRMWARE_REMOTE_SECTION, FIRMWARE_GITHUB_OWNER_OPTION, "") or ""
+        ).strip()
+        repo = str(
+            CTX.settings.get(FIRMWARE_REMOTE_SECTION, FIRMWARE_GITHUB_REPO_OPTION, "") or ""
+        ).strip()
+        if not owner or not repo:
+            raise RuntimeError("Firmware remote BaseUrl and GitHub owner/repo are both not configured.")
+        return f"https://api.github.com/repos/{owner}/{repo}"
+
     def fetch_releases(self) -> list[FirmwareRelease]:
+        """Fetch firmware releases from the legacy GitHub Releases API."""
         payload = self._github_get_json(f"{self.api_root}/releases")
         if not isinstance(payload, list):
             return []
@@ -235,12 +357,10 @@ class FirmwareManager:
         for item in payload:
             if not isinstance(item, dict):
                 continue
-
             tag = str(item.get("tag_name") or "").strip()
             release = self._release_from_tag(tag)
             if release is None:
                 continue
-
             asset = self._find_release_asset(item, release.kind, release.date)
             if asset is not None:
                 release = FirmwareRelease(
@@ -253,8 +373,11 @@ class FirmwareManager:
                     download_url=str(asset.get("browser_download_url") or ""),
                 )
             releases.append(release)
-
         return releases
+
+    # ------------------------------------------------------------------
+    # Download with SHA-256 verification
+    # ------------------------------------------------------------------
 
     def download_latest(self, kind: str) -> FirmwareRelease:
         latest = self.get_latest_remote_releases().get(self._normalize_kind(kind))
@@ -264,20 +387,44 @@ class FirmwareManager:
 
     def download_release(self, release: FirmwareRelease) -> FirmwareRelease:
         if not release.download_url:
-            raise RuntimeError(f"Release {release.tag} does not contain a downloadable firmware asset.")
+            raise RuntimeError(
+                f"Release {release.tag} does not contain a downloadable firmware asset."
+            )
 
         target_dir = self._kind_dir(release.kind) / self._version_dir_name(release)
         target_dir.mkdir(parents=True, exist_ok=True)
-        target_path = target_dir / release.asset_name
+
+        # Derive filename: prefer asset_name, fall back to URL basename
+        asset_name = release.asset_name or Path(release.download_url.split("?")[0]).name
+        if not asset_name:
+            asset_name = f"F4CP-{release.kind}-{release.version}.bin"
+        target_path = target_dir / asset_name
 
         request = self._build_request(release.download_url)
         tmp_path: Path | None = None
         try:
             with urlopen(request, timeout=60) as response:
-                with tempfile.NamedTemporaryFile(delete=False, dir=str(target_dir), suffix=target_path.suffix) as tmp_file:
+                suffix = Path(asset_name).suffix or ".bin"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, dir=str(target_dir), suffix=suffix
+                ) as tmp_file:
                     shutil.copyfileobj(response, tmp_file)
                     tmp_path = Path(tmp_file.name)
+
+            # SHA-256 integrity check
+            if release.sha256:
+                actual_digest = self._sha256_file(tmp_path)
+                if actual_digest.lower() != release.sha256.lower().strip():
+                    tmp_path.unlink(missing_ok=True)
+                    tmp_path = None
+                    raise RuntimeError(
+                        f"SHA-256 mismatch for {asset_name}: "
+                        f"expected {release.sha256}, got {actual_digest}"
+                    )
+
             tmp_path.replace(target_path)
+            tmp_path = None
+
         except (HTTPError, URLError, OSError) as exc:
             if tmp_path and tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
@@ -290,10 +437,20 @@ class FirmwareManager:
             version=release.version,
             date=release.date,
             suffix=release.suffix,
-            asset_name=release.asset_name,
+            asset_name=asset_name,
             download_url=release.download_url,
+            sha256=release.sha256,
+            size=release.size,
+            channel=release.channel,
+            device=release.device,
+            hardware=release.hardware,
+            changelog_url=release.changelog_url,
             path=target_path,
         )
+
+    # ------------------------------------------------------------------
+    # Config write-back
+    # ------------------------------------------------------------------
 
     def write_local_version(self, release: FirmwareRelease) -> None:
         if release.kind == "Upper":
@@ -320,13 +477,14 @@ class FirmwareManager:
             remote = latest.get(kind)
             local = self.get_latest_local_release(kind)
             flags[kind] = remote is not None and (
-                local is None or (remote.date, remote.suffix) > (local.date, local.suffix)
+                local is None
+                or self._release_sort_key(remote) > self._release_sort_key(local)
             )
         return flags
 
-    def _kind_dir(self, kind: str) -> Path:
-        normalized = self._normalize_kind(kind)
-        return self.power_dir if normalized == "Power" else self.upper_dir
+    # ------------------------------------------------------------------
+    # Static normalisation / parsing helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _normalize_kind(kind: str) -> str:
@@ -335,22 +493,68 @@ class FirmwareManager:
             return "Power"
         if text in {"upper", "stm32h750"}:
             return "Upper"
-        raise ValueError(f"Unsupported firmware kind: {kind}")
+        raise ValueError(f"Unsupported firmware kind: {kind!r}")
 
-    def _release_from_tag(self, tag: str) -> FirmwareRelease | None:
-        match = self._tagPattern.match(tag)
-        if match is None:
-            return None
-        kind = self._normalize_kind(match.group(1))
-        date = f"{match.group(2)}_{match.group(3)}"
-        suffix = int(match.group(4))
-        return FirmwareRelease(kind=kind, tag=tag, version=tag, date=date, suffix=suffix)
+    @staticmethod
+    def _parse_semver(version: str) -> tuple[int, int, int] | None:
+        """Parse 'v0.1.3' or '0.1.3' -> (0, 1, 3), return None if not semver."""
+        m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", str(version or "").strip())
+        if m:
+            return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        return None
+
+    @classmethod
+    def _release_sort_key(cls, release: FirmwareRelease) -> tuple[int, int, int, int, int]:
+        """Return a sortable key, where semver releases (era=1) always rank above old-style (era=0)."""
+        semver = cls._parse_semver(release.version)
+        if semver:
+            return (1, semver[0], semver[1], semver[2], 0)
+        # Old-style: encode date "MM_DD" or "YYYY-MM-DD" as numeric
+        try:
+            parts = str(release.date).replace("-", "_").split("_")
+            mm = int(parts[-2]) if len(parts) >= 2 else 0
+            dd = int(parts[-1]) if len(parts) >= 1 else 0
+            date_int = mm * 100 + dd
+        except (ValueError, IndexError):
+            date_int = 0
+        return (0, 0, date_int, release.suffix, 0)
+
+    @staticmethod
+    def _version_dir_name(release: FirmwareRelease) -> str:
+        # New semver releases: use version string directly as directory name
+        if re.match(r"^v\d+\.\d+\.\d+", release.version):
+            return release.version
+        # Old date-based format
+        year = datetime.now().strftime("%Y")
+        month, day = release.date.split("_", 1)
+        return f"{year}-{month}{day}-{release.suffix:03d}"
+
+    # ------------------------------------------------------------------
+    # Local file parsing (supports both old and new naming conventions)
+    # ------------------------------------------------------------------
 
     def _release_from_local_file(self, path: Path) -> FirmwareRelease | None:
+        # New semver naming: F4CP-Power-v0.1.3.bin
+        new_match = self._newAssetPattern.match(path.name)
+        if new_match is not None:
+            kind = self._normalize_kind(new_match.group(1))
+            version = f"v{new_match.group(2)}.{new_match.group(3)}.{new_match.group(4)}"
+            # Try to read date from sibling manifest.json
+            date_str = self._read_manifest_date(path.parent)
+            return FirmwareRelease(
+                kind=kind,
+                tag=version,
+                version=version,
+                date=date_str,
+                suffix=0,
+                asset_name=path.name,
+                path=path,
+            )
+
+        # Legacy naming: UF4DP_Power_MM_DD.hex
         asset_match = self._assetPattern.match(path.name)
         if asset_match is None:
             return None
-
         kind = self._normalize_kind(asset_match.group(1))
         date = f"{asset_match.group(2)}_{asset_match.group(3)}"
         suffix = self._suffix_from_parent(path.parent, date)
@@ -365,6 +569,27 @@ class FirmwareManager:
             path=path,
         )
 
+    @staticmethod
+    def _read_manifest_date(version_dir: Path) -> str:
+        """Try to read 'date' field from a sibling manifest.json, return '' on failure."""
+        manifest_path = version_dir / "manifest.json"
+        if manifest_path.exists():
+            try:
+                data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                return str(data.get("date") or "")
+            except Exception:
+                pass
+        return ""
+
+    def _release_from_tag(self, tag: str) -> FirmwareRelease | None:
+        match = self._tagPattern.match(tag)
+        if match is None:
+            return None
+        kind = self._normalize_kind(match.group(1))
+        date = f"{match.group(2)}_{match.group(3)}"
+        suffix = int(match.group(4))
+        return FirmwareRelease(kind=kind, tag=tag, version=tag, date=date, suffix=suffix)
+
     def _suffix_from_parent(self, parent: Path, date: str) -> int:
         release = self._release_from_tag(parent.name)
         if release is not None and release.date == date:
@@ -375,28 +600,55 @@ class FirmwareManager:
             return int(suffix) if suffix else 0
         return 0
 
-    def _find_release_asset(self, item: dict[str, object], kind: str, date: str) -> dict[str, object] | None:
+    def _find_release_asset(
+        self, item: dict[str, object], kind: str, date: str
+    ) -> dict[str, object] | None:
         assets = item.get("assets")
         if not isinstance(assets, list):
             return None
-
         expected_prefix = f"UF4DP_{kind}_{date}"
         matched_assets: list[dict[str, object]] = []
         for asset in assets:
             if not isinstance(asset, dict):
                 continue
             name = str(asset.get("name") or "")
-            if name.lower().startswith(expected_prefix.lower()) and Path(name).suffix.lower() in FIRMWARE_EXTENSIONS:
+            if (
+                name.lower().startswith(expected_prefix.lower())
+                and Path(name).suffix.lower() in FIRMWARE_EXTENSIONS
+            ):
                 matched_assets.append(asset)
-
         if not matched_assets:
             return None
-
         extension_priority = {".hex": 0, ".bin": 1, ".elf": 2, ".axf": 3}
         return min(
             matched_assets,
-            key=lambda asset: extension_priority.get(Path(str(asset.get("name") or "")).suffix.lower(), 99),
+            key=lambda a: extension_priority.get(
+                Path(str(a.get("name") or "")).suffix.lower(), 99
+            ),
         )
+
+    # ------------------------------------------------------------------
+    # HTTP helpers
+    # ------------------------------------------------------------------
+
+    def _api_get_json(self, url: str) -> object:
+        """Fetch JSON from the F4CP update server, raising RuntimeError on failure."""
+        request = self._build_request(url)
+        try:
+            with urlopen(request, timeout=15) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise RuntimeError(
+                f"HTTP {exc.code} from update server ({url}): {exc.reason}"
+            ) from exc
+        except URLError as exc:
+            raise RuntimeError(
+                f"Cannot connect to update server ({url}): {exc}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Update server returned invalid JSON ({url}): {exc}"
+            ) from exc
 
     def _github_get_json(self, url: str) -> object:
         request = self._build_request(url)
@@ -409,18 +661,40 @@ class FirmwareManager:
 
     @staticmethod
     def _build_request(url: str) -> Request:
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "F4CP-FirmwareManager",
-            "X-GitHub-Api-Version": "2022-11-28",
+        headers: dict[str, str] = {
+            "User-Agent": "F4CP-FirmwareManager/1.0",
+            "Accept": "application/json",
         }
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        # Add GitHub-specific headers only for GitHub API URLs
+        if "api.github.com" in url:
+            headers["Accept"] = "application/vnd.github+json"
+            headers["X-GitHub-Api-Version"] = "2022-11-28"
+            token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
         return Request(url, headers=headers)
 
     @staticmethod
-    def _local_sort_key(path: Path) -> tuple[str, int, float, str]:
+    def _sha256_file(path: Path) -> str:
+        """Compute the SHA-256 hex digest of *path*."""
+        h = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    # ------------------------------------------------------------------
+    # Sort key for raw file paths (used by list_firmware_files)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _local_sort_key(path: Path) -> tuple:
+        # New semver naming takes priority
+        new_match = FirmwareManager._newAssetPattern.match(path.name)
+        if new_match is not None:
+            v = (int(new_match.group(2)), int(new_match.group(3)), int(new_match.group(4)))
+            return (1, v[0], v[1], v[2], 0.0)
+
         date = ""
         suffix = 0
         asset_match = FirmwareManager._assetPattern.match(path.name)
@@ -437,13 +711,11 @@ class FirmwareManager:
                 suffix_text = dir_match.group(4)
                 suffix = int(suffix_text) if suffix_text else 0
 
-        return date, suffix, path.stat().st_mtime, path.name
-
-    @staticmethod
-    def _version_dir_name(release: FirmwareRelease) -> str:
-        year = datetime.now().strftime("%Y")
-        month, day = release.date.split("_", 1)
-        return f"{year}-{month}{day}-{release.suffix:03d}"
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        return (0, 0, 0, 0, mtime)
 
 
 firmware_manager = FirmwareManager()

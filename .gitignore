@@ -13,3 +13,4 @@ Logs/
 
 # Runtime config (contains device-specific settings)
 Resources/Config/
+/.config/
