@@ -15,7 +15,6 @@ dependencies = [
     "PyQt5>=5.15.2",
     "pyqtgraph >=0.14.0",
     "pyocd>=0.44.0",
-    "numpy>=2.2.6",
     "pyqt-fluent-widgets>=1.11.2",
 ]
 
@@ -64,10 +63,10 @@ zip_exclude_packages = [
 ]
 
 excludes = [
-#    "numpy",
-#    "numpy.core",
-#    "numpy.linalg",
-#    "numpy.lib",
+    "numpy",
+    "numpy.core",
+    "numpy.linalg",
+    "numpy.lib",
     "scipy",
     "scipy.linalg",
     "scipy.sparse",
