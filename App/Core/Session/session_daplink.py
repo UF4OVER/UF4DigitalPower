@@ -34,6 +34,8 @@ PYOCD_PROGRESS_PHASE_RANGES = {
     "program": (20.0, 100.0),
 }
 PYOCD_DEFAULT_PROGRESS_STEPS = 40
+SUPPORTED_TARGET_KEYWORDS = ("g474", "h743", "h750")
+SUPPORTED_PACK_NAME_KEYWORDS = ("g474", "h743", "h750")
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 PYOCD_PROGRESS_FRAGMENT_RE = re.compile(r"^[\[\]\-=|\s]+$")
 
@@ -844,15 +846,23 @@ class DaplinkPyocdSession(QObject):
     def discover_pack_targets(cls) -> tuple[list[Path], list[DaplinkTargetInfo]]:
         pyocd_api = _pyocd_api()
         pack_dir = cls.pack_dir()
-        pack_paths = sorted(pack_dir.glob("*.pack"))
+        pack_paths = cls._candidate_pack_paths(pack_dir)
+        used_pack_paths: set[Path] = set()
         targets_by_name: dict[str, DaplinkTargetInfo] = {}
 
         for pack_path in pack_paths:
             metadata = cls._read_pack_metadata(pack_path)
-            cmsis_pack = pyocd_api.CmsisPack(str(pack_path))
+            try:
+                cmsis_pack = pyocd_api.CmsisPack(str(pack_path))
+            except Exception as exc:  # NOQA broad-except
+                logger.warning(f"Skip invalid CMSIS Pack {pack_path}: {exc}")
+                continue
+
             for device in cmsis_pack.devices:
                 target_name = pyocd_api.normalise_target_type_name(device.part_number)
                 if target_name in targets_by_name:
+                    continue
+                if not cls._is_supported_target(device.part_number, target_name, device.families):
                     continue
 
                 flash_region = next((region for region in device.memory_map if isinstance(region, pyocd_api.FlashRegion)), None)
@@ -872,9 +882,10 @@ class DaplinkPyocdSession(QObject):
                     pack_version=metadata["version"],
                     pack_path=str(pack_path),
                 )
+                used_pack_paths.add(pack_path)
 
         targets = sorted(targets_by_name.values(), key=lambda item: item.part_number.lower())
-        return pack_paths, targets
+        return sorted(used_pack_paths), targets
 
     @staticmethod
     def scan_daplink_probes() -> list[DaplinkProbeInfo]:
@@ -935,6 +946,29 @@ class DaplinkPyocdSession(QObject):
             "vendor": (root.findtext("vendor") or default_vendor).strip(),
         }
 
+    @classmethod
+    def _candidate_pack_paths(cls, pack_dir: Path) -> list[Path]:
+        if not pack_dir.is_dir():
+            return []
+
+        all_pack_paths = sorted(pack_dir.glob("*.pack"))
+        filtered = [
+            path for path in all_pack_paths
+            if any(keyword in path.name.lower() for keyword in SUPPORTED_PACK_NAME_KEYWORDS)
+        ]
+        return filtered or all_pack_paths
+
+    @staticmethod
+    def _is_supported_target(part_number: str, target_name: str, families) -> bool:
+        text = " ".join(
+            [
+                part_number or "",
+                target_name or "",
+                " ".join(families or []),
+            ]
+        ).lower()
+        return any(keyword in text for keyword in SUPPORTED_TARGET_KEYWORDS)
+
     @staticmethod
     def _parse_frequency(text: str) -> int:
         value = (text or "").strip().lower().replace("hz", "")
@@ -966,4 +1000,3 @@ class DaplinkPyocdSession(QObject):
         if address is None:
             return "--"
         return f"0x{address:08X}"
-
