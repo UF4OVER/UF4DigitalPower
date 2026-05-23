@@ -11,7 +11,7 @@ What it does:
 3. Deletes unused Qt5 platform/plugin DLLs (~2 MB)
 4. Deletes pyOCD SVD debug data (14.5 MB)
 5. Deletes capstone disassembly DLL (7.2 MB)
-6. Strips CMSIS Pack files — keep at most one recent pack
+6. Strips CMSIS Pack files — keep STM32G474/H743/H750 related packs only
 7. UPX-compresses remaining .exe / .dll / .pyd files
 """
 
@@ -49,6 +49,7 @@ LIB_DLL_EXCLUDES = [
     "capstone.dll",
 ]
 
+PACK_KEEP_KEYWORDS = ("g474", "h743", "h750")
 MAX_CMSIS_PACKS = 2
 
 
@@ -115,15 +116,37 @@ def trim_cmsis_packs(exe_dir: Path):
     pack_dir = exe_dir / "Resources" / "Tools" / "Pack"
     if not pack_dir.is_dir():
         return
+
     packs = sorted(pack_dir.glob("*.pack"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if len(packs) <= MAX_CMSIS_PACKS:
-        print(f"[CMSIS Pack] {len(packs)} pack(s), no trimming needed")
+    if not packs:
+        print("[CMSIS Pack] no pack files found")
         return
-    for old in packs[MAX_CMSIS_PACKS:]:
-        size_mb = old.stat().st_size / (1024 * 1024)
-        old.unlink()
-        print(f"[CMSIS Pack] removed {old.name} ({size_mb:.1f} MB)")
-    print(f"[CMSIS Pack] kept {MAX_CMSIS_PACKS} of {len(packs)}")
+
+    keep = [pack for pack in packs if any(key in pack.name.lower() for key in PACK_KEEP_KEYWORDS)]
+
+    # If pack filenames are generic and cannot be recognised, keep the previous
+    # fallback behaviour instead of deleting every pack and breaking flashing.
+    if not keep:
+        keep = packs[:MAX_CMSIS_PACKS]
+        print(f"[CMSIS Pack] no G474/H743/H750 filename match, fallback keep latest {len(keep)} pack(s)")
+
+    keep_set = set(keep)
+    removed = 0
+    removed_size = 0
+    for pack in packs:
+        if pack in keep_set:
+            continue
+        size = pack.stat().st_size
+        pack.unlink()
+        removed += 1
+        removed_size += size
+        print(f"[CMSIS Pack] removed {pack.name} ({size / (1024 * 1024):.1f} MB)")
+
+    kept_names = ", ".join(pack.name for pack in sorted(keep_set, key=lambda p: p.name.lower()))
+    print(
+        f"[CMSIS Pack] kept {len(keep_set)} pack(s): {kept_names}; "
+        f"removed {removed} pack(s), {removed_size / (1024 * 1024):.1f} MB"
+    )
 
 
 def compress_with_upx(exe_dir: Path):
