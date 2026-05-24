@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
-from App.Pages.page_power import PowerPage
+from widgets.pages import PowerPage
 
 
 class _FakeScanner(QObject):
@@ -30,7 +30,7 @@ class PowerPageConnectionModeTests(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
 
     def test_connection_mode_controls_switch_between_serial_and_bluetooth(self):
-        with patch("App.Pages.page_power.DeviceScanner", _FakeScanner):
+        with patch("app.pages.page_power.DeviceScanner", _FakeScanner):
             page = PowerPage()
 
         try:
@@ -49,7 +49,7 @@ class PowerPageConnectionModeTests(unittest.TestCase):
             page.deleteLater()
 
     def test_bluetooth_target_keeps_display_name_and_address_mapping(self):
-        with patch("App.Pages.page_power.DeviceScanner", _FakeScanner):
+        with patch("app.pages.page_power.DeviceScanner", _FakeScanner):
             page = PowerPage()
 
         try:

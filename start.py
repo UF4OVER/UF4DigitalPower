@@ -19,12 +19,12 @@ from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
 
-from Config import AppIconPath, cfg
+from config import AppIconPath, cfg
 
-from App.Core import StyleSheet, logger, loadSavedFont
-from App.Core import UF4Icon
+from app.manager import StyleSheet, logger, loadSavedFont
 
-from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
+from app.widgets.icon import UF4Icon
+from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
 
 
 class DynamicIsland(QFrame):

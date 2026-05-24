@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from PyQt5.QtCore import QCoreApplication
 
-from App.Core.Session.session_daplink import (
+from session.session_daplink import (
     DaplinkProgrammerEventType,
     DaplinkPyocdSession,
 )
@@ -104,7 +104,7 @@ class DaplinkProcessOutputTests(unittest.TestCase):
         )
 
     def test_pyocd_command_uses_python_module_in_venv(self):
-        with patch("App.Core.Session.session_daplink.sys.executable", r"E:\PROJECT_DPOWER\F4CP\.venv\Scripts\python.exe"):
+        with patch("app.core.session.session_daplink.sys.executable", r"E:\PROJECT_DPOWER\F4CP\.venv\Scripts\python.exe"):
             program, args = DaplinkPyocdSession._pyocd_command()
 
         self.assertEqual(program, r"E:\PROJECT_DPOWER\F4CP\.venv\Scripts\python.exe")

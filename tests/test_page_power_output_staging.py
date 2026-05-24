@@ -8,8 +8,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
-from App.Pages.page_power import PowerPage
-from App.Core.Session.session_powert import PowerStatus
+from widgets.pages import PowerPage
+from session import PowerStatus
 
 
 class _FakeScanner(QObject):
@@ -64,7 +64,7 @@ class PowerPageOutputStagingTests(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
 
     def test_poll_refresh_does_not_overwrite_staged_output_state(self):
-        with patch("App.Pages.page_power.DeviceScanner", _FakeScanner):
+        with patch("app.pages.page_power.DeviceScanner", _FakeScanner):
             page = PowerPage()
 
         try:

@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication
 
-from App.Pages.page_device import DevicePage
+from widgets.pages import DevicePage
 
 
 class DevicePageConnectionModeTests(unittest.TestCase):

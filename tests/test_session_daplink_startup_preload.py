@@ -2,7 +2,7 @@ import unittest
 
 from PyQt5.QtCore import QCoreApplication
 
-from App.Core.Session.session_daplink import (
+from session.session_daplink import (
     DaplinkProgrammerEventType,
     DaplinkPyocdSession,
     DaplinkRequestPayload,

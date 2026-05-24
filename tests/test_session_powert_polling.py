@@ -5,12 +5,12 @@ from typing import cast
 
 from PyQt5.QtCore import QCoreApplication
 
-from App.Core.Session.session_powert import (
+from session import (
     F4CPPowerClient,
     PowerDataType,
     PowerStatus,
 )
-from App.Core.Session.session_serial import SerialSession
+from session.session_serial import SerialSession
 
 
 class _FakeSerialSession:

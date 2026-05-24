@@ -83,7 +83,7 @@ jobs:
 
       - name: Build packaged exe
         run: |
-          powershell -ExecutionPolicy Bypass -File .\Script\package_exe.ps1
+          powershell -ExecutionPolicy Bypass -File .\script\package_exe.ps1
 
       - name: Download UPX
         run: |
@@ -93,7 +93,7 @@ jobs:
 
       - name: Compress binaries with UPX
         run: |
-          python Script/upx_zip.py
+          python script/upx_zip.py
 
       - name: Package build output for release
         shell: pwsh

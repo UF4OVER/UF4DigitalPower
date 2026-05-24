@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication
 
-from App.Pages.page_battery import BatteryPage, BatterySnapshot
+from widgets.pages import BatteryPage, BatterySnapshot
 
 
 class BatteryPageTests(unittest.TestCase):
