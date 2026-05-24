@@ -9,23 +9,10 @@ from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
-    BodyLabel,
-    CardWidget,
-    CaptionLabel,
-    ComboBox,
-    FluentIcon as FIF,
-    LineEdit,
-    PillPushButton,
-    PrimaryPushButton,
-    PushButton,
-    ScrollArea,
-    StrongBodyLabel,
-    SubtitleLabel,
-    SwitchButton,
-    TextEdit,
-    TitleLabel,
-    isDarkTheme,
-    setFont,
+    BodyLabel, CardWidget, CaptionLabel, ComboBox, FluentIcon as FIF,
+    LineEdit, PillPushButton, PrimaryPushButton, PushButton, ScrollArea,
+    StrongBodyLabel, SubtitleLabel, SwitchButton, TextEdit, TitleLabel,
+    isDarkTheme, setFont,
 )
 
 from app.core.channel import ChannelConfig
@@ -33,17 +20,12 @@ from app.core.data_hub import DataHub
 from app.core.utility import showMessage
 from app.manager import StyleSheet
 from app.session import (
-    DebugSnapshot,
-    F4CPPowerClient,
-    PowerStatus,
-    SerialConfig,
-    SerialSession,
-    listSerialPorts,
-    pretty_faults,
+    DebugSnapshot, F4CPPowerClient, PowerStatus, SerialConfig,
+    SerialSession, listSerialPorts, pretty_faults,
 )
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
-from config import cfg, logger
+from config import CTX, cfg, logger
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
@@ -141,18 +123,13 @@ class StatusChip(PillPushButton):
             background = "rgba(239, 68, 68, 0.20)"
             foreground = "#F87171" if isDarkTheme() else "#B91C1C"
             border = "rgba(239, 68, 68, 0.34)"
-        self.setStyleSheet(
-            f"""
+        self.setStyleSheet(f"""
             PillPushButton {{
-                background: {background};
-                color: {foreground};
-                border: 1px solid {border};
-                border-radius: 14px;
-                padding: 0 12px;
-                font-weight: 700;
+                background: {background}; color: {foreground};
+                border: 1px solid {border}; border-radius: 14px;
+                padding: 0 12px; font-weight: 700;
             }}
-            """
-        )
+        """)
 
 
 class ParameterEditor(CardWidget):
@@ -257,20 +234,14 @@ class TelemetryChartCard(CardWidget):
         self.chart.refreshTheme()
 
     def pushStatus(self, status: PowerStatus) -> None:
-        self.dataHub.push_many(
-            {
-                "vin": status.vin_v,
-                "vout": status.vout_v,
-                "iin": status.iin_a,
-                "iout": status.iout_a,
-                "pin": status.pin_w,
-                "pout": status.pout_w,
-                "efficiency": status.efficiency,
-                "core_temp": status.core_temp_c,
-                "board_temp": status.board_temp_c,
-            },
-            t=time.time(),
-        )
+        self.dataHub.push_many({
+            "vin": status.vin_v, "vout": status.vout_v,
+            "iin": status.iin_a, "iout": status.iout_a,
+            "pin": status.pin_w, "pout": status.pout_w,
+            "efficiency": status.efficiency,
+            "core_temp": status.core_temp_c,
+            "board_temp": status.board_temp_c,
+        }, t=time.time())
 
     def pushMock(self) -> None:
         t = time.time()
@@ -281,20 +252,13 @@ class TelemetryChartCard(CardWidget):
         iout = 3.0 + math.sin(phase * 0.9) * 0.35
         pin = vin * iin
         pout = vout * iout
-        self.dataHub.push_many(
-            {
-                "vin": vin,
-                "vout": vout,
-                "iin": iin,
-                "iout": iout,
-                "pin": pin,
-                "pout": pout,
-                "efficiency": 0.0 if pin <= 0 else pout / pin * 100.0,
-                "core_temp": 42.0 + math.sin(phase * 0.25) * 2.0,
-                "board_temp": 38.0 + math.sin(phase * 0.32) * 1.4,
-            },
-            t=t,
-        )
+        self.dataHub.push_many({
+            "vin": vin, "vout": vout, "iin": iin, "iout": iout,
+            "pin": pin, "pout": pout,
+            "efficiency": 0.0 if pin <= 0 else pout / pin * 100.0,
+            "core_temp": 42.0 + math.sin(phase * 0.25) * 2.0,
+            "board_temp": 38.0 + math.sin(phase * 0.32) * 1.4,
+        }, t=t)
 
 
 class PowerPage(ScrollArea):
@@ -319,6 +283,7 @@ class PowerPage(ScrollArea):
         self._writePollingRestartPending = False
         self._lastVerboseLogTs = 0.0
         self._appendLogBusy = False
+        self._pageLogPath = CTX.dirs.LogDir / f"power_page_{time.strftime('%Y-%m-%d')}.log"
 
         self._client = F4CPPowerClient()
         self._clientThread = QThread(self)
@@ -493,12 +458,14 @@ class PowerPage(ScrollArea):
     def refreshSerialPorts(self) -> None:
         ports = [p.strip() for p in (listSerialPorts() or []) if p and p.strip()]
         current = self.portCombo.currentText().strip()
+        self.portCombo.blockSignals(True)
         self.portCombo.clear()
         if ports:
             self.portCombo.addItems(ports)
             if current in ports:
                 self.portCombo.setCurrentText(current)
-        self._appendLog(f"串口列表: {ports}")
+        self.portCombo.blockSignals(False)
+        self._writePageLogFile(f"串口列表: {ports}")
 
     def toggleConnection(self) -> None:
         if self._client.is_connected:
@@ -538,7 +505,7 @@ class PowerPage(ScrollArea):
             if self._manualSession:
                 self._manualSession.close()
         except Exception as exc:
-            logger.error(f"PowerPage manual session close failed: {exc}")
+            self._writePageLogFile(f"PowerPage manual session close failed: {exc}")
         self._manualSession = None
         self._applyDisconnectedState()
         self._appendLog("设备已断开")
@@ -552,7 +519,7 @@ class PowerPage(ScrollArea):
             session.set_event_receiver(None)
             session.close()
         except Exception as exc:
-            logger.error(f"PowerPage serial cleanup failed: {exc}")
+            self._writePageLogFile(f"PowerPage serial cleanup failed: {exc}")
 
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setOnline(connected)
@@ -739,13 +706,23 @@ class PowerPage(ScrollArea):
         if not self.parameterEditor.ovp.text():
             self.parameterEditor.ovp.setText(DEFAULT_OVP_SET_VALUE_TEXT)
 
+    def _writePageLogFile(self, text: str) -> None:
+        try:
+            self._pageLogPath.parent.mkdir(parents=True, exist_ok=True)
+            with self._pageLogPath.open("a", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
+        except Exception:
+            pass
+
     def _appendLog(self, text: str) -> None:
         if self._appendLogBusy:
             return
         self._appendLogBusy = True
         try:
             ts = time.strftime("%H:%M:%S")
-            self.logEdit.append(f"[{ts}] {text}")
+            self._writePageLogFile(text)
+            if getattr(self, "logEdit", None) is not None:
+                self.logEdit.append(f"[{ts}] {text}")
         finally:
             self._appendLogBusy = False
 
@@ -787,17 +764,17 @@ class PowerPage(ScrollArea):
             if self._manualSession:
                 self._manualSession.close()
         except Exception as exc:
-            logger.error(f"PowerPage manual session shutdown failed: {exc}")
+            self._writePageLogFile(f"PowerPage manual session shutdown failed: {exc}")
         self._manualSession = None
         try:
             if self._clientThread.isRunning():
                 QMetaObject.invokeMethod(self._client, "shutdown", Qt.BlockingQueuedConnection)
         except Exception as exc:
-            logger.error(f"PowerPage client shutdown failed: {exc}")
+            self._writePageLogFile(f"PowerPage client shutdown failed: {exc}")
         if self._clientThread.isRunning():
             self._clientThread.quit()
             if not self._clientThread.wait(3000):
-                logger.error("PowerPage client thread did not exit within 3000 ms")
+                self._writePageLogFile("PowerPage client thread did not exit within 3000 ms")
 
     def _onThemeChanged(self, *_):
         QTimer.singleShot(0, self._refreshThemeBundle)
