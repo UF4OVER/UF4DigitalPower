@@ -14,7 +14,6 @@ class OpenGLChartWidget(QOpenGLWidget):
     """
     OpenGL 实时曲线控件。
 
-    它只负责显示 ChartModel 生成的 ChartSnapshot，并处理鼠标交互：
     - 左键拖动：时间轴左右平移，只改变 time_offset，不改变时基窗口
     - 滚轮：缩放时基窗口
     - 双击：回到实时位置
@@ -42,22 +41,19 @@ class OpenGLChartWidget(QOpenGLWidget):
         self._tooltip_fg = QColor(230, 235, 245)
         self._cross_color = QColor(255, 255, 255, 168)
         self._legend_colors = [
-            QColor(51, 140, 255),
-            QColor(51, 217, 115),
-            QColor(255, 166, 51),
-            QColor(255, 77, 89),
-            QColor(178, 115, 255),
-            QColor(51, 217, 217),
-            QColor(255, 230, 77),
-            QColor(230, 230, 230),
+            QColor(51, 140, 255), QColor(51, 217, 115), QColor(255, 166, 51),
+            QColor(255, 77, 89), QColor(178, 115, 255), QColor(51, 217, 217),
+            QColor(255, 230, 77), QColor(75, 85, 99),
         ]
 
+        self.setAutoFillBackground(False)
         self.setMinimumSize(600, 360)
         self.setMouseTracking(True)
         self.refreshTheme()
 
     def initializeGL(self) -> None:
         self.renderer.initialize()
+        self.renderer.set_theme(isDarkTheme())
 
     def resizeGL(self, width: int, height: int) -> None:
         self.renderer.resize(width, height)
@@ -70,18 +66,21 @@ class OpenGLChartWidget(QOpenGLWidget):
 
     def refreshTheme(self) -> None:
         dark = isDarkTheme()
+        self.renderer.set_theme(dark)
         if dark:
             self._title_color = QColor(245, 247, 250)
             self._axis_color = QColor(165, 175, 190)
             self._tooltip_bg = QColor(20, 24, 32, 232)
             self._tooltip_fg = QColor(235, 240, 248)
             self._cross_color = QColor(255, 255, 255, 168)
+            self.setStyleSheet("QOpenGLWidget#OpenGLChartWidget { background: #0E1117; }")
         else:
             self._title_color = QColor(17, 24, 39)
             self._axis_color = QColor(71, 85, 105)
             self._tooltip_bg = QColor(255, 255, 255, 236)
             self._tooltip_fg = QColor(15, 23, 42)
             self._cross_color = QColor(15, 23, 42, 118)
+            self.setStyleSheet("QOpenGLWidget#OpenGLChartWidget { background: #F8FAFC; }")
         self.update()
 
     def _draw_overlay(self, snapshot: ChartSnapshot) -> None:
@@ -122,11 +121,7 @@ class OpenGLChartWidget(QOpenGLWidget):
             color = self._legend_colors[index % len(self._legend_colors)]
             latest_value = curve.points[-1].raw_y
             painter.setPen(color)
-            painter.drawText(
-                x,
-                y + row * 18,
-                f"{curve.name}: {latest_value:.{curve.precision}f}{curve.unit}",
-            )
+            painter.drawText(x, y + row * 18, f"{curve.name}: {latest_value:.{curve.precision}f}{curve.unit}")
             row += 1
 
     def _draw_hover_info(self, painter: QPainter) -> None:
@@ -135,17 +130,14 @@ class OpenGLChartWidget(QOpenGLWidget):
         x = self._hover_info["px"]
         y = self._hover_info["py"]
         text = self._hover_info["text"]
-
         pen = QPen(self._cross_color)
         pen.setWidth(1)
         painter.setPen(pen)
         painter.drawLine(x, 0, x, self.height())
         painter.drawLine(0, y, self.width(), y)
-
         painter.setBrush(self._tooltip_fg)
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(x - 4, y - 4, 8, 8)
-
         painter.setFont(QFont("Microsoft YaHei", 9))
         metrics = painter.fontMetrics()
         text_w = metrics.horizontalAdvance(text) + 18
@@ -156,7 +148,6 @@ class OpenGLChartWidget(QOpenGLWidget):
             box_x = x - text_w - 12
         if box_y < 0:
             box_y = y + 12
-
         painter.setPen(Qt.NoPen)
         painter.setBrush(self._tooltip_bg)
         painter.drawRoundedRect(box_x, box_y, text_w, text_h, 7, 7)
@@ -184,13 +175,7 @@ class OpenGLChartWidget(QOpenGLWidget):
                 if dist2 <= best_dist2:
                     best_dist2 = dist2
                     value_text = f"{point.raw_y:.{curve.precision}f}{curve.unit}"
-                    best = {
-                        "px": px,
-                        "py": py,
-                        "curve": curve,
-                        "point": point,
-                        "text": f"{curve.name}: {value_text}",
-                    }
+                    best = {"px": px, "py": py, "curve": curve, "point": point, "text": f"{curve.name}: {value_text}"}
         self._hover_info = best
 
     def mousePressEvent(self, event) -> None:
