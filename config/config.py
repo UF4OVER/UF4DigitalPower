@@ -288,37 +288,20 @@ class AppContext:
 #  Default context
 # ============================================================================
 
-_default_ctx: AppContext | None = None
-
-def get_default_context() -> AppContext:
-    """Return the singleton default AppContext, creating it on first call."""
-    global _default_ctx
-    if _default_ctx is None:
-        _default_ctx = AppContext()
-    return _default_ctx
-
-
-def set_app_context(ctx: AppContext):
-    """Override the default context (intended for testing)."""
-    global _default_ctx
-    _default_ctx = ctx
-
-
-def reset_app_context():
-    """Reset the default context to None so the next call rebuilds it."""
-    global _default_ctx
-    _default_ctx = None
 
 
 # ============================================================================
 #  CTX — module-level singleton, the one thing you need to import
 # ============================================================================
 
-CTX: AppContext = get_default_context()
+CTX: AppContext = AppContext()
 
 # CTX: AppContext  = AppContext(base_dir=Path(__file__).resolve().parent.parent / ".config")
 # Convenience shortcuts derived from CTX
 cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
+_config_json_path = CTX.dirs.ConfigDir / "config.json"
+qconfig.load(_config_json_path, cfg)
+
 AppIconPath = CTX.app_icon_path  # str — path to app icon
 
 

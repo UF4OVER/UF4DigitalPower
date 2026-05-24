@@ -10,8 +10,7 @@
 #  @Python  :
 # -------------------------------
 
-from .config import (  # noqa: F401
-    # ---- core context ----
+from .config import (
     CTX,
     AppContext,
     DirPaths,
@@ -21,10 +20,7 @@ from .config import (  # noqa: F401
     cfg,
     AppIconPath,
     logger,
-    # ---- context helpers ----
-    get_default_context,
-    set_app_context,
-    reset_app_context,
+
     # ---- application constants ----
     VERSION,
     YEAR,
