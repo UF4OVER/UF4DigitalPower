@@ -143,7 +143,7 @@ class DaplinkPage(ScrollArea):
         self.targetFilterLabel = BodyLabel(self.connectCard)
         grid.addWidget(self.targetFilterLabel, 1, 0)
         self.targetFilterInput = LineEdit(self.connectCard)
-        self.targetFilterInput.setText("G474RBT")
+        self.targetFilterInput.setText("G474CB")
         self.targetFilterInput.textChanged.connect(self._applyTargetFilter)
         grid.addWidget(self.targetFilterInput, 1, 1)
 
@@ -349,7 +349,7 @@ class DaplinkPage(ScrollArea):
         self.reloadPackBtn.setText('重载 Pack')
         self.targetFilterLabel.setText('目标过滤')
         self.targetFilterInput.setPlaceholderText(
-            '输入 STM32G474 / G474 / RETx 等关键字'
+            '输入 STM32G474 / H743 / CB/ZI 等关键字'
         )
         self.frequencyLabel.setText('SWD 频率')
         self.frequencyInput.setPlaceholderText(
@@ -502,7 +502,7 @@ class DaplinkPage(ScrollArea):
         if firmwareKind == "Power":
             self.targetFilterInput.setText("STM32G474")
         elif firmwareKind == "Upper":
-            self.targetFilterInput.setText("STM32H750")
+            self.targetFilterInput.setText("STM32H743")
 
     @staticmethod
     def _firmwareKindFromPath(path: Path | str | None) -> str | None:
@@ -542,7 +542,7 @@ class DaplinkPage(ScrollArea):
         if firmwareKind == "Upper" and "h750" not in targetText:
             self.showMessage(
                 '固件与目标不匹配',
-                'Upper 固件必须下载到 STM32H750。',
+                'Upper 固件必须下载到 STM32H743。',
                 "warning",
             )
             return False
@@ -788,7 +788,7 @@ class DaplinkPage(ScrollArea):
             self.targetCombo.addItem('没有匹配的 target')
             self.targetCombo.blockSignals(False)
             self.targetSummaryLabel.setText(
-                "当前筛选没有命中 target，请尝试 STM32G474、G474、RETx 等关键字。"
+                "当前筛选没有命中 target，请尝试 STM32G474,H743,CB/ZI 等关键字。"
             )
             self.targetSummaryLabel.setStyleSheet("color: #C42B1C;")
             return

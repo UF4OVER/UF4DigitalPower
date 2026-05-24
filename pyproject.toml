@@ -57,7 +57,6 @@ zip_exclude_packages = [
    "PyQt5",
    "lark",
    "pyocd",
-   "cmsis_pack_manager",
    "qfluentwidgets",
 ]
 
