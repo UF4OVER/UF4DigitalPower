@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -75,30 +75,28 @@ class _MetricValue:
 class MetricCard(CardWidget):
     def __init__(self, title: str, accent: str, parent=None):
         super().__init__(parent)
-        self.setObjectName("PowerMetricCard")
         self._accent = accent
-
+        self.setObjectName("PowerMetricCard")
         self.titleLabel = CaptionLabel(title, self)
         self.valueLabel = TitleLabel("--", self)
         self.unitLabel = StrongBodyLabel("", self)
         self.extraLabel = CaptionLabel("等待数据", self)
         self.extraLabel.setWordWrap(True)
-
         setFont(self.valueLabel, 28, QFont.DemiBold)
         setFont(self.unitLabel, 15, QFont.DemiBold)
 
-        valueRow = QHBoxLayout()
-        valueRow.setContentsMargins(0, 0, 0, 0)
-        valueRow.setSpacing(8)
-        valueRow.addWidget(self.valueLabel)
-        valueRow.addWidget(self.unitLabel)
-        valueRow.addStretch(1)
+        value_row = QHBoxLayout()
+        value_row.setContentsMargins(0, 0, 0, 0)
+        value_row.setSpacing(8)
+        value_row.addWidget(self.valueLabel)
+        value_row.addWidget(self.unitLabel)
+        value_row.addStretch(1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(8)
         layout.addWidget(self.titleLabel)
-        layout.addLayout(valueRow)
+        layout.addLayout(value_row)
         layout.addWidget(self.extraLabel)
         self.setMinimumHeight(138)
         self.refreshTheme()
@@ -172,7 +170,6 @@ class ParameterEditor(CardWidget):
         for editor in (self.outputVoltage, self.outputCurrent, self.ovp, self.ocp, self.otp, self.fan):
             editor.setFixedHeight(34)
             editor.setClearButtonEnabled(True)
-
         self.outputVoltage.setPlaceholderText("输出电压 V")
         self.outputCurrent.setPlaceholderText("输出电流 A")
         self.ovp.setPlaceholderText("OVP V")
@@ -190,18 +187,11 @@ class ParameterEditor(CardWidget):
         form.setContentsMargins(0, 0, 0, 0)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(10)
-        form.addWidget(BodyLabel("电压", self), 0, 0)
-        form.addWidget(self.outputVoltage, 0, 1)
-        form.addWidget(BodyLabel("电流", self), 0, 2)
-        form.addWidget(self.outputCurrent, 0, 3)
-        form.addWidget(BodyLabel("OVP", self), 1, 0)
-        form.addWidget(self.ovp, 1, 1)
-        form.addWidget(BodyLabel("OCP", self), 1, 2)
-        form.addWidget(self.ocp, 1, 3)
-        form.addWidget(BodyLabel("OTP", self), 2, 0)
-        form.addWidget(self.otp, 2, 1)
-        form.addWidget(BodyLabel("风扇", self), 2, 2)
-        form.addWidget(self.fan, 2, 3)
+        labels = (("电压", self.outputVoltage), ("电流", self.outputCurrent), ("OVP", self.ovp), ("OCP", self.ocp), ("OTP", self.otp), ("风扇", self.fan))
+        for i, (label, editor) in enumerate(labels):
+            r, c = divmod(i, 2)
+            form.addWidget(BodyLabel(label, self), r, c * 2)
+            form.addWidget(editor, r, c * 2 + 1)
 
         control = QHBoxLayout()
         control.setContentsMargins(0, 6, 0, 0)
@@ -246,7 +236,6 @@ class TelemetryChartCard(CardWidget):
         self.chartModel = ChartModel(self.dataHub)
         self.chartModel.set_time_window(30.0)
         self.chartModel.set_auto_y_range(True)
-
         self.titleLabel = SubtitleLabel("实时曲线", self)
         self.tipLabel = CaptionLabel("左键拖动平移时间轴，滚轮缩放时基，双击回到实时位置。", self)
         self.chart = RealtimeChartWidget(self.chartModel, self)
@@ -329,6 +318,7 @@ class PowerPage(ScrollArea):
         self._writeInFlight = False
         self._writePollingRestartPending = False
         self._lastVerboseLogTs = 0.0
+        self._appendLogBusy = False
 
         self._client = F4CPPowerClient()
         self._clientThread = QThread(self)
@@ -339,7 +329,6 @@ class PowerPage(ScrollArea):
         self._writePollRestartTimer = QTimer(self)
         self._writePollRestartTimer.setSingleShot(True)
         self._writePollRestartTimer.timeout.connect(self._restartAutoPollingAfterWrite)
-
         self._mockTimer = QTimer(self)
         self._mockTimer.setInterval(100)
         self._mockTimer.timeout.connect(self.pushMockPowerSample)
@@ -372,7 +361,6 @@ class PowerPage(ScrollArea):
         layout = QHBoxLayout(self.headerCard)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
-
         titleBox = QVBoxLayout()
         titleBox.setContentsMargins(0, 0, 0, 0)
         titleBox.setSpacing(2)
@@ -431,7 +419,6 @@ class PowerPage(ScrollArea):
     def _initStatusAndParameters(self) -> None:
         row = QHBoxLayout()
         row.setSpacing(12)
-
         self.statusCard = CardWidget(self.scrollWidget)
         self.statusCard.setObjectName("PowerStatusCard")
         statusLayout = QVBoxLayout(self.statusCard)
@@ -443,7 +430,6 @@ class PowerPage(ScrollArea):
         self.statusInfo.setTextInteractionFlags(Qt.TextSelectableByMouse)
         statusLayout.addWidget(self.statusTitle)
         statusLayout.addWidget(self.statusInfo, 1)
-
         self.parameterEditor = ParameterEditor("输出设定与保护阈值", self.scrollWidget)
         row.addWidget(self.statusCard, 1)
         row.addWidget(self.parameterEditor, 2)
@@ -455,7 +441,6 @@ class PowerPage(ScrollArea):
         layout = QVBoxLayout(self.logCard)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
-
         top = QHBoxLayout()
         self.logCardTitle = SubtitleLabel("协议 / 状态日志", self.logCard)
         self.logLevelCombo = ComboBox(self.logCard)
@@ -466,7 +451,6 @@ class PowerPage(ScrollArea):
         top.addStretch(1)
         top.addWidget(self.logLevelCombo)
         top.addWidget(self.clearLogButton)
-
         self.logEdit = TextEdit(self.logCard)
         self.logEdit.setMinimumHeight(170)
         self.logEdit.setReadOnly(True)
@@ -485,7 +469,6 @@ class PowerPage(ScrollArea):
         self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
         self._client.powerStateWritten.connect(self._onPowerStateWritten)
         self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
-
         self.attachSessionRequested.connect(self._client.attach_session)
         self.detachSessionRequested.connect(self._client.detach_session)
         self.readStatusRequested.connect(self._client.request_read_status)
@@ -495,7 +478,6 @@ class PowerPage(ScrollArea):
         self.powerStateRequested.connect(self._client.request_set_power_state)
         self.startPollingRequested.connect(self._client.start_polling)
         self.stopPollingRequested.connect(self._client.stop_polling)
-
         self.refreshTargetButton.clicked.connect(self.refreshSerialPorts)
         self.connectButton.clicked.connect(self.toggleConnection)
         self.refreshButton.clicked.connect(self._readStatusOnce)
@@ -583,14 +565,12 @@ class PowerPage(ScrollArea):
         previous = self._lastStatus
         self._lastStatus = status
         self.chartCard.pushStatus(status)
-
         self.metricCards["vin"].setMetric(_MetricValue("输入电压", f"{status.vin_v:.3f}", "V", f"输入功率 {status.pin_w:.2f} W"))
         self.metricCards["iin"].setMetric(_MetricValue("输入电流", f"{status.iin_a:.3f}", "A", f"模式 {status.mode_name}"))
         self.metricCards["pin"].setMetric(_MetricValue("输入功率", f"{status.pin_w:.3f}", "W", f"故障 0x{status.fault_state:04X}"))
         self.metricCards["vout"].setMetric(_MetricValue("输出电压", f"{status.vout_v:.3f}", "V", f"设定 {status.set_voltage_limit_mv / 1000.0:.3f} V"))
         self.metricCards["iout"].setMetric(_MetricValue("输出电流", f"{status.iout_a:.3f}", "A", f"设定 {status.set_current_limit_ma / 1000.0:.3f} A"))
         self.metricCards["pout"].setMetric(_MetricValue("输出功率", f"{status.pout_w:.3f}", "W", f"效率 {status.efficiency:.2f} %"))
-
         self.parameterEditor.setFromStatus(status)
         switch_value = status.power_enabled
         if self._stagedOutputEnabled is not None:
@@ -601,7 +581,6 @@ class PowerPage(ScrollArea):
         self.parameterEditor.outputSwitch.blockSignals(True)
         self.parameterEditor.outputSwitch.setChecked(switch_value)
         self.parameterEditor.outputSwitch.blockSignals(False)
-
         faults = pretty_faults(status.fault_state) or "无"
         self.statusInfo.setText(
             f"输出：{'开启' if status.power_enabled else '关闭'}\n"
@@ -614,19 +593,8 @@ class PowerPage(ScrollArea):
             f"PWM A/D：{status.pwm_a_compare} / {status.pwm_d_compare}\n"
             f"风扇：{status.fan_speed} / 设定 {status.fan_set_value}"
         )
-
-        if (
-            previous is None
-            or previous.power_state != status.power_state
-            or previous.state_machine_flag_bits != status.state_machine_flag_bits
-            or previous.fault_state != status.fault_state
-        ):
-            self._appendLog(
-                f"状态 输出={'开启' if status.power_enabled else '关闭'} "
-                f"状态机={status.state_flag_name} 拓扑={status.topology_name} "
-                f"故障={faults} VOUT={status.vout_v:.3f}V IOUT={status.iout_a:.3f}A"
-            )
-
+        if previous is None or previous.power_state != status.power_state or previous.state_machine_flag_bits != status.state_machine_flag_bits or previous.fault_state != status.fault_state:
+            self._appendLog(f"状态 输出={'开启' if status.power_enabled else '关闭'} 状态机={status.state_flag_name} 拓扑={status.topology_name} 故障={faults} VOUT={status.vout_v:.3f}V IOUT={status.iout_a:.3f}A")
         if self.logLevelCombo.currentData() == "verbose" and time.monotonic() - self._lastVerboseLogTs >= 2.0:
             self._lastVerboseLogTs = time.monotonic()
             self._appendLog(self._client.pretty_print_status(status))
@@ -772,10 +740,14 @@ class PowerPage(ScrollArea):
             self.parameterEditor.ovp.setText(DEFAULT_OVP_SET_VALUE_TEXT)
 
     def _appendLog(self, text: str) -> None:
-        if not (text.startswith("REQ ") or text.startswith("RX ") or text.startswith("TX ")):
-            logger.info(text)
-        ts = time.strftime("%H:%M:%S")
-        self.logEdit.append(f"[{ts}] {text}")
+        if self._appendLogBusy:
+            return
+        self._appendLogBusy = True
+        try:
+            ts = time.strftime("%H:%M:%S")
+            self.logEdit.append(f"[{ts}] {text}")
+        finally:
+            self._appendLogBusy = False
 
     def _setMockEnabled(self, enabled: bool) -> None:
         if enabled:
@@ -833,11 +805,10 @@ class PowerPage(ScrollArea):
     def _refreshThemeBundle(self) -> None:
         StyleSheet.POWER_PAGE.apply(self)
         dark = isDarkTheme()
-        title = "#F5F7FA" if dark else "#111827"
         muted = "#9AA4B2" if dark else "#64748B"
         body = "#D9E2EC" if dark else "#334155"
         self.subtitleLabel.setStyleSheet(f"color: {muted};")
-        self.statusInfo.setStyleSheet(f"color: {body}; background: transparent; line-height: 150%;")
+        self.statusInfo.setStyleSheet(f"color: {body}; background: transparent;")
         self.stateBadge.refreshTheme()
         for card in self.metricCards.values():
             card.refreshTheme()
