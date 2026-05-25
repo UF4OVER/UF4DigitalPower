@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication, QWidget
 
-from App.Core.Manager.manager_notification import (
+from manager import (
     NotificationCard,
     bindNotificationWindow,
     notificationManager,

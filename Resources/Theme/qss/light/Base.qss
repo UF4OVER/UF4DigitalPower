@@ -1,0 +1,4 @@
+#Window{
+    background: transparent;
+    border: none;
+}

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from Config.config import (
+from config.config import (
     AppContext,
     DirPaths,
     SettingsManager,
@@ -29,7 +29,7 @@ class DirPathsTests(unittest.TestCase):
         """DirPaths should resolve base_dir to project root."""
         dp = DirPaths()
         self.assertTrue(dp.base_dir.exists())
-        self.assertTrue((dp.base_dir / "Config").exists())
+        self.assertTrue((dp.base_dir / "config").exists())
 
     def test_custom_base_dir_injection(self):
         """DI: inject custom base_dir for test isolation."""
@@ -68,8 +68,8 @@ class DirPathsTests(unittest.TestCase):
     def test_config_paths(self):
         """ConfigIniPath and ConfigJsonPath resolve correctly."""
         dp = DirPaths(base_dir=self.tmp)
-        self.assertEqual(dp.ConfigIniPath, self.tmp / "Resources" / "Config" / "config.ini")
-        self.assertEqual(dp.ConfigJsonPath, self.tmp / "Resources" / "Config" / "config.json")
+        self.assertEqual(dp.ConfigIniPath, self.tmp / "Resources" / "config" / "config.ini")
+        self.assertEqual(dp.ConfigJsonPath, self.tmp / "Resources" / "config" / "config.json")
 
 
 class SettingsManagerTests(unittest.TestCase):
@@ -129,12 +129,12 @@ class AppContextTests(unittest.TestCase):
         self.assertIsInstance(ctx.dirs, DirPaths)
         self.assertIsInstance(ctx.settings, SettingsManager)
         self.assertTrue((self.tmp / "Logs").exists())
-        self.assertTrue((self.tmp / "Resources" / "Config").exists())
+        self.assertTrue((self.tmp / "Resources" / "config").exists())
 
     def test_qcfg_loaded(self):
         """AppContext.qcfg is an F4CPConfig instance."""
         ctx = AppContext(base_dir=self.tmp)
-        from Config.config import F4CPConfig
+        from config.config import F4CPConfig
         self.assertIsInstance(ctx.qcfg, F4CPConfig)
 
     def test_app_icon_path(self):
@@ -175,7 +175,7 @@ class AppContextTests(unittest.TestCase):
 
 
 class BackwardCompatTests(unittest.TestCase):
-    """Verify legacy `from Config import X` names still resolve correctly.
+    """Verify legacy `from config import X` names still resolve correctly.
 
     These names are eagerly initialized at import time from the real project
     root.  ``set_app_context()`` does NOT retroactively update them (by design:
@@ -183,27 +183,27 @@ class BackwardCompatTests(unittest.TestCase):
     """
 
     def test_dir_paths_instance_proxy(self):
-        from Config import DirPathsInstance
+        from config import DirPathsInstance
         self.assertIsInstance(DirPathsInstance, DirPaths)
         self.assertTrue(DirPathsInstance.base_dir.exists())
 
     def test_setting_manager_instance_proxy(self):
-        from Config import SettingMangerInstance
+        from config import SettingMangerInstance
         self.assertIsInstance(SettingMangerInstance, SettingsManager)
         self.assertTrue(SettingMangerInstance.config_path.endswith("config.ini"))
 
     def test_cfg_proxy(self):
-        from Config import cfg
-        from Config.config import F4CPConfig
+        from config import cfg
+        from config.config import F4CPConfig
         self.assertIsInstance(cfg, F4CPConfig)
 
     def test_app_icon_path_proxy(self):
-        from Config import AppIconPath
+        from config import AppIconPath
         self.assertIsInstance(AppIconPath, str)
         self.assertTrue(AppIconPath.endswith(".ico"))
 
     def test_app_config_path_proxy(self):
-        from Config import APP_CONFIG_PATH
+        from config import APP_CONFIG_PATH
         self.assertIsInstance(APP_CONFIG_PATH, Path)
         self.assertEqual(APP_CONFIG_PATH.name, "config.ini")
 
@@ -223,20 +223,20 @@ class ManagerFontInjectTests(unittest.TestCase):
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_discover_font_options_with_ctx(self):
-        from App.Core.Manager.manager_font import discover_font_options
+        from manager import discover_font_options
         options = discover_font_options(ctx=self.ctx)
         self.assertGreaterEqual(len(options), 1)
         self.assertEqual(options[0].key, "__system__")
 
     def test_get_saved_font_key_with_ctx(self):
-        from App.Core.Manager.manager_font import get_saved_font_key
+        from manager import get_saved_font_key
         key = get_saved_font_key(ctx=self.ctx)
         self.assertIsInstance(key, str)
         self.assertTrue(len(key) > 0)
 
     def test_discover_font_options_without_ctx(self):
         """Backward compat: calling without ctx still works."""
-        from App.Core.Manager.manager_font import discover_font_options
+        from manager import discover_font_options
         options = discover_font_options()
         self.assertGreaterEqual(len(options), 1)
 
@@ -255,7 +255,7 @@ class StyleSheetInjectTests(unittest.TestCase):
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_injected_dirs_used_in_path(self):
-        from App.Core.Manager.manager_stylesheet import StyleSheet
+        from manager import StyleSheet
         StyleSheet.set_dirs(self.dirs)
         try:
             p = StyleSheet.HOME_PAGE.path()
@@ -279,7 +279,7 @@ class DaplinkSessionInjectTests(unittest.TestCase):
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_injected_dirs_resolve(self):
-        from App.Core.Session.session_daplink import DaplinkPyocdSession
+        from session.session_daplink import DaplinkPyocdSession
         DaplinkPyocdSession.set_dirs(self.dirs)
         try:
             resolved = DaplinkPyocdSession._resolve_dirs()
@@ -289,7 +289,7 @@ class DaplinkSessionInjectTests(unittest.TestCase):
             DaplinkPyocdSession.set_dirs(None)
 
     def test_pack_dir_uses_injected_dirs(self):
-        from App.Core.Session.session_daplink import DaplinkPyocdSession
+        from session.session_daplink import DaplinkPyocdSession
         DaplinkPyocdSession.set_dirs(self.dirs)
         try:
             pd = DaplinkPyocdSession.pack_dir()

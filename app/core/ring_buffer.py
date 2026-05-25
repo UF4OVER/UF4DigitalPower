@@ -1,0 +1,96 @@
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026/5/24
+#  @FileName: ring_buffer.py.py
+#  @Software: PyCharm
+#  @System  : Windows 11 25H2
+#  @Author  : UF4
+#  @Contact : 数据环形缓冲区
+#  @Python  : 
+# -------------------------------
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from collections import deque
+from typing import Deque, Iterable, Optional
+import time
+
+
+@dataclass(frozen=True)
+class Sample:
+    """
+    单个采样点。
+    t: 时间戳，单位秒，通常使用 time.time()
+    value: 采样值
+    """
+
+    t: float
+    value: float
+
+
+class RingBuffer:
+    """
+    固定长度环形缓冲区。
+    """
+
+    def __init__(self, maxlen: int = 2000):
+        if maxlen <= 0:
+            raise ValueError("maxlen must be greater than 0")
+
+        self._data: Deque[Sample] = deque(maxlen=maxlen)
+
+    @property
+    def maxlen(self) -> int:
+        """
+        满了直接丢了，最大点数
+        """
+        return self._data.maxlen or 0
+
+    def append(self, value: float, t: Optional[float] = None) -> None:
+        if t is None:
+            t = time.time()
+
+        self._data.append(Sample(float(t), float(value)))
+
+    def extend(self, samples: Iterable[Sample]) -> None:
+        for sample in samples:
+            self._data.append(sample)
+
+    def clear(self) -> None:
+        self._data.clear()
+
+    def samples(self) -> list[Sample]:
+        return list(self._data)
+
+    def latest(self) -> Optional[Sample]:
+        if not self._data:
+            return None
+        return self._data[-1]
+
+    def values(self) -> list[float]:
+        return [sample.value for sample in self._data]
+
+    def times(self) -> list[float]:
+        return [sample.t for sample in self._data]
+
+    def window(self, seconds: float, now: Optional[float] = None) -> list[Sample]:
+        """
+        返回最近 seconds 秒的数据。
+        """
+
+        if seconds <= 0:
+            return []
+
+        if now is None:
+            now = time.time()
+
+        min_t = now - seconds
+        return [sample for sample in self._data if sample.t >= min_t]
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __bool__(self) -> bool:
+        return bool(self._data)

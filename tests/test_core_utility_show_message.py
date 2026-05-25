@@ -6,8 +6,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication, QWidget
 
-import App.Core.utility as utility
-from App.Core.utility import showMessage
+import app.core.utility as utility
+from app.core.utility import showMessage
 
 
 class UtilityShowMessageTests(unittest.TestCase):
@@ -20,8 +20,8 @@ class UtilityShowMessageTests(unittest.TestCase):
         utility._INFOBAR_MANAGER_CONFIGURED = False
         manager = MagicMock()
 
-        with patch("App.Core.utility.InfoBarManager.make", return_value=manager) as make_mock:
-            with patch("App.Core.utility.InfoBar.success") as success_mock:
+        with patch("app.core.utility.InfoBarManager.make", return_value=manager) as make_mock:
+            with patch("app.core.utility.InfoBar.success") as success_mock:
                 showMessage(parent, "Done", "Operation OK", "success", autoCloseMs=1200)
 
         make_mock.assert_called_once()
@@ -39,7 +39,7 @@ class UtilityShowMessageTests(unittest.TestCase):
         parent = QWidget()
         utility._INFOBAR_MANAGER_CONFIGURED = True
 
-        with patch("App.Core.utility.InfoBar.warning") as warning_mock:
+        with patch("app.core.utility.InfoBar.warning") as warning_mock:
             showMessage(parent, "Warn", "Need attention", "warning")
 
         warning_mock.assert_called_once()
@@ -48,7 +48,7 @@ class UtilityShowMessageTests(unittest.TestCase):
         parent = QWidget()
         utility._INFOBAR_MANAGER_CONFIGURED = True
 
-        with patch("App.Core.utility.InfoBar.info") as info_mock:
+        with patch("app.core.utility.InfoBar.info") as info_mock:
             showMessage(parent, "Hint", "Default info", "other")
 
         info_mock.assert_called_once()

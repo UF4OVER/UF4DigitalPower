@@ -9,22 +9,31 @@
 #  @Contact :
 #  @Python  :
 # -------------------------------
+import sys
 
-from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
-from PyQt5.QtGui import QCloseEvent, QIcon
-from PyQt5.QtWidgets import QApplication, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QSizePolicy
+from PyQt5.QtCore import QEasingCurve, QEventLoop, QPropertyAnimation, Qt, QTimer, QSize
+from PyQt5.QtGui import QCloseEvent, QIcon, QPixmap, QColor
+from PyQt5.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGraphicsOpacityEffect,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QVBoxLayout,
+)
 
 from qfluentwidgets import MSFluentWindow
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import isDarkTheme
-from qfluentwidgets import setTheme
 
-from Config import AppIconPath, cfg
+from config import AppIconPath, cfg
 
-from App.Core import StyleSheet, logger, loadSavedFont
-from App.Core import UF4Icon
+from app.manager import applyApplicationTheme, logger, normalizedTheme
 
-from App.Pages import BatteryPage, DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
+from app.widgets.icon import UF4Icon
+from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
+
 
 
 class DynamicIsland(QFrame):
@@ -147,7 +156,7 @@ class DynamicIsland(QFrame):
 
     def _applyStyle(self, level: str = None):
         color = self._LEVEL_COLOR.get((level or self._level).lower(), self._LEVEL_COLOR["info"])
-        bg = "rgba(26, 26, 26, 232)" if self._dark else "rgba(250, 250, 250, 238)"
+        bg = "rgba(34, 34, 34, 232)" if self._dark else "rgba(250, 250, 250, 238)"
         border = "rgba(255, 255, 255, 36)" if self._dark else "rgba(0, 0, 0, 18)"
         titleColor = "#FFFFFF" if self._dark else "#171717"
         contentColor = "rgba(255, 255, 255, 170)" if self._dark else "rgba(0, 0, 0, 150)"
@@ -176,37 +185,23 @@ class DynamicIsland(QFrame):
 class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
-        self.setObjectName("FluentAcrylicWindow")
-
-        # self.setFixedSize(1200, 800)
-
+        self.setObjectName("Window")
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
-        # self.batteryInterface = BatteryPage(self)
         self.daplinkInterface = DaplinkPage(self)
         self.settingInterface = SettingsPage(self)
 
         self.__initNavigation()
         self.__initWindow()
-
         self._onThemeChanged()
-
         cfg.themeChanged.connect(self._onThemeChanged)
 
-        StyleSheet.HOME_PAGE.apply(self.homeInterface)
-        StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-        # StyleSheet.BATTERY_PAGE.apply(self.batteryInterface)
-        StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.DAPLINK_PAGE.apply(self.daplinkInterface)
-
-        QTimer.singleShot(0, self._refreshStartupTheme)
         QTimer.singleShot(150, self._checkUpdateOnStartUp)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "dynamicIsland"):
-            self.dynamicIsland.recenter()
+        self.dynamicIsland.recenter()
 
     def __initNavigation(self):
         self.homeNavItem = self.addSubInterface(
@@ -227,40 +222,29 @@ class Window(MSFluentWindow):
             '设备',
             UF4Icon.DEVELOPER_BOARD_FILL
         )
-        # self.batteryNavItem = self.addSubInterface(
-        #     self.batteryInterface,
-        #     UF4Icon.BATTERY_SAVER,
-        #     '电池',
-        #     UF4Icon.BATTERY_SAVER_FILL
-        # )
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface,
-            UF4Icon.FLASH_SETTINGS,
+            self.daplinkInterface, UF4Icon.FLASH_SETTINGS,
             '烧录',
             UF4Icon.FLASH_SETTINGS_FILL
-
         )
         self.settingNavItem = self.addSubInterface(
             self.settingInterface,
             UF4Icon.SERVER,
             '设置',
             UF4Icon.SERVER_FILL,
-            NavigationItemPosition.BOTTOM,
+            NavigationItemPosition.BOTTOM
         )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
         self.resize(1400, 1100)
-        # self.setTitleBar(FluentWidgetTitleBar(self))
         self.setWindowIcon(QIcon(AppIconPath))
-        self.setWindowTitle("Fluor4CellPower")
-
+        self.setWindowTitle("UF4 POWER")
         self.titleBar.raise_()
         self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.dynamicIsland = DynamicIsland(self.titleBar)
         self.dynamicIsland.recenter()
         self.dynamicIsland.raise_()
-
         desktop = QApplication.desktop().availableGeometry()
         w, h = desktop.width(), desktop.height()
         self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
@@ -270,26 +254,57 @@ class Window(MSFluentWindow):
         super().close()
 
     def closeEvent(self, event: QCloseEvent):
-        try:
-            if hasattr(self, "powerInterface") and self.powerInterface is not None:
-                self.powerInterface.shutdown()
-        except Exception as exc:
-            logger.error(f"PowerPage shutdown failed during window close: {exc}")
+        self.powerInterface.shutdown()
         super().closeEvent(event)
 
     def _onThemeChanged(self, *_):
-        dark = isDarkTheme()
-        bgColor = "#1F1F1F" if dark else "#F3F3F3"
-        self.setStyleSheet(f"Window {{ background: {bgColor}; }}")
-        if hasattr(self, "dynamicIsland"):
-            self.dynamicIsland.setDarkTheme(dark)
+        theme = normalizedTheme(cfg.themeMode.value)
+        is_dark = theme.name.lower() == "dark"
+        bg_light = QColor("#F3F3F3")
+        bg_dark = QColor("#242424")
+
+        applyApplicationTheme(self, theme)
+        self.setCustomBackgroundColor(bg_light, bg_dark)
+        self.setMicaEffectEnabled(False)
+        self.dynamicIsland.setDarkTheme(is_dark)
+
+        shell_bg = "#242424" if is_dark else "#F3F3F3"
+        nav_bg = "#1F1F1F" if is_dark else "#FFFFFF"
+        title_bg = shell_bg
+        text = "#F5F5F5" if is_dark else "#1F1F1F"
+        border = "rgba(255,255,255,0.10)" if is_dark else "rgba(0,0,0,0.08)"
+        self.setStyleSheet(f"""
+            MSFluentWindow#Window {{ background: {shell_bg}; }}
+            QWidget#navigationInterface {{
+                background: {nav_bg};
+                border-right: 1px solid {border};
+            }}
+            QWidget#titleBar {{
+                background: {title_bg};
+                color: {text};
+            }}
+        """)
+        self.navigationInterface.setStyleSheet(f"background: {nav_bg}; border-right: 1px solid {border};")
+        self.titleBar.setStyleSheet(f"background: {title_bg}; color: {text};")
+
+        for widget in (self, self.navigationInterface, self.titleBar):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+
+        for page in (
+            self.homeInterface,
+            self.deviceInterface,
+            self.powerInterface,
+            self.daplinkInterface,
+            self.settingInterface,
+        ):
+            if hasattr(page, "_onThemeChanged"):
+                page._onThemeChanged()
 
     def showDynamicIsland(self, title: str, content: str = "", level: str = "info", duration: int = 3200):
         if hasattr(self, "dynamicIsland"):
             self.dynamicIsland.notify(title, content, level, duration)
-
-    def _refreshStartupTheme(self):
-        setTheme(cfg.themeMode.value)
 
     def _checkUpdateOnStartUp(self):
         if getattr(cfg.checkUpdateAtStartUp, "value", False):
@@ -297,8 +312,6 @@ class Window(MSFluentWindow):
 
 
 if __name__ == "__main__":
-    import sys
-
     logger.info("main is running")
 
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
@@ -308,12 +321,10 @@ if __name__ == "__main__":
     logger.info("Application started")
     try:
         app = QApplication(sys.argv)
-
-        # setTheme(cfg.themeMode.value)
-        loadSavedFont(app)
-
+        applyApplicationTheme(theme=cfg.themeMode.value)
         w = Window()
         w.show()
+        # w.setMicaEffectEnabled(True)
 
         app.exec_()
     except Exception as e:
