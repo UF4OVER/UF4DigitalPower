@@ -9,11 +9,10 @@
 #  @Contact :
 #  @Python  :
 # -------------------------------
-
-from pathlib import Path
+import sys
 
 from PyQt5.QtCore import QEasingCurve, QEventLoop, QPropertyAnimation, Qt, QTimer, QSize
-from PyQt5.QtGui import QCloseEvent, QIcon, QPixmap
+from PyQt5.QtGui import QCloseEvent, QIcon, QPixmap, QColor
 from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
@@ -29,11 +28,12 @@ from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import ProgressBar
 from qfluentwidgets import isDarkTheme
 from qfluentwidgets import setTheme
+
 from qframelesswindow import FramelessWindow
 
 from config import AppIconPath, CTX, cfg
 
-from app.manager import StyleSheet, logger, loadSavedFont
+from app.manager import StyleSheet, logger
 
 from app.widgets.icon import UF4Icon
 from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
@@ -307,7 +307,7 @@ class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
         self.setObjectName("Window")
-
+        # self.updateFrameless()
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
@@ -328,21 +328,45 @@ class Window(MSFluentWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "dynamicIsland"):
-            self.dynamicIsland.recenter()
+        self.dynamicIsland.recenter()
 
     def __initNavigation(self):
-        self.homeNavItem = self.addSubInterface(self.homeInterface, UF4Icon.GAUGE, '引导', UF4Icon.GAUGE_FILL)
-        self.deviceNavItem = self.addSubInterface(self.deviceInterface, UF4Icon.SERIAL_PORT, '串口', UF4Icon.SERIAL_PORT_FILL)
-        self.powerNavItem = self.addSubInterface(self.powerInterface, UF4Icon.DEVELOPER_BOARD, '设备', UF4Icon.DEVELOPER_BOARD_FILL)
-        self.daplinkNavItem = self.addSubInterface(self.daplinkInterface, UF4Icon.FLASH_SETTINGS, '烧录', UF4Icon.FLASH_SETTINGS_FILL)
-        self.settingNavItem = self.addSubInterface(self.settingInterface, UF4Icon.SERVER, '设置', UF4Icon.SERVER_FILL, NavigationItemPosition.BOTTOM)
+        self.homeNavItem = self.addSubInterface(
+            self.homeInterface,
+            UF4Icon.GAUGE,
+            '引导',
+            UF4Icon.GAUGE_FILL
+        )
+        self.deviceNavItem = self.addSubInterface(
+            self.deviceInterface,
+            UF4Icon.SERIAL_PORT,
+            '串口',
+            UF4Icon.SERIAL_PORT_FILL
+        )
+        self.powerNavItem = self.addSubInterface(
+            self.powerInterface,
+            UF4Icon.DEVELOPER_BOARD,
+            '设备',
+            UF4Icon.DEVELOPER_BOARD_FILL
+        )
+        self.daplinkNavItem = self.addSubInterface(
+            self.daplinkInterface, UF4Icon.FLASH_SETTINGS,
+            '烧录',
+            UF4Icon.FLASH_SETTINGS_FILL
+        )
+        self.settingNavItem = self.addSubInterface(
+            self.settingInterface,
+            UF4Icon.SERVER,
+            '设置',
+            UF4Icon.SERVER_FILL,
+            NavigationItemPosition.BOTTOM
+        )
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
         self.resize(1400, 1100)
         self.setWindowIcon(QIcon(AppIconPath))
-        self.setWindowTitle("Fluor4CellPower")
+        self.setWindowTitle("UF4 POWER")
         self.titleBar.raise_()
         self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.dynamicIsland = DynamicIsland(self.titleBar)
@@ -357,21 +381,19 @@ class Window(MSFluentWindow):
         super().close()
 
     def closeEvent(self, event: QCloseEvent):
-        try:
-            if hasattr(self, "powerInterface") and self.powerInterface is not None:
-                self.powerInterface.shutdown()
-        except Exception as exc:
-            logger.error(f"PowerPage shutdown failed during window close: {exc}")
+        self.powerInterface.shutdown()
         super().closeEvent(event)
 
     def _onThemeChanged(self, *_):
         dark = isDarkTheme()
         bgColor = "#242424" if dark else "#F3F3F3"
-        self.setStyleSheet(f"Window {{ background: {bgColor}; }}")
-        if hasattr(self, "dynamicIsland"):
-            self.dynamicIsland.setDarkTheme(dark)
-        if hasattr(self, "powerInterface") and self.powerInterface is not None:
-            self.powerInterface._refreshThemeBundle()
+        self.setStyleSheet(f"Window {{ background: transparent;}}")
+        self.setCustomBackgroundColor(QColor("#F3F3F3"), QColor("#242424"))
+
+        # if hasattr(self, "dynamicIsland"):
+        self.dynamicIsland.setDarkTheme(dark)
+        # if hasattr(self, "powerInterface") and self.powerInterface is not None:
+            # self.powerInterface._refreshThemeBundle()
 
     def showDynamicIsland(self, title: str, content: str = "", level: str = "info", duration: int = 3200):
         if hasattr(self, "dynamicIsland"):
@@ -382,39 +404,22 @@ class Window(MSFluentWindow):
             self.homeInterface.requestUpdateCheck(manual=False)
 
 
-def createMainWindowWithSplash() -> Window:
-    splash = StartupSplashWindow()
-    splash.show()
-    QApplication.processEvents()
-
-    splash.setText("正在加载字体与主题…")
-    loadSavedFont(QApplication.instance())
-
-    splash.setText("正在创建主窗口…")
-    window = Window()
-
-    splash.setText("正在显示主界面…")
-    window.show()
-    window.raise_()
-    window.activateWindow()
-    QApplication.processEvents()
-
-    QTimer.singleShot(260, lambda: splash.finish(window))
-    return window
-
 
 if __name__ == "__main__":
-    import sys
-
     logger.info("main is running")
+
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+
     logger.info("Application started")
     try:
         app = QApplication(sys.argv)
         setTheme(cfg.themeMode.value)
-        w = createMainWindowWithSplash()
+        w = Window()
+        w.show()
+        w.setMicaEffectEnabled(True)
+
         app.exec_()
     except Exception as e:
         logger.error(e)

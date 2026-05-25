@@ -275,6 +275,7 @@ class PowerPage(ScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("PowerPage")
+
         self._shutdownDone = False
         self._manualSession = None
         self._lastStatus: PowerStatus | None = None
@@ -283,6 +284,7 @@ class PowerPage(ScrollArea):
         self._writePollingRestartPending = False
         self._lastVerboseLogTs = 0.0
         self._appendLogBusy = False
+
         self._pageLogPath = CTX.dirs.LogDir / f"power_page_{time.strftime('%Y-%m-%d')}.log"
 
         self._client = F4CPPowerClient()
@@ -312,12 +314,12 @@ class PowerPage(ScrollArea):
 
         self.setWidget(self.scrollWidget)
         self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setViewportMargins(0, 0, 0, 0)
 
         self._bindSignals()
         self._applyDisconnectedState()
-        self._refreshThemeBundle()
+        # self._refreshThemeBundle()
         self.refreshSerialPorts()
 
     def _initHeader(self) -> None:
@@ -392,7 +394,7 @@ class PowerPage(ScrollArea):
         self.statusTitle = SubtitleLabel("状态", self.statusCard)
         self.statusInfo = QLabel("等待设备数据", self.statusCard)
         self.statusInfo.setWordWrap(True)
-        self.statusInfo.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.statusInfo.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         statusLayout.addWidget(self.statusTitle)
         statusLayout.addWidget(self.statusInfo, 1)
         self.parameterEditor = ParameterEditor("输出设定与保护阈值", self.scrollWidget)
@@ -434,6 +436,7 @@ class PowerPage(ScrollArea):
         self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
         self._client.powerStateWritten.connect(self._onPowerStateWritten)
         self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
+
         self.attachSessionRequested.connect(self._client.attach_session)
         self.detachSessionRequested.connect(self._client.detach_session)
         self.readStatusRequested.connect(self._client.request_read_status)
@@ -453,7 +456,7 @@ class PowerPage(ScrollArea):
         self.parameterEditor.applyProtectButton.clicked.connect(self._applyProtectionValues)
         self.clearLogButton.clicked.connect(self.logEdit.clear)
         self.mockButton.toggled.connect(self._setMockEnabled)
-        cfg.themeChanged.connect(self._onThemeChanged)
+        # cfg.themeChanged.connect(self._onThemeChanged)
 
     def refreshSerialPorts(self) -> None:
         ports = [p.strip() for p in (listSerialPorts() or []) if p and p.strip()]
@@ -768,7 +771,7 @@ class PowerPage(ScrollArea):
         self._manualSession = None
         try:
             if self._clientThread.isRunning():
-                QMetaObject.invokeMethod(self._client, "shutdown", Qt.BlockingQueuedConnection)
+                QMetaObject.invokeMethod(self._client, "shutdown", Qt.ConnectionType.BlockingQueuedConnection)
         except Exception as exc:
             self._writePageLogFile(f"PowerPage client shutdown failed: {exc}")
         if self._clientThread.isRunning():
@@ -776,17 +779,3 @@ class PowerPage(ScrollArea):
             if not self._clientThread.wait(3000):
                 self._writePageLogFile("PowerPage client thread did not exit within 3000 ms")
 
-    def _onThemeChanged(self, *_):
-        QTimer.singleShot(0, self._refreshThemeBundle)
-
-    def _refreshThemeBundle(self) -> None:
-        StyleSheet.POWER_PAGE.apply(self)
-        dark = isDarkTheme()
-        muted = "#9AA4B2" if dark else "#64748B"
-        body = "#D9E2EC" if dark else "#334155"
-        self.subtitleLabel.setStyleSheet(f"color: {muted};")
-        self.statusInfo.setStyleSheet(f"color: {body}; background: transparent;")
-        self.stateBadge.refreshTheme()
-        for card in self.metricCards.values():
-            card.refreshTheme()
-        self.chartCard.refreshTheme()

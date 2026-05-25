@@ -278,7 +278,7 @@ class DevicePage(ScrollArea):
 
         self.setWidget(self.scrollWidget)
         self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         StyleSheet.DEVICE_PAGE.apply(self)
         self._applyLocalStyle()
 
