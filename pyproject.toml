@@ -1,6 +1,11 @@
 [project]
 name = "F4CP"
-version = "0.4.3.dev2"
+version = "0.5.0.a1"
+# dev1    开发快照，最早期，不稳定
+# a1       alpha 内测版，功能可能还没完整
+# b1       beta 测试版，功能基本有了，但可能有 bug
+# rc1      release candidate，候选正式版，接近正式发布
+# 无后缀   正式版
 description = "Fluor4CellPower battery and power management system"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -89,6 +94,7 @@ zip_exclude_packages = [
 #   "OpenGL",
    "lark",
    "pyocd",
+   "cmsis_pack_manager",
    "qfluentwidgets",
 ]
 
