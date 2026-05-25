@@ -11,18 +11,16 @@ from qfluentwidgets import isDarkTheme
 from app.widgets.chart.chart_value_panel import ChartValuePanel
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.chart_control_panel import ChartControlPanel
-from app.render.opengl.opengl_chart_widget import OpenGLChartWidget
-from config import cfg
+from app.widgets.chart.fallback_chart_widget import FallbackChartWidget
+from config import cfg, logger
 
 
 class RealtimeChartWidget(QWidget):
     """
     实时图表外层控件。
 
-    - 外层圆角、半透明卡片
-    - OpenGL 图表区域背景透明
-    - 数据进入后使用短间隔刷新节流
-    - 可见时额外用轻量定时器刷新，保证真实串口轮询和假数据都能实时动
+    打包环境里 PyOpenGL 可能无法导入，因此 OpenGL 控件必须懒加载。
+    OpenGL 不可用时自动使用 Qt Painter 备用图表，保证 APP 可启动。
     """
 
     def __init__(self, chart_model: ChartModel, parent=None):
@@ -30,11 +28,12 @@ class RealtimeChartWidget(QWidget):
         self.setObjectName("RealtimeChartWidget")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.chart_model = chart_model
-        self._opengl_initialized = False
+        self._chart_initialized = False
+        self._using_opengl = False
         self._pending_title = "Power Device Realtime Chart"
 
         self.control_panel = ChartControlPanel(self)
-        self.opengl_widget: OpenGLChartWidget | None = None
+        self.opengl_widget = None
         self.value_panel = ChartValuePanel(self)
 
         self._repaint_timer = QTimer(self)
@@ -74,15 +73,24 @@ class RealtimeChartWidget(QWidget):
         self.initializeOpenGL()
 
     def initializeOpenGL(self) -> None:
-        """Create QOpenGLWidget after the main window has entered the event loop."""
-        if self._opengl_initialized:
+        """Create chart widget lazily, falling back to QPainter when OpenGL fails."""
+        if self._chart_initialized:
             return
-        self._opengl_initialized = True
+        self._chart_initialized = True
 
-        self.opengl_widget = OpenGLChartWidget(self.chart_model, self.chart_area)
+        chart_widget = None
+        try:
+            from app.render.opengl.opengl_chart_widget import OpenGLChartWidget
+            chart_widget = OpenGLChartWidget(self.chart_model, self.chart_area)
+            self._using_opengl = True
+        except Exception as exc:
+            logger.warning(f"OpenGL chart unavailable, fallback to Qt Painter chart: {exc}")
+            chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
+            self._using_opengl = False
+
+        self.opengl_widget = chart_widget
         self.opengl_widget.set_title(self._pending_title)
         self.opengl_widget.snapshotUpdated.connect(self.value_panel.set_snapshot)
-
         self.chart_area_layout.insertWidget(0, self.opengl_widget, 1)
 
         self.refreshTheme()
@@ -93,7 +101,6 @@ class RealtimeChartWidget(QWidget):
             self.opengl_widget.update()
 
     def request_repaint(self) -> None:
-        """Request one chart repaint with a small throttle for realtime streams."""
         if not self._repaint_timer.isActive():
             self._repaint_timer.start()
 
