@@ -19,16 +19,16 @@ class OpenGLRenderer(RendererBase):
     """
     OpenGL 图表渲染器。
 
-    背景、网格和中心轴颜色由主题驱动，避免图表内部永远固定为深色。
+    背景透明，仅网格、中心轴和曲线随主题绘制。
     """
 
     def __init__(self):
         self.width = 1
         self.height = 1
         self._dark = True
-        self._background = (0.055, 0.060, 0.070, 1.0)
-        self._grid = (0.25, 0.28, 0.32, 0.55)
-        self._axis = (0.45, 0.48, 0.55, 0.65)
+        self._background = (0.0, 0.0, 0.0, 0.0)
+        self._grid = (0.55, 0.62, 0.72, 0.28)
+        self._axis = (0.40, 0.48, 0.58, 0.48)
         self.default_colors = [
             (0.20, 0.55, 1.00),
             (0.20, 0.85, 0.45),
@@ -43,14 +43,13 @@ class OpenGLRenderer(RendererBase):
 
     def set_theme(self, dark: bool) -> None:
         self._dark = bool(dark)
+        self._background = (0.0, 0.0, 0.0, 0.0)
         if self._dark:
-            self._background = (0.055, 0.060, 0.070, 1.0)
-            self._grid = (0.25, 0.28, 0.32, 0.55)
-            self._axis = (0.45, 0.48, 0.55, 0.65)
+            self._grid = (0.58, 0.66, 0.78, 0.22)
+            self._axis = (0.72, 0.78, 0.86, 0.32)
         else:
-            self._background = (0.972, 0.980, 0.992, 1.0)
-            self._grid = (0.58, 0.64, 0.72, 0.32)
-            self._axis = (0.38, 0.45, 0.55, 0.52)
+            self._grid = (0.35, 0.43, 0.55, 0.24)
+            self._axis = (0.28, 0.36, 0.48, 0.36)
 
     def initialize(self) -> None:
         glDisable(GL_DEPTH_TEST)
