@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
 
 import math
 import time
@@ -18,7 +17,7 @@ from qfluentwidgets import (
 from app.core.channel import ChannelConfig
 from app.core.data_hub import DataHub
 from app.core.utility import showMessage
-from app.manager import StyleSheet
+
 from app.session import (
     DebugSnapshot, F4CPPowerClient, PowerStatus, SerialConfig,
     SerialSession, listSerialPorts, pretty_faults,

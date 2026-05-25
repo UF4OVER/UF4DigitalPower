@@ -25,135 +25,15 @@ from PyQt5.QtWidgets import (
 
 from qfluentwidgets import MSFluentWindow
 from qfluentwidgets import NavigationItemPosition
-from qfluentwidgets import ProgressBar
 from qfluentwidgets import isDarkTheme
 
-from qframelesswindow import FramelessWindow
-
-from config import AppIconPath, CTX, cfg
+from config import AppIconPath, cfg
 
 from app.manager import applyApplicationTheme, logger, normalizedTheme
 
 from app.widgets.icon import UF4Icon
 from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
 
-
-class StartupSplashWindow(FramelessWindow):
-    """Branded startup window shown before the main window is constructed."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("StartupSplashWindow")
-        self.setWindowTitle("Fluor4CellPower")
-        self.setWindowIcon(QIcon(AppIconPath))
-        self.resize(720, 360)
-        self.setFixedSize(720, 360)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
-
-        self._opacity = QGraphicsOpacityEffect(self)
-        self._opacity.setOpacity(1.0)
-        self.setGraphicsEffect(self._opacity)
-        self._fadeAnimation = QPropertyAnimation(self._opacity, b"opacity", self)
-        self._fadeAnimation.setDuration(220)
-        self._fadeAnimation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._fadeAnimation.finished.connect(self.close)
-
-        root = QFrame(self)
-        root.setObjectName("StartupSplashRoot")
-        root.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-
-        self.imageLabel = QLabel(root)
-        self.imageLabel.setObjectName("StartupSplashImage")
-        self.imageLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.imageLabel.setScaledContents(False)
-
-        self.titleLabel = QLabel("Fluor4CellPower", root)
-        self.titleLabel.setObjectName("StartupSplashTitle")
-        self.subTitleLabel = QLabel("正在初始化上位机界面与设备模块…", root)
-        self.subTitleLabel.setObjectName("StartupSplashSubtitle")
-        self.progressBar = ProgressBar(root)
-        self.progressBar.setRange(0, 0)
-        self.progressBar.setFixedHeight(4)
-
-        layout = QVBoxLayout(root)
-        layout.setContentsMargins(0, 0, 0, 18)
-        layout.setSpacing(0)
-        layout.addWidget(self.imageLabel, 1)
-        layout.addSpacing(12)
-        layout.addWidget(self.titleLabel)
-        layout.addWidget(self.subTitleLabel)
-        layout.addSpacing(12)
-        layout.addWidget(self.progressBar)
-
-        shell = QVBoxLayout(self)
-        shell.setContentsMargins(0, 0, 0, 0)
-        shell.addWidget(root)
-
-        self._loadBackground()
-        self._applyStyle()
-        self._centerOnScreen()
-
-    def _loadBackground(self) -> None:
-        image_path = CTX.dirs.AssetsDir / "F4CP_2x1_1200x600.png"
-        pixmap = QPixmap(str(image_path))
-        if pixmap.isNull():
-            self.imageLabel.setText("F4CP")
-            return
-        target = QSize(720, 270)
-        self.imageLabel.setPixmap(pixmap.scaled(target, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation))
-
-    def _applyStyle(self) -> None:
-        dark = isDarkTheme()
-        root_bg = "#181A20" if dark else "#FFFFFF"
-        title = "#FFFFFF" if dark else "#111827"
-        subtitle = "rgba(255,255,255,0.68)" if dark else "rgba(15,23,42,0.62)"
-        border = "rgba(255,255,255,0.12)" if dark else "rgba(15,23,42,0.10)"
-        self.setStyleSheet(f"""
-            QFrame#StartupSplashRoot {{
-                background: {root_bg};
-                border: 1px solid {border};
-                border-radius: 18px;
-            }}
-            QLabel#StartupSplashImage {{
-                border-top-left-radius: 18px;
-                border-top-right-radius: 18px;
-                background: #0B0F18;
-            }}
-            QLabel#StartupSplashTitle {{
-                color: {title};
-                font-size: 24px;
-                font-weight: 700;
-                padding-left: 24px;
-                padding-right: 24px;
-            }}
-            QLabel#StartupSplashSubtitle {{
-                color: {subtitle};
-                font-size: 13px;
-                padding-left: 24px;
-                padding-right: 24px;
-                padding-top: 4px;
-            }}
-            ProgressBar {{
-                margin-left: 24px;
-                margin-right: 24px;
-            }}
-        """)
-
-    def _centerOnScreen(self) -> None:
-        desktop = QApplication.desktop().availableGeometry()
-        self.move(desktop.center().x() - self.width() // 2, desktop.center().y() - self.height() // 2)
-
-    def setText(self, text: str) -> None:
-        self.subTitleLabel.setText(text)
-        QApplication.processEvents()
-
-    def finish(self, mainWindow=None) -> None:
-        self.raise_()
-        self._fadeAnimation.stop()
-        self._fadeAnimation.setStartValue(self._opacity.opacity())
-        self._fadeAnimation.setEndValue(0.0)
-        self._fadeAnimation.start()
 
 
 class DynamicIsland(QFrame):
@@ -354,17 +234,14 @@ class Window(MSFluentWindow):
             UF4Icon.SERVER_FILL,
             NavigationItemPosition.BOTTOM
         )
-        self.navigationInterface.setObjectName("navigationInterface")
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
         self.resize(1400, 1100)
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("UF4 POWER")
-        self.titleBar.setObjectName("titleBar")
         self.titleBar.raise_()
-        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.navigationInterface.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.dynamicIsland = DynamicIsland(self.titleBar)
         self.dynamicIsland.recenter()
         self.dynamicIsland.raise_()
@@ -447,6 +324,7 @@ if __name__ == "__main__":
         applyApplicationTheme(theme=cfg.themeMode.value)
         w = Window()
         w.show()
+        # w.setMicaEffectEnabled(True)
 
         app.exec_()
     except Exception as e:

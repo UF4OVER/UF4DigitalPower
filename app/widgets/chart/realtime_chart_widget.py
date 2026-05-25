@@ -27,18 +27,12 @@ class RealtimeChartWidget(QWidget):
         self.setObjectName("RealtimeChartWidget")
         self.chart_model = chart_model
         self._opengl_initialized = False
+
         self._pending_title = "Power Device Realtime Chart"
 
         self.control_panel = ChartControlPanel(self)
         self.opengl_widget: OpenGLChartWidget | None = None
         self.value_panel = ChartValuePanel(self)
-        self.placeholder = QLabel("图表正在初始化…", self)
-        self.placeholder.setObjectName("ChartOpenGLPlaceholder")
-        self.placeholder.setAlignment(Qt.AlignCenter)
-        self.placeholder.setMinimumSize(600, 360)
-
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.setInterval(33)
 
         self.control_panel.groupChanged.connect(self.chart_model.set_visible_groups)
         self.control_panel.groupChanged.connect(lambda *_: self.update_chart())
@@ -51,14 +45,13 @@ class RealtimeChartWidget(QWidget):
         self.chart_area_layout = QHBoxLayout()
         self.chart_area_layout.setContentsMargins(0, 0, 0, 0)
         self.chart_area_layout.setSpacing(0)
-        self.chart_area_layout.addWidget(self.placeholder, 1)
+
         self.chart_area_layout.addWidget(self.value_panel)
 
         self.main_layout.addWidget(self.control_panel)
         self.main_layout.addLayout(self.chart_area_layout, 1)
 
-        self.refreshTheme()
-        QTimer.singleShot(120, self.initializeOpenGL)
+        self.initializeOpenGL()
 
     def initializeOpenGL(self) -> None:
         """Create QOpenGLWidget after the main window has entered the event loop."""
@@ -69,13 +62,10 @@ class RealtimeChartWidget(QWidget):
         self.opengl_widget = OpenGLChartWidget(self.chart_model, self)
         self.opengl_widget.set_title(self._pending_title)
         self.opengl_widget.snapshotUpdated.connect(self.value_panel.set_snapshot)
-        self.refresh_timer.timeout.connect(self.opengl_widget.update)
 
         self.chart_area_layout.insertWidget(0, self.opengl_widget, 1)
-        self.placeholder.hide()
-        self.placeholder.deleteLater()
+
         self.refreshTheme()
-        self.refresh_timer.start()
         self.opengl_widget.update()
 
     def update_chart(self) -> None:
