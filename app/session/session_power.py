@@ -9,7 +9,7 @@ from typing import Callable, Iterable
 from PyQt5.QtCore import QCoreApplication, QEventLoop, QIODevice, QObject, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtSerialPort import QSerialPort
 
-from session import (
+from app.session import (
     ErrorEvent,
     RxEvent,
     SendEvent,
