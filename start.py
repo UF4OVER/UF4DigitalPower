@@ -27,13 +27,12 @@ from qfluentwidgets import MSFluentWindow
 from qfluentwidgets import NavigationItemPosition
 from qfluentwidgets import ProgressBar
 from qfluentwidgets import isDarkTheme
-from qfluentwidgets import setTheme
 
 from qframelesswindow import FramelessWindow
 
 from config import AppIconPath, CTX, cfg
 
-from app.manager import StyleSheet, logger
+from app.manager import applyApplicationTheme, logger
 
 from app.widgets.icon import UF4Icon
 from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
@@ -307,7 +306,6 @@ class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
         self.setObjectName("Window")
-        # self.updateFrameless()
         self.homeInterface = HomePage(self)
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
@@ -318,11 +316,6 @@ class Window(MSFluentWindow):
         self.__initWindow()
         self._onThemeChanged()
         cfg.themeChanged.connect(self._onThemeChanged)
-
-        StyleSheet.HOME_PAGE.apply(self.homeInterface)
-        StyleSheet.DEVICE_PAGE.apply(self.deviceInterface)
-        StyleSheet.SETTINGS_PAGE.apply(self.settingInterface)
-        StyleSheet.DAPLINK_PAGE.apply(self.daplinkInterface)
 
         QTimer.singleShot(150, self._checkUpdateOnStartUp)
 
@@ -385,15 +378,19 @@ class Window(MSFluentWindow):
         super().closeEvent(event)
 
     def _onThemeChanged(self, *_):
-        dark = isDarkTheme()
-        bgColor = "#242424" if dark else "#F3F3F3"
-        self.setStyleSheet(f"Window {{ background: transparent;}}")
+        applyApplicationTheme(self, cfg.themeMode.value)
         self.setCustomBackgroundColor(QColor("#F3F3F3"), QColor("#242424"))
+        self.dynamicIsland.setDarkTheme(isDarkTheme())
 
-        # if hasattr(self, "dynamicIsland"):
-        self.dynamicIsland.setDarkTheme(dark)
-        # if hasattr(self, "powerInterface") and self.powerInterface is not None:
-            # self.powerInterface._refreshThemeBundle()
+        for page in (
+            self.homeInterface,
+            self.deviceInterface,
+            self.powerInterface,
+            self.daplinkInterface,
+            self.settingInterface,
+        ):
+            if hasattr(page, "_onThemeChanged"):
+                page._onThemeChanged()
 
     def showDynamicIsland(self, title: str, content: str = "", level: str = "info", duration: int = 3200):
         if hasattr(self, "dynamicIsland"):
@@ -402,7 +399,6 @@ class Window(MSFluentWindow):
     def _checkUpdateOnStartUp(self):
         if getattr(cfg.checkUpdateAtStartUp, "value", False):
             self.homeInterface.requestUpdateCheck(manual=False)
-
 
 
 if __name__ == "__main__":
@@ -415,7 +411,7 @@ if __name__ == "__main__":
     logger.info("Application started")
     try:
         app = QApplication(sys.argv)
-        setTheme(cfg.themeMode.value)
+        applyApplicationTheme(theme=cfg.themeMode.value)
         w = Window()
         w.show()
         w.setMicaEffectEnabled(True)
