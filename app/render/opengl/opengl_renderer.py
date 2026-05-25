@@ -9,6 +9,16 @@
 #  @Contact : OpenGL 曲线渲染主逻辑
 #  @Python  :
 # -------------------------------
+from __future__ import annotations
+
+import os
+import sys
+
+# cx_Freeze 打包后 PyOpenGL 可能拿不到 entry_points 元数据，导致 platform 插件为 None。
+# 必须在导入 OpenGL.GL 之前强制指定 Windows 平台插件。
+if sys.platform.startswith("win"):
+    os.environ.setdefault("PYOPENGL_PLATFORM", "win32")
+
 from OpenGL.GL import *
 
 from render.renderer_base import RendererBase
