@@ -36,6 +36,19 @@ includes = [
     "PyQt5.QtCore",
     "PyQt5.QtGui",
     "PyQt5.QtWidgets",
+    "PyQt5.QtOpenGL",
+    "OpenGL",
+    "OpenGL.GL",
+    "OpenGL.error",
+    "OpenGL.platform",
+    "OpenGL.platform.win32",
+    "OpenGL.platform.baseplatform",
+    "OpenGL.raw.GL.VERSION.GL_1_0",
+    "OpenGL.raw.GL.VERSION.GL_1_1",
+    "OpenGL.raw.GL.VERSION.GL_1_2",
+    "OpenGL.raw.GL.VERSION.GL_1_3",
+    "OpenGL.raw.GL.VERSION.GL_1_4",
+    "OpenGL.raw.GL.VERSION.GL_1_5",
     "pyocd",
     "qfluentwidgets",
     "config",
@@ -53,6 +66,11 @@ packages = [
     "app.widgets.icon",
     "app.widgets.pages",
     "app.widgets.render",
+    "OpenGL",
+    "OpenGL.GL",
+    "OpenGL.raw",
+    "OpenGL.raw.GL",
+    "OpenGL.platform",
     "config"
 ]
 
@@ -68,6 +86,7 @@ zip_include_packages = ["*"]
 
 zip_exclude_packages = [
    "PyQt5",
+   "OpenGL",
    "lark",
    "pyocd",
    "qfluentwidgets",
@@ -112,7 +131,6 @@ excludes = [
     "PyQt5.QtPrintSupport",
     "PyQt5.QtSql",
     "PyQt5.QtTest",
-##    "PyQt5.QtOpenGL",
     "PyQt5.QtHelp",
     "PyQt5.QtMultimedia",
     "PyQt5.QtMultimediaWidgets",
