@@ -28,7 +28,6 @@ from qfluentwidgets import (
     SwitchSettingCard,
     Theme,
     qconfig,
-    setTheme,
     setThemeColor,
 )
 
@@ -145,8 +144,6 @@ class SettingsPage(ScrollArea):
 
     def __connectSignalToSlot(self):
         cfg.appRestartSig.connect(self.__showRestartTooltip)
-        cfg.themeChanged.connect(setTheme)
-        cfg.themeChanged.connect(lambda *_: self.__applyLocalStyle())
         self.themeCard.comboBox.currentIndexChanged.connect(self.__onThemeModeChanged)
         self.themeColorCard.colorChanged.connect(lambda c: setThemeColor(c))
         self.fontCard.comboBox.currentIndexChanged.connect(self.__onFontChanged)
@@ -163,6 +160,10 @@ class SettingsPage(ScrollArea):
                 background-color: transparent;
             }
         ''')
+
+    def _onThemeChanged(self, *_):
+        self.__applyLocalStyle()
+        self.__setCustomColorCardTexts('主题色', '调整应用的主色调')
 
     def showEvent(self, event):
         super().showEvent(event)
