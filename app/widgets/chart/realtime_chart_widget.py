@@ -12,6 +12,7 @@ from app.widgets.chart.chart_value_panel import ChartValuePanel
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.chart_control_panel import ChartControlPanel
 from app.render.opengl.opengl_chart_widget import OpenGLChartWidget
+from config import cfg
 
 
 class RealtimeChartWidget(QWidget):
@@ -20,7 +21,8 @@ class RealtimeChartWidget(QWidget):
 
     - 外层圆角、半透明卡片
     - OpenGL 图表区域背景透明
-    - 数据进入后使用短间隔刷新节流，保证实时性同时避免过度重绘
+    - 数据进入后使用短间隔刷新节流
+    - 可见时额外用轻量定时器刷新，保证真实串口轮询和假数据都能实时动
     """
 
     def __init__(self, chart_model: ChartModel, parent=None):
@@ -30,7 +32,6 @@ class RealtimeChartWidget(QWidget):
         self.chart_model = chart_model
         self._opengl_initialized = False
         self._pending_title = "Power Device Realtime Chart"
-        self._last_paint_request_ms = 0
 
         self.control_panel = ChartControlPanel(self)
         self.opengl_widget: OpenGLChartWidget | None = None
@@ -40,6 +41,16 @@ class RealtimeChartWidget(QWidget):
         self._repaint_timer.setSingleShot(True)
         self._repaint_timer.setInterval(16)
         self._repaint_timer.timeout.connect(self.update_chart)
+
+        self._live_timer = QTimer(self)
+        self._live_timer.setInterval(100)
+        self._live_timer.timeout.connect(self._tick_realtime_update)
+        self._live_timer.start()
+
+        try:
+            cfg.themeChanged.connect(self.refreshTheme)
+        except Exception:
+            pass
 
         self.control_panel.groupChanged.connect(self.chart_model.set_visible_groups)
         self.control_panel.groupChanged.connect(lambda *_: self.request_repaint())
@@ -77,6 +88,10 @@ class RealtimeChartWidget(QWidget):
         self.refreshTheme()
         self.opengl_widget.update()
 
+    def _tick_realtime_update(self) -> None:
+        if self.isVisible() and self.opengl_widget is not None:
+            self.opengl_widget.update()
+
     def request_repaint(self) -> None:
         """Request one chart repaint with a small throttle for realtime streams."""
         if not self._repaint_timer.isActive():
@@ -108,7 +123,7 @@ class RealtimeChartWidget(QWidget):
         self.control_panel.setCurrentGroup("all")
         self.request_repaint()
 
-    def refreshTheme(self) -> None:
+    def refreshTheme(self, *_args) -> None:
         dark = isDarkTheme()
         card_bg = "rgba(255, 255, 255, 0.045)" if dark else "rgba(255, 255, 255, 0.54)"
         border = "rgba(255, 255, 255, 0.10)" if dark else "rgba(15, 23, 42, 0.08)"
