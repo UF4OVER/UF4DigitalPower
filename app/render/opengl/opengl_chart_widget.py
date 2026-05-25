@@ -14,6 +14,7 @@ class OpenGLChartWidget(QOpenGLWidget):
     """
     OpenGL 实时曲线控件。
 
+    - 背景透明，容器负责圆角和底色
     - 左键拖动：时间轴左右平移，只改变 time_offset，不改变时基窗口
     - 滚轮：缩放时基窗口
     - 双击：回到实时位置
@@ -47,6 +48,7 @@ class OpenGLChartWidget(QOpenGLWidget):
         ]
 
         self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMinimumSize(600, 360)
         self.setMouseTracking(True)
         self.refreshTheme()
@@ -73,14 +75,13 @@ class OpenGLChartWidget(QOpenGLWidget):
             self._tooltip_bg = QColor(20, 24, 32, 232)
             self._tooltip_fg = QColor(235, 240, 248)
             self._cross_color = QColor(255, 255, 255, 168)
-            self.setStyleSheet("QOpenGLWidget#OpenGLChartWidget { background: #0E1117; }")
         else:
             self._title_color = QColor(17, 24, 39)
             self._axis_color = QColor(71, 85, 105)
             self._tooltip_bg = QColor(255, 255, 255, 236)
             self._tooltip_fg = QColor(15, 23, 42)
             self._cross_color = QColor(15, 23, 42, 118)
-            self.setStyleSheet("QOpenGLWidget#OpenGLChartWidget { background: #F8FAFC; }")
+        self.setStyleSheet("QOpenGLWidget#OpenGLChartWidget { background: transparent; border: none; }")
         self.update()
 
     def _draw_overlay(self, snapshot: ChartSnapshot) -> None:
