@@ -32,7 +32,7 @@ from qframelesswindow import FramelessWindow
 
 from config import AppIconPath, CTX, cfg
 
-from app.manager import applyApplicationTheme, logger
+from app.manager import applyApplicationTheme, logger, normalizedTheme
 
 from app.widgets.icon import UF4Icon
 from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
@@ -354,14 +354,17 @@ class Window(MSFluentWindow):
             UF4Icon.SERVER_FILL,
             NavigationItemPosition.BOTTOM
         )
+        self.navigationInterface.setObjectName("navigationInterface")
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
         self.resize(1400, 1100)
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("UF4 POWER")
+        self.titleBar.setObjectName("titleBar")
         self.titleBar.raise_()
-        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.navigationInterface.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.dynamicIsland = DynamicIsland(self.titleBar)
         self.dynamicIsland.recenter()
         self.dynamicIsland.raise_()
@@ -378,9 +381,39 @@ class Window(MSFluentWindow):
         super().closeEvent(event)
 
     def _onThemeChanged(self, *_):
-        applyApplicationTheme(self, cfg.themeMode.value)
-        self.setCustomBackgroundColor(QColor("#F3F3F3"), QColor("#242424"))
-        self.dynamicIsland.setDarkTheme(isDarkTheme())
+        theme = normalizedTheme(cfg.themeMode.value)
+        is_dark = theme.name.lower() == "dark"
+        bg_light = QColor("#F3F3F3")
+        bg_dark = QColor("#242424")
+
+        applyApplicationTheme(self, theme)
+        self.setCustomBackgroundColor(bg_light, bg_dark)
+        self.setMicaEffectEnabled(False)
+        self.dynamicIsland.setDarkTheme(is_dark)
+
+        shell_bg = "#242424" if is_dark else "#F3F3F3"
+        nav_bg = "#1F1F1F" if is_dark else "#FFFFFF"
+        title_bg = shell_bg
+        text = "#F5F5F5" if is_dark else "#1F1F1F"
+        border = "rgba(255,255,255,0.10)" if is_dark else "rgba(0,0,0,0.08)"
+        self.setStyleSheet(f"""
+            MSFluentWindow#Window {{ background: {shell_bg}; }}
+            QWidget#navigationInterface {{
+                background: {nav_bg};
+                border-right: 1px solid {border};
+            }}
+            QWidget#titleBar {{
+                background: {title_bg};
+                color: {text};
+            }}
+        """)
+        self.navigationInterface.setStyleSheet(f"background: {nav_bg}; border-right: 1px solid {border};")
+        self.titleBar.setStyleSheet(f"background: {title_bg}; color: {text};")
+
+        for widget in (self, self.navigationInterface, self.titleBar):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
         for page in (
             self.homeInterface,
@@ -414,7 +447,6 @@ if __name__ == "__main__":
         applyApplicationTheme(theme=cfg.themeMode.value)
         w = Window()
         w.show()
-        w.setMicaEffectEnabled(True)
 
         app.exec_()
     except Exception as e:
