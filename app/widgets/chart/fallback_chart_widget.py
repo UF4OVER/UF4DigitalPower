@@ -10,7 +10,7 @@ from app.widgets.chart.chart_model import ChartModel, ChartSnapshot
 
 
 class FallbackChartWidget(QWidget):
-    """Pure Qt realtime chart used when PyOpenGL is unavailable after packaging."""
+    """Pure Qt realtime chart with capped repaint and cached draw paths."""
 
     snapshotUpdated = pyqtSignal(object)
 
@@ -24,6 +24,9 @@ class FallbackChartWidget(QWidget):
         self._last_drag_x = 0
         self._hover_info: dict | None = None
         self._hover_threshold_px = 12
+        self._snapshot_dirty = True
+        self._cached_paths: list[QPainterPath] = []
+        self._cached_size: tuple[int, int] = (0, 0)
         self._legend_colors = [
             QColor(51, 140, 255), QColor(51, 217, 115), QColor(255, 166, 51),
             QColor(255, 77, 89), QColor(178, 115, 255), QColor(51, 217, 217),
@@ -38,6 +41,9 @@ class FallbackChartWidget(QWidget):
     def set_title(self, title: str) -> None:
         self.title = title or "Power Device Realtime Chart"
         self.update()
+
+    def mark_data_dirty(self) -> None:
+        self._snapshot_dirty = True
 
     def refreshTheme(self) -> None:
         dark = isDarkTheme()
@@ -59,7 +65,9 @@ class FallbackChartWidget(QWidget):
         self.update()
 
     def paintEvent(self, event) -> None:
-        self.latest_snapshot = self.chart_model.build_snapshot()
+        self._ensure_snapshot()
+        if self.latest_snapshot is None:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.TextAntialiasing)
@@ -67,7 +75,33 @@ class FallbackChartWidget(QWidget):
         self._draw_curves(painter, self.latest_snapshot)
         self._draw_overlay(painter, self.latest_snapshot)
         painter.end()
+
+    def resizeEvent(self, event) -> None:
+        self.mark_data_dirty()
+        super().resizeEvent(event)
+
+    def _ensure_snapshot(self) -> None:
+        size = (self.width(), self.height())
+        if not self._snapshot_dirty and self.latest_snapshot is not None and size == self._cached_size:
+            return
+
+        self._cached_size = size
+        self.latest_snapshot = self.chart_model.build_snapshot_for_width(max(1, self.width()))
+        self._cached_paths = self._build_paths(self.latest_snapshot)
+        self._snapshot_dirty = False
         self.snapshotUpdated.emit(self.latest_snapshot)
+
+    def _build_paths(self, snapshot: ChartSnapshot) -> list[QPainterPath]:
+        paths: list[QPainterPath] = []
+        for curve in snapshot.curves:
+            path = QPainterPath()
+            if curve.points:
+                first = curve.points[0]
+                path.moveTo(*self._gl_to_pixel(first.gl_x, first.gl_y))
+                for point in curve.points[1:]:
+                    path.lineTo(*self._gl_to_pixel(point.gl_x, point.gl_y))
+            paths.append(path)
+        return paths
 
     def _draw_grid(self, painter: QPainter) -> None:
         painter.setPen(QPen(self._grid_color, 1))
@@ -91,17 +125,13 @@ class FallbackChartWidget(QWidget):
             pen = QPen(color, 2)
             pen.setCosmetic(True)
             painter.setPen(pen)
-            path = QPainterPath()
-            first = curve.points[0]
-            path.moveTo(*self._gl_to_pixel(first.gl_x, first.gl_y))
-            for point in curve.points[1:]:
-                path.lineTo(*self._gl_to_pixel(point.gl_x, point.gl_y))
-            painter.drawPath(path)
+            if index < len(self._cached_paths):
+                painter.drawPath(self._cached_paths[index])
 
     def _draw_overlay(self, painter: QPainter, snapshot: ChartSnapshot) -> None:
         painter.setPen(self._title_color)
         painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
-        painter.drawText(12, 24, self.title + "  (Qt Painter)")
+        painter.drawText(12, 24, self.title + "  (Qt)")
 
         painter.setPen(self._axis_color)
         painter.setFont(QFont("Consolas", 9))
@@ -193,6 +223,7 @@ class FallbackChartWidget(QWidget):
             seconds_per_px = self.chart_model.time_window_sec / max(1, self.width())
             self.chart_model.pan_time(-dx * seconds_per_px)
             self._hover_info = None
+            self.mark_data_dirty()
             self.update()
             event.accept()
             return
@@ -211,6 +242,7 @@ class FallbackChartWidget(QWidget):
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             self.chart_model.reset_time_offset()
+            self.mark_data_dirty()
             self.update()
             event.accept()
             return
@@ -224,5 +256,6 @@ class FallbackChartWidget(QWidget):
     def wheelEvent(self, event) -> None:
         delta = event.angleDelta().y()
         self.chart_model.zoom_time_window(0.8 if delta > 0 else 1.25)
+        self.mark_data_dirty()
         self.update()
         event.accept()

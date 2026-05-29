@@ -19,9 +19,11 @@ class RealtimeChartWidget(QWidget):
     """
     实时图表外层控件。
 
-    打包环境里 PyOpenGL 可能无法导入，因此 OpenGL 控件必须懒加载。
-    OpenGL 不可用时自动使用 Qt Painter 备用图表，保证 APP 可启动。
+    统一使用 Qt Painter 图表，并将采样输入与界面重绘解耦。
+    数据流可以高频写入，界面重绘限制在可控帧率内。
     """
+
+    DEFAULT_RENDER_INTERVAL_MS = 33
 
     def __init__(self, chart_model: ChartModel, parent=None):
         super().__init__(parent)
@@ -29,11 +31,11 @@ class RealtimeChartWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.chart_model = chart_model
         self._chart_initialized = False
-        self._using_opengl = False
         self._pending_title = "Power Device Realtime Chart"
+        self._dirty = True
 
         self.control_panel = ChartControlPanel(self)
-        self.opengl_widget = None
+        self.chart_widget = None
         self.value_panel = ChartValuePanel(self)
 
         self._repaint_timer = QTimer(self)
@@ -42,7 +44,7 @@ class RealtimeChartWidget(QWidget):
         self._repaint_timer.timeout.connect(self.update_chart)
 
         self._live_timer = QTimer(self)
-        self._live_timer.setInterval(100)
+        self._live_timer.setInterval(self.DEFAULT_RENDER_INTERVAL_MS)
         self._live_timer.timeout.connect(self._tick_realtime_update)
         self._live_timer.start()
 
@@ -52,7 +54,7 @@ class RealtimeChartWidget(QWidget):
             pass
 
         self.control_panel.groupChanged.connect(self.chart_model.set_visible_groups)
-        self.control_panel.groupChanged.connect(lambda *_: self.request_repaint())
+        self.control_panel.groupChanged.connect(lambda *_: self.request_repaint(data_changed=True))
         self.control_panel.exportRequested.connect(self.export_image_to_file)
 
         self.main_layout = QVBoxLayout(self)
@@ -70,66 +72,69 @@ class RealtimeChartWidget(QWidget):
         self.main_layout.addWidget(self.control_panel)
         self.main_layout.addWidget(self.chart_area, 1)
 
-        self.initializeOpenGL()
+        self.initializeChart()
 
-    def initializeOpenGL(self) -> None:
-        """Create chart widget lazily, falling back to QPainter when OpenGL fails."""
+    def initializeChart(self) -> None:
+        """Create the pure Qt chart lazily."""
         if self._chart_initialized:
             return
         self._chart_initialized = True
 
-        chart_widget = None
-        try:
-            from app.render.opengl.opengl_chart_widget import OpenGLChartWidget
-            chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
-            logger.info("Using OpenGL for realtime chart rendering.")
-            self._using_opengl = True
-        except Exception as exc:
-            logger.warning(f"OpenGL chart unavailable, fallback to Qt Painter chart: {exc}")
-            chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
-            self._using_opengl = False
-
-        self.opengl_widget = chart_widget
-        self.opengl_widget.set_title(self._pending_title)
-        self.opengl_widget.snapshotUpdated.connect(self.value_panel.set_snapshot)
-        self.chart_area_layout.insertWidget(0, self.opengl_widget, 1)
+        self.chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
+        self.chart_widget.set_title(self._pending_title)
+        self.chart_widget.snapshotUpdated.connect(self.value_panel.set_snapshot)
+        self.chart_area_layout.insertWidget(0, self.chart_widget, 1)
+        logger.info("Using Qt Painter for realtime chart rendering.")
 
         self.refreshTheme()
-        self.opengl_widget.update()
+        self.mark_data_dirty()
+        self.update_chart()
 
     def _tick_realtime_update(self) -> None:
-        if self.isVisible() and self.opengl_widget is not None:
-            self.opengl_widget.update()
+        if self.isVisible() and self.chart_widget is not None and self._dirty:
+            self.update_chart()
 
-    def request_repaint(self) -> None:
+    def request_repaint(self, data_changed: bool = False) -> None:
+        if data_changed:
+            self.mark_data_dirty()
         if not self._repaint_timer.isActive():
             self._repaint_timer.start()
 
+    def mark_data_dirty(self) -> None:
+        self._dirty = True
+        if self.chart_widget is not None:
+            self.chart_widget.mark_data_dirty()
+
+    def set_render_fps(self, fps: int) -> None:
+        fps = max(1, int(fps))
+        self._live_timer.setInterval(max(16, int(1000 / fps)))
+
     def update_chart(self) -> None:
-        if self.opengl_widget is not None:
-            self.opengl_widget.update()
+        if self.chart_widget is not None:
+            self.chart_widget.update()
+            self._dirty = False
 
     def set_time_window(self, seconds: float) -> None:
         self.chart_model.set_time_window(seconds)
-        self.request_repaint()
+        self.request_repaint(data_changed=True)
 
     def set_auto_y_range(self, enabled: bool) -> None:
         self.chart_model.set_auto_y_range(enabled)
-        self.request_repaint()
+        self.request_repaint(data_changed=True)
 
     def set_title(self, title: str) -> None:
         self._pending_title = title or "Power Device Realtime Chart"
-        if self.opengl_widget is not None:
-            self.opengl_widget.set_title(self._pending_title)
+        if self.chart_widget is not None:
+            self.chart_widget.set_title(self._pending_title)
 
     def show_channels(self, *keys: str) -> None:
         self.chart_model.show_channels(*keys)
-        self.request_repaint()
+        self.request_repaint(data_changed=True)
 
     def show_all_channels(self) -> None:
         self.chart_model.show_all_channels()
         self.control_panel.setCurrentGroup("all")
-        self.request_repaint()
+        self.request_repaint(data_changed=True)
 
     def refreshTheme(self, *_args) -> None:
         dark = isDarkTheme()
@@ -152,8 +157,8 @@ class RealtimeChartWidget(QWidget):
         )
         self.control_panel.refreshTheme()
         self.value_panel.refreshTheme()
-        if self.opengl_widget is not None:
-            self.opengl_widget.refreshTheme()
+        if self.chart_widget is not None:
+            self.chart_widget.refreshTheme()
         self.request_repaint()
 
     def export_image_to_file(self) -> None:
@@ -166,8 +171,8 @@ class RealtimeChartWidget(QWidget):
         )
         if not path:
             return
-        if self.opengl_widget is None:
-            self.initializeOpenGL()
+        if self.chart_widget is None:
+            self.initializeChart()
         self.repaint()
         pixmap = self.grab()
         pixmap.save(path)

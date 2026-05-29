@@ -14,7 +14,6 @@
 import sys
 
 from PyQt5.QtCore import QTimer
-from PyQt5.QtGui import QSurfaceFormat
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
 
 from app.core.data_hub import DataHub
@@ -49,13 +48,6 @@ class DemoWindow(QWidget):
 
 
 def main():
-    fmt = QSurfaceFormat()
-    fmt.setRenderableType(QSurfaceFormat.OpenGL)
-    fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
-    fmt.setVersion(2, 1)
-    fmt.setSamples(4)
-    QSurfaceFormat.setDefaultFormat(fmt)
-
     app = QApplication(sys.argv)
 
     window = DemoWindow()

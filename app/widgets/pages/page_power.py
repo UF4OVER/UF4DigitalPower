@@ -241,6 +241,7 @@ class TelemetryChartCard(CardWidget):
             "core_temp": status.core_temp_c,
             "board_temp": status.board_temp_c,
         }, t=time.time())
+        self.chart.mark_data_dirty()
 
     def pushMock(self) -> None:
         t = time.time()
@@ -258,6 +259,7 @@ class TelemetryChartCard(CardWidget):
             "core_temp": 42.0 + math.sin(phase * 0.25) * 2.0,
             "board_temp": 38.0 + math.sin(phase * 0.32) * 1.4,
         }, t=t)
+        self.chart.mark_data_dirty()
 
 
 class PowerPage(ScrollArea):

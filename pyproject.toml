@@ -20,7 +20,6 @@ dependencies = [
     "PyQt5>=5.15.2",
     "pyocd>=0.44.0",
     "pyqt-fluent-widgets>=1.11.2",
-    "pyopengl>=3.1.10",
 ]
 
 [tool.uv]
@@ -70,12 +69,6 @@ packages = [
     "app.widgets.chart",
     "app.widgets.icon",
     "app.widgets.pages",
-    "app.render",
-#    "OpenGL",
-#    "OpenGL.GL",
-#    "OpenGL.raw",
-#    "OpenGL.raw.GL",
-#    "OpenGL.platform",
     "config"
 ]
 
