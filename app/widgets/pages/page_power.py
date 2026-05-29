@@ -31,6 +31,7 @@ DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
 POWER_POLL_INTERVAL_MS = 500
 POWER_SERIAL_BAUD_RATE = 921600
 WRITE_POLL_RESTART_DELAY_MS = 600
+MOCK_SAMPLE_INTERVAL_MS = 20
 
 POWER_CHART_CHANNELS = (
     ChannelConfig("vin", "输入电压", "V", precision=3, group="voltage", color=(47, 128, 237), line_width=2.0),
@@ -297,8 +298,12 @@ class PowerPage(ScrollArea):
         self._writePollRestartTimer = QTimer(self)
         self._writePollRestartTimer.setSingleShot(True)
         self._writePollRestartTimer.timeout.connect(self._restartAutoPollingAfterWrite)
+        self._scrollIdleTimer = QTimer(self)
+        self._scrollIdleTimer.setSingleShot(True)
+        self._scrollIdleTimer.setInterval(180)
+        self._scrollIdleTimer.timeout.connect(self._resumeChartAfterScroll)
         self._mockTimer = QTimer(self)
-        self._mockTimer.setInterval(100)
+        self._mockTimer.setInterval(MOCK_SAMPLE_INTERVAL_MS)
         self._mockTimer.timeout.connect(self.pushMockPowerSample)
 
         self.scrollWidget = QWidget(self)
@@ -317,6 +322,7 @@ class PowerPage(ScrollArea):
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setViewportMargins(0, 0, 0, 0)
+        self.verticalScrollBar().valueChanged.connect(self._onScrollValueChanged)
 
         self._bindSignals()
         self._applyDisconnectedState()
@@ -420,6 +426,13 @@ class PowerPage(ScrollArea):
         top.addWidget(self.logLevelCombo)
         top.addWidget(self.clearLogButton)
         self.logEdit = TextEdit(self.logCard)
+
+    def _onScrollValueChanged(self, _value: int) -> None:
+        self.chartCard.chart.set_live_updates_suspended(True)
+        self._scrollIdleTimer.start()
+
+    def _resumeChartAfterScroll(self) -> None:
+        self.chartCard.chart.set_live_updates_suspended(False)
         self.logEdit.setMinimumHeight(170)
         self.logEdit.setReadOnly(True)
         self.logEdit.document().setMaximumBlockCount(400)

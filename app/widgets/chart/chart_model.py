@@ -152,13 +152,16 @@ class ChartModel:
             self.time_window_sec,
             view_now,
         )
+        reduced_channel_samples = [
+            (channel, self._downsample_samples(samples, pixel_width))
+            for channel, samples in channel_samples
+        ]
 
-        y_range = self._calculate_y_range(channel_samples)
+        y_range = self._calculate_y_range(reduced_channel_samples)
 
         curves: list[ChartCurve] = []
 
-        for channel, samples in channel_samples:
-            samples = self._downsample_samples(samples, pixel_width)
+        for channel, samples in reduced_channel_samples:
             points = [
                 self._to_chart_point(sample, x_range, y_range)
                 for sample in samples
@@ -220,6 +223,18 @@ class ChartModel:
         if reduced[-1] != last:
             reduced.append(last)
         return reduced
+
+    @staticmethod
+    def pixel_to_time(pixel_x: int, pixel_width: int, x_range: AxisRange) -> float:
+        if pixel_width <= 1 or not x_range.is_valid():
+            return x_range.maximum
+
+        ratio = max(0.0, min(1.0, pixel_x / max(1, pixel_width)))
+        return x_range.minimum + x_range.span * ratio
+
+    @staticmethod
+    def point_to_pixel_x(point: ChartPoint, pixel_width: int) -> int:
+        return int((point.gl_x + 1.0) * 0.5 * pixel_width)
 
     def _filter_visible_channels(self) -> list[ChannelBuffer]:
         channels = self.data_hub.visible_channels()

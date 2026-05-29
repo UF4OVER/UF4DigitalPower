@@ -23,7 +23,8 @@ class RealtimeChartWidget(QWidget):
     数据流可以高频写入，界面重绘限制在可控帧率内。
     """
 
-    DEFAULT_RENDER_INTERVAL_MS = 33
+    DEFAULT_RENDER_INTERVAL_MS = 50
+    VALUE_PANEL_UPDATE_INTERVAL_MS = 200
 
     def __init__(self, chart_model: ChartModel, parent=None):
         super().__init__(parent)
@@ -33,10 +34,12 @@ class RealtimeChartWidget(QWidget):
         self._chart_initialized = False
         self._pending_title = "Power Device Realtime Chart"
         self._dirty = True
+        self._live_updates_suspended = False
 
         self.control_panel = ChartControlPanel(self)
         self.chart_widget = None
         self.value_panel = ChartValuePanel(self)
+        self._pending_panel_snapshot = None
 
         self._repaint_timer = QTimer(self)
         self._repaint_timer.setSingleShot(True)
@@ -47,6 +50,11 @@ class RealtimeChartWidget(QWidget):
         self._live_timer.setInterval(self.DEFAULT_RENDER_INTERVAL_MS)
         self._live_timer.timeout.connect(self._tick_realtime_update)
         self._live_timer.start()
+
+        self._value_panel_timer = QTimer(self)
+        self._value_panel_timer.setInterval(self.VALUE_PANEL_UPDATE_INTERVAL_MS)
+        self._value_panel_timer.timeout.connect(self._flush_value_panel_snapshot)
+        self._value_panel_timer.start()
 
         try:
             cfg.themeChanged.connect(self.refreshTheme)
@@ -82,7 +90,7 @@ class RealtimeChartWidget(QWidget):
 
         self.chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
         self.chart_widget.set_title(self._pending_title)
-        self.chart_widget.snapshotUpdated.connect(self.value_panel.set_snapshot)
+        self.chart_widget.snapshotUpdated.connect(self._queue_value_panel_snapshot)
         self.chart_area_layout.insertWidget(0, self.chart_widget, 1)
         logger.info("Using Qt Painter for realtime chart rendering.")
 
@@ -91,6 +99,8 @@ class RealtimeChartWidget(QWidget):
         self.update_chart()
 
     def _tick_realtime_update(self) -> None:
+        if self._live_updates_suspended:
+            return
         if self.isVisible() and self.chart_widget is not None and self._dirty:
             self.update_chart()
 
@@ -113,6 +123,26 @@ class RealtimeChartWidget(QWidget):
         if self.chart_widget is not None:
             self.chart_widget.update()
             self._dirty = False
+
+    def _queue_value_panel_snapshot(self, snapshot) -> None:
+        self._pending_panel_snapshot = snapshot
+
+    def _flush_value_panel_snapshot(self) -> None:
+        if self._live_updates_suspended:
+            return
+        if self._pending_panel_snapshot is None:
+            return
+        self.value_panel.set_snapshot(self._pending_panel_snapshot)
+        self._pending_panel_snapshot = None
+
+    def set_live_updates_suspended(self, suspended: bool) -> None:
+        suspended = bool(suspended)
+        if self._live_updates_suspended == suspended:
+            return
+        self._live_updates_suspended = suspended
+        if not suspended:
+            self.request_repaint(data_changed=True)
+            self._flush_value_panel_snapshot()
 
     def set_time_window(self, seconds: float) -> None:
         self.chart_model.set_time_window(seconds)
@@ -159,6 +189,8 @@ class RealtimeChartWidget(QWidget):
         self.value_panel.refreshTheme()
         if self.chart_widget is not None:
             self.chart_widget.refreshTheme()
+        if self._pending_panel_snapshot is not None:
+            self.value_panel.set_snapshot(self._pending_panel_snapshot)
         self.request_repaint()
 
     def export_image_to_file(self) -> None:

@@ -87,7 +87,13 @@ class RingBuffer:
             now = time.time()
 
         min_t = now - seconds
-        return [sample for sample in self._data if sample.t >= min_t]
+        result: list[Sample] = []
+        for sample in reversed(self._data):
+            if sample.t < min_t:
+                break
+            result.append(sample)
+        result.reverse()
+        return result
 
     def __len__(self) -> int:
         return len(self._data)

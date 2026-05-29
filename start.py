@@ -12,7 +12,7 @@
 import sys
 
 from PyQt5.QtCore import QEasingCurve, QEventLoop, QPropertyAnimation, Qt, QTimer, QSize
-from PyQt5.QtGui import QCloseEvent, QIcon, QPixmap, QColor
+from PyQt5.QtGui import QCloseEvent, QFont, QIcon, QPixmap, QColor
 from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
@@ -29,7 +29,7 @@ from qfluentwidgets import isDarkTheme
 
 from config import AppIconPath, cfg
 
-from app.manager import applyApplicationTheme, logger, normalizedTheme
+from app.manager import applyApplicationTheme, loadSavedFont, logger, normalizedTheme
 
 from app.widgets.icon import UF4Icon
 from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
@@ -89,6 +89,7 @@ class DynamicIsland(QFrame):
         layout.addWidget(self.titleLabel)
         layout.addWidget(self.contentLabel)
 
+        self._applyFonts()
         self._applyStyle("info")
         self.hide()
 
@@ -97,6 +98,7 @@ class DynamicIsland(QFrame):
         content = (content or "").strip()
         level = (level or "info").lower()
 
+        self._applyFonts()
         self._level = level
         self._hiding = False
         self._applyStyle(level)
@@ -172,14 +174,26 @@ class DynamicIsland(QFrame):
             }}
             QLabel#DynamicIslandTitle {{
                 color: {titleColor};
-                font-size: 12px;
-                font-weight: 600;
             }}
             QLabel#DynamicIslandContent {{
                 color: {contentColor};
-                font-size: 12px;
             }}
         """)
+
+    def _applyFonts(self):
+        app = QApplication.instance()
+        base_font = app.font() if app is not None else self.font()
+
+        island_font = QFont(base_font)
+        island_font.setPointSize(12)
+        self.setFont(island_font)
+
+        title_font = QFont(island_font)
+        title_font.setWeight(QFont.DemiBold)
+        self.titleLabel.setFont(title_font)
+
+        content_font = QFont(island_font)
+        self.contentLabel.setFont(content_font)
 
 
 class Window(MSFluentWindow):
@@ -321,6 +335,7 @@ if __name__ == "__main__":
     logger.info("Application started")
     try:
         app = QApplication(sys.argv)
+        loadSavedFont(app)
         applyApplicationTheme(theme=cfg.themeMode.value)
         w = Window()
         w.show()
