@@ -81,7 +81,7 @@ class RealtimeChartWidget(QWidget):
         chart_widget = None
         try:
             from app.render.opengl.opengl_chart_widget import OpenGLChartWidget
-            chart_widget = OpenGLChartWidget(self.chart_model, self.chart_area)
+            chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
             logger.info("Using OpenGL for realtime chart rendering.")
             self._using_opengl = True
         except Exception as exc:
