@@ -481,6 +481,7 @@ class PowerPage(ScrollArea):
         self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
         self._client.powerStateWritten.connect(self._onPowerStateWritten)
         self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
+        self._client.communicationFailureLimitReached.connect(self._disconnectAfterCommunicationFailures)
 
         self.attachSessionRequested.connect(self._client.attach_session)
         self.detachSessionRequested.connect(self._client.detach_session)
@@ -725,6 +726,13 @@ class PowerPage(ScrollArea):
             return
         self._appendLog("连续写入失败 3 次，已断开串口")
         showMessage(self, "串口已断开", "连续写入失败 3 次，已关闭当前串口连接。", level="error")
+        self._disconnectManualSession()
+
+    def _disconnectAfterCommunicationFailures(self, message: str) -> None:
+        if not self._client.is_connected and self._manualSession is None:
+            return
+        self._appendLog(f"连续通信失败 3 次，已断开串口。最后错误: {message}")
+        showMessage(self, "串口已断开", "连续 3 次无回复或错误，已关闭当前串口连接。", level="error")
         self._disconnectManualSession()
 
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:

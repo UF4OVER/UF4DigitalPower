@@ -217,7 +217,16 @@ class FrameParser:
 
 
 class SimPowerDevice(QObject):
-    def __init__(self, port: str, baudrate: int, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        port: str,
+        baudrate: int,
+        *,
+        fault_mode: str = "normal",
+        fault_count: int = 0,
+        fault_command: str = "all",
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self.serial = QSerialPort(self)
         self.serial.setPortName(port)
@@ -248,11 +257,19 @@ class SimPowerDevice(QObject):
         self.started_at = time.monotonic()
         self.tick = 0
         self.values = self._initial_values()
+        self.fault_mode = fault_mode
+        self.fault_count = max(0, int(fault_count))
+        self.fault_command = fault_command
 
     def open(self) -> None:
         if not self.serial.open(QIODevice.OpenModeFlag.ReadWrite):
             raise RuntimeError(f"open {self.serial.portName()} failed: {self.serial.errorString()}")
         print(f"Sim power device listening on {self.serial.portName()} @ {self.serial.baudRate()}")
+        if self.fault_mode != "normal" and self.fault_count > 0:
+            print(
+                f"fault injection enabled: mode={self.fault_mode}, "
+                f"count={self.fault_count}, command={self.fault_command}"
+            )
 
     def close(self) -> None:
         self.stream_timer.stop()
@@ -320,6 +337,41 @@ class SimPowerDevice(QObject):
         print(f"NACK seq={seq}: {reason}")
         self._write(build_frame(PowerCommand.NACK, seq, b""))
 
+    def _send_bad_crc(self, seq: int) -> None:
+        frame = bytearray(build_frame(PowerCommand.ACK, seq, b""))
+        frame[-1] ^= 0xFF
+        print(f"BAD_CRC seq={seq}")
+        self._write(bytes(frame))
+
+    def _should_fault(self, cmd: PowerCommand) -> bool:
+        if self.fault_mode == "normal" or self.fault_count <= 0:
+            return False
+        if self.fault_command != "all" and self.fault_command != cmd.name.lower():
+            return False
+        self.fault_count -= 1
+        return True
+
+    def _inject_fault(self, frame: Frame, cmd: PowerCommand) -> bool:
+        if not self._should_fault(cmd):
+            return False
+        if cmd == PowerCommand.STREAM_START:
+            self.stream_timer.stop()
+
+        if self.fault_mode == "drop":
+            print(f"DROP seq={frame.seq} cmd={cmd.name}")
+            return True
+        if self.fault_mode == "nack":
+            self._send_nack(frame.seq, "injected fault")
+            return True
+        if self.fault_mode == "bad-crc":
+            self._send_bad_crc(frame.seq)
+            return True
+        if self.fault_mode == "close":
+            print(f"CLOSE seq={frame.seq} cmd={cmd.name}")
+            self.close()
+            return True
+        return False
+
     def _handle_frame(self, frame: Frame) -> None:
         try:
             cmd = PowerCommand(frame.cmd)
@@ -328,6 +380,8 @@ class SimPowerDevice(QObject):
             return
 
         print(f"FRAME cmd={cmd.name} seq={frame.seq} payload={frame.payload.hex(' ')}")
+        if self._inject_fault(frame, cmd):
+            return
         try:
             if cmd == PowerCommand.READ:
                 self._handle_read(frame)
@@ -481,6 +535,24 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simulate F4CP lower power device on a serial port.")
     parser.add_argument("--port", default="COM9", help="simulator serial port, default: COM9")
     parser.add_argument("--baudrate", type=int, default=921600, help="baudrate, default: 921600")
+    parser.add_argument(
+        "--fault-mode",
+        choices=("normal", "drop", "nack", "bad-crc", "close"),
+        default="normal",
+        help="inject response faults for PowerPage disconnect testing",
+    )
+    parser.add_argument(
+        "--fault-count",
+        type=int,
+        default=0,
+        help="number of matching requests to fault; use 3 to test auto disconnect",
+    )
+    parser.add_argument(
+        "--fault-command",
+        choices=("all", "read", "write", "report", "stream_start", "stream_stop"),
+        default="all",
+        help="host command to fault; default faults all commands",
+    )
     return parser.parse_args()
 
 
@@ -492,7 +564,13 @@ def main() -> int:
     keepalive.timeout.connect(lambda: None)
     keepalive.start(200)
 
-    device = SimPowerDevice(args.port, args.baudrate)
+    device = SimPowerDevice(
+        args.port,
+        args.baudrate,
+        fault_mode=args.fault_mode,
+        fault_count=args.fault_count,
+        fault_command=args.fault_command,
+    )
     try:
         device.open()
     except Exception as exc:

@@ -16,9 +16,9 @@ from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QCloseEvent, QIcon, QColor
 from PyQt5.QtWidgets import QApplication
 
-from qfluentwidgets import MSFluentWindow, NavigationItemPosition
+from qfluentwidgets import MSFluentWindow, NavigationItemPosition, isDarkTheme
 
-from app.manager import applyApplicationTheme, loadSavedFont, logger, normalizedTheme
+from app.manager import loadSavedFont, logger
 from app.widgets.components import DynamicIsland, createSplashScreen
 from app.widgets.icon import UF4Icon
 from app.widgets.pages import (
@@ -131,50 +131,11 @@ class Window(MSFluentWindow):
         super().closeEvent(event)
 
     def _onThemeChanged(self, *_):
-        theme = normalizedTheme(cfg.themeMode.value)
-        is_dark = theme.name.lower() == "dark"
-        bg_light = QColor("#F3F3F3")
-        bg_dark = QColor("#242424")
-
-        applyApplicationTheme(self, theme)
-        self.setCustomBackgroundColor(bg_light, bg_dark)
-        self.setMicaEffectEnabled(False)
-        # self.titleBar.setStyleSheet("background: transparent;")
-        self.dynamicIsland.setDarkTheme(is_dark)
-
-        shell_bg = "#242424" if is_dark else "#F3F3F3"
-        nav_bg = "#1F1F1F" if is_dark else "#FFFFFF"
-        title_bg = shell_bg
-        text = "#F5F5F5" if is_dark else "#1F1F1F"
-        border = "rgba(255,255,255,0.10)" if is_dark else "rgba(0,0,0,0.08)"
-        self.setStyleSheet(f"""
-            MSFluentWindow#Window {{ background: {shell_bg}; }}
-            QWidget#navigationInterface {{
-                background: {nav_bg};
-                border-right: 1px solid {border};
-            }}
-            QWidget#titleBar {{
-                background: {title_bg};
-                color: {text};
-            }}
-        """)
-        self.navigationInterface.setStyleSheet(f"background: {nav_bg}; border-right: 1px solid {border};")
-        self.titleBar.setStyleSheet(f"background: {title_bg}; color: {text};")
-
-        for widget in (self, self.navigationInterface, self.titleBar):
-            widget.style().unpolish(widget)
-            widget.style().polish(widget)
-            widget.update()
-
-        for page in (
-            self.homeInterface,
-            self.deviceInterface,
-            self.powerInterface,
-            self.daplinkInterface,
-            self.settingInterface,
-        ):
-            if hasattr(page, "_onThemeChanged"):
-                page._onThemeChanged()
+        dark = isDarkTheme()
+        bgColor = "#1F1F1F" if dark else "#F3F3F3"
+        self.setStyleSheet(f"Window {{ background: {bgColor}; }}")
+        if hasattr(self, "dynamicIsland"):
+            self.dynamicIsland.setDarkTheme(dark)
 
     def showDynamicIsland(self, title: str, content: str = "", level: str = "info", duration: int = 3200):
         if hasattr(self, "dynamicIsland"):

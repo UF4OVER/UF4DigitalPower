@@ -166,6 +166,7 @@ WRITE_IDLE_RETRY_MS = 25
 WRITE_IDLE_WAIT_TIMEOUT_MS = 2500
 WRITE_POLL_RESUME_DELAY_MS = 800
 WRITE_FAILURE_DISCONNECT_THRESHOLD = 3
+COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD = 3
 
 POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Input Voltage"),
@@ -591,6 +592,7 @@ class F4CPPowerClient(QObject):
     protectionValuesWritten = pyqtSignal()
     powerStateWritten = pyqtSignal(bool)
     writeFailureLimitReached = pyqtSignal()
+    communicationFailureLimitReached = pyqtSignal(str)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -609,6 +611,7 @@ class F4CPPowerClient(QObject):
         self._poll_requested_interval_ms: int | None = None
         self._poll_resume_interval_ms: int | None = None
         self._consecutive_write_failures = 0
+        self._consecutive_communication_failures = 0
         self._stream_types: tuple[PowerDataType, ...] = ()
         self._stream_fast_types: tuple[PowerDataType, ...] = ()
         self._stream_slow_types: tuple[PowerDataType, ...] = ()
@@ -635,6 +638,7 @@ class F4CPPowerClient(QObject):
         self._last_values.clear()
         self._last_status = None
         self._consecutive_write_failures = 0
+        self._consecutive_communication_failures = 0
         self._stop_raw_stream_state()
         session.set_event_receiver(self)
         self.connectionChanged.emit(session.is_open)
@@ -655,6 +659,7 @@ class F4CPPowerClient(QObject):
         self._last_values.clear()
         self._last_status = None
         self._consecutive_write_failures = 0
+        self._consecutive_communication_failures = 0
         self._stop_raw_stream_state()
         self.connectionChanged.emit(False)
 
@@ -668,8 +673,11 @@ class F4CPPowerClient(QObject):
     def start_polling(self, interval_ms: int = 800) -> None:
         interval = max(200, int(interval_ms))
         if self.is_connected and not self.is_busy:
-            self.start_streaming(interval)
-            return
+            try:
+                self.start_streaming(interval)
+                return
+            except Exception as exc:
+                self.error.emit(str(exc))
 
         self._poll_resume_timer.stop()
         self._poll_resume_interval_ms = None
@@ -1040,6 +1048,21 @@ class F4CPPowerClient(QObject):
             self._consecutive_write_failures = 0
             self.writeFailureLimitReached.emit()
 
+    def _reset_communication_failures(self) -> None:
+        self._consecutive_communication_failures = 0
+
+    def _record_communication_failure(self, exc: Exception | str) -> None:
+        self._consecutive_communication_failures += 1
+        message = str(exc)
+        self.log.emit(
+            f"通信失败 {self._consecutive_communication_failures}/"
+            f"{COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD}: {message}"
+        )
+        if self._consecutive_communication_failures >= COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD:
+            self.log.emit("连续通信失败 3 次，准备断开串口")
+            self._consecutive_communication_failures = 0
+            self.communicationFailureLimitReached.emit(message)
+
     def _pause_polling_for_write(self) -> None:
         self._poll_resume_timer.stop()
         if self._stream_enabled:
@@ -1136,7 +1159,9 @@ class F4CPPowerClient(QObject):
         self._pending = None
 
         if pending.error is not None:
+            self._record_communication_failure(pending.error)
             raise pending.error
+        self._reset_communication_failures()
         return pending.response or {}
 
     def _handle_rx(self, event: RxEvent) -> None:
@@ -1230,6 +1255,7 @@ class F4CPPowerClient(QObject):
             return
 
         self._last_values.update(values)
+        self._reset_communication_failures()
         self.log.emit(
             f"REPORT seq=0 types={','.join(type_id.name for type_id in values)}"
         )
@@ -1263,8 +1289,9 @@ class F4CPPowerClient(QObject):
     def _handle_error(self, event: ErrorEvent) -> None:
         message = event.payload.message
         self._fail_pending(PowerClientError(message))
+        self._record_communication_failure(message)
         self.error.emit(message)
-        if event.payload.fatal:
+        if event.payload.fatal and not self.is_connected:
             self._handle_serial_connection_lost(message)
 
     def _handle_state(self, event: StateEvent) -> None:
@@ -1275,7 +1302,7 @@ class F4CPPowerClient(QObject):
             self.stop_polling()
             self._fail_pending(PowerClientError("Serial port closed"))
         elif state == SerialState.ERROR:
-            self._handle_serial_connection_lost(event.payload.info or "Serial port error")
+            self.error.emit(event.payload.info or "Serial port error")
 
     def _handle_serial_connection_lost(self, message: str) -> None:
         self.stop_polling()
@@ -1322,6 +1349,7 @@ class F4CPPowerClient(QObject):
 
     def _handle_raw_stream_values(self, values: dict[PowerDataType, int]) -> None:
         self._last_values.update(values)
+        self._reset_communication_failures()
         status = self._status_from_values(values)
         if status is None:
             return
