@@ -57,7 +57,7 @@ class ChartPoint:
     图表点。
 
     raw_x/raw_y 是真实数据坐标。
-    gl_x/gl_y 是 OpenGL 归一化坐标，范围通常是 -1.0 到 1.0。
+    gl_x/gl_y 是归一化坐标，范围通常是 -1.0 到 1.0。
     """
     raw_x: float
     raw_y: float
@@ -79,7 +79,7 @@ class ChartSnapshot:
     """
     某一帧图表快照。
 
-    OpenGL 渲染层后面就吃这个结构。
+    渲染层直接消费这个结构。
     """
     x_range: AxisRange
     y_range: AxisRange
@@ -95,7 +95,7 @@ class ChartModel:
     - 从 DataHub 获取通道数据
     - 截取最近 N 秒采样点
     - 自动计算 Y 轴范围
-    - 把真实坐标转换为 OpenGL 坐标
+    - 把真实坐标转换为归一化坐标
     """
 
     def __init__(self, data_hub: DataHub):
@@ -129,6 +129,13 @@ class ChartModel:
         self.auto_y_range = False
 
     def build_snapshot(self, now: Optional[float] = None) -> ChartSnapshot:
+        return self.build_snapshot_for_width(None, now=now)
+
+    def build_snapshot_for_width(
+        self,
+        pixel_width: int | None,
+        now: Optional[float] = None,
+    ) -> ChartSnapshot:
         if now is None:
             now = time.time()
 
@@ -143,14 +150,18 @@ class ChartModel:
         channel_samples = self._collect_window_samples(
             visible_channels,
             self.time_window_sec,
-            now,
+            view_now,
         )
+        reduced_channel_samples = [
+            (channel, self._downsample_samples(samples, pixel_width))
+            for channel, samples in channel_samples
+        ]
 
-        y_range = self._calculate_y_range(channel_samples)
+        y_range = self._calculate_y_range(reduced_channel_samples)
 
         curves: list[ChartCurve] = []
 
-        for channel, samples in channel_samples:
+        for channel, samples in reduced_channel_samples:
             points = [
                 self._to_chart_point(sample, x_range, y_range)
                 for sample in samples
@@ -171,6 +182,59 @@ class ChartModel:
             y_range=y_range,
             curves=curves,
         )
+
+    @staticmethod
+    def _downsample_samples(samples: list[Sample], pixel_width: int | None) -> list[Sample]:
+        if pixel_width is None or pixel_width <= 0:
+            return samples
+
+        target_points = max(2, int(pixel_width) * 2)
+        if len(samples) <= target_points:
+            return samples
+
+        bucket_count = max(1, int(pixel_width))
+        bucket_size = len(samples) / bucket_count
+        reduced: list[Sample] = []
+
+        for bucket_index in range(bucket_count):
+            start = int(bucket_index * bucket_size)
+            end = max(start + 1, int((bucket_index + 1) * bucket_size))
+            bucket = samples[start:end]
+            if not bucket:
+                continue
+            if len(bucket) <= 2:
+                reduced.extend(bucket)
+                continue
+
+            minimum = min(bucket, key=lambda item: item.value)
+            maximum = max(bucket, key=lambda item: item.value)
+            if minimum.t <= maximum.t:
+                reduced.extend((minimum, maximum))
+            else:
+                reduced.extend((maximum, minimum))
+
+        if not reduced:
+            return [samples[0], samples[-1]]
+
+        first = samples[0]
+        last = samples[-1]
+        if reduced[0] != first:
+            reduced.insert(0, first)
+        if reduced[-1] != last:
+            reduced.append(last)
+        return reduced
+
+    @staticmethod
+    def pixel_to_time(pixel_x: int, pixel_width: int, x_range: AxisRange) -> float:
+        if pixel_width <= 1 or not x_range.is_valid():
+            return x_range.maximum
+
+        ratio = max(0.0, min(1.0, pixel_x / max(1, pixel_width)))
+        return x_range.minimum + x_range.span * ratio
+
+    @staticmethod
+    def point_to_pixel_x(point: ChartPoint, pixel_width: int) -> int:
+        return int((point.gl_x + 1.0) * 0.5 * pixel_width)
 
     def _filter_visible_channels(self) -> list[ChannelBuffer]:
         channels = self.data_hub.visible_channels()

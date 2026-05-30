@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import configparser
 import json
+import socket
 from dataclasses import dataclass
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -22,9 +23,11 @@ from config import (
 	UPDATE_URL_OPTION,
 	VERSION_LOCAL_SECTION,
 	VERSION_REMOTE_SECTION,
-	logger,
+logger,
 )
 from .manage_firmware import firmware_manager
+
+UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 
 
 def _normalize_version(value: object, fallback: str = "--") -> str:
@@ -151,7 +154,7 @@ class UpdateManager:
 		try:
 			with urlopen(update_url, timeout=8) as response:
 				payload = response.read().decode("utf-8-sig")
-		except URLError as exc:
+		except UPDATE_FETCH_EXCEPTIONS as exc:
 			logger.warning(f"UpdateManager failed to fetch update data: {exc}")
 			return UpdateCheckResult(
 				success=False,

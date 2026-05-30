@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 
 from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QDoubleValidator, QFont, QIntValidator
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel, CardWidget, CaptionLabel, ComboBox, FluentIcon as FIF,
@@ -17,6 +17,7 @@ from qfluentwidgets import (
 from app.core.channel import ChannelConfig
 from app.core.data_hub import DataHub
 from app.core.utility import showMessage
+from app.manager import StyleSheet
 
 from app.session import (
     DebugSnapshot, F4CPPowerClient, PowerStatus, SerialConfig,
@@ -31,6 +32,7 @@ DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
 POWER_POLL_INTERVAL_MS = 500
 POWER_SERIAL_BAUD_RATE = 921600
 WRITE_POLL_RESTART_DELAY_MS = 600
+MOCK_SAMPLE_INTERVAL_MS = 20
 
 POWER_CHART_CHANNELS = (
     ChannelConfig("vin", "输入电压", "V", precision=3, group="voltage", color=(47, 128, 237), line_width=2.0),
@@ -143,9 +145,32 @@ class ParameterEditor(CardWidget):
         self.otp = LineEdit(self)
         self.fan = LineEdit(self)
 
-        for editor in (self.outputVoltage, self.outputCurrent, self.ovp, self.ocp, self.otp, self.fan):
+        self._editors = (
+            self.outputVoltage,
+            self.outputCurrent,
+            self.ovp,
+            self.ocp,
+            self.otp,
+            self.fan,
+        )
+
+        for editor in self._editors:
             editor.setFixedHeight(34)
             editor.setClearButtonEnabled(True)
+            editor.setMinimumWidth(148)
+            editor.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        decimal_validator = QDoubleValidator(0.0, 9999.999, 3, self)
+        decimal_validator.setNotation(QDoubleValidator.StandardNotation)
+        fan_validator = QIntValidator(0, 1000, self)
+
+        self.outputVoltage.setValidator(decimal_validator)
+        self.outputCurrent.setValidator(decimal_validator)
+        self.ovp.setValidator(decimal_validator)
+        self.ocp.setValidator(decimal_validator)
+        self.otp.setValidator(decimal_validator)
+        self.fan.setValidator(fan_validator)
+
         self.outputVoltage.setPlaceholderText("输出电压 V")
         self.outputCurrent.setPlaceholderText("输出电流 A")
         self.ovp.setPlaceholderText("OVP V")
@@ -158,6 +183,11 @@ class ParameterEditor(CardWidget):
         self.outputSwitch.setOffText("输出关闭")
         self.applyOutputButton = PrimaryPushButton(FIF.ACCEPT, "应用输出", self)
         self.applyProtectButton = PushButton(FIF.SAVE, "应用保护", self)
+        self.outputSwitch.setFixedHeight(34)
+        self.applyOutputButton.setFixedHeight(34)
+        self.applyProtectButton.setFixedHeight(34)
+        self.applyOutputButton.setMinimumWidth(110)
+        self.applyProtectButton.setMinimumWidth(110)
 
         form = QGridLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -198,6 +228,8 @@ class ParameterEditor(CardWidget):
                 editor.setText(value)
 
     def setWriteEnabled(self, enabled: bool) -> None:
+        for editor in self._editors:
+            editor.setEnabled(enabled)
         self.outputSwitch.setEnabled(enabled)
         self.applyOutputButton.setEnabled(enabled)
         self.applyProtectButton.setEnabled(enabled)
@@ -241,6 +273,7 @@ class TelemetryChartCard(CardWidget):
             "core_temp": status.core_temp_c,
             "board_temp": status.board_temp_c,
         }, t=time.time())
+        self.chart.mark_data_dirty()
 
     def pushMock(self) -> None:
         t = time.time()
@@ -258,6 +291,7 @@ class TelemetryChartCard(CardWidget):
             "core_temp": 42.0 + math.sin(phase * 0.25) * 2.0,
             "board_temp": 38.0 + math.sin(phase * 0.32) * 1.4,
         }, t=t)
+        self.chart.mark_data_dirty()
 
 
 class PowerPage(ScrollArea):
@@ -295,8 +329,12 @@ class PowerPage(ScrollArea):
         self._writePollRestartTimer = QTimer(self)
         self._writePollRestartTimer.setSingleShot(True)
         self._writePollRestartTimer.timeout.connect(self._restartAutoPollingAfterWrite)
+        self._scrollIdleTimer = QTimer(self)
+        self._scrollIdleTimer.setSingleShot(True)
+        self._scrollIdleTimer.setInterval(180)
+        self._scrollIdleTimer.timeout.connect(self._resumeChartAfterScroll)
         self._mockTimer = QTimer(self)
-        self._mockTimer.setInterval(100)
+        self._mockTimer.setInterval(MOCK_SAMPLE_INTERVAL_MS)
         self._mockTimer.timeout.connect(self.pushMockPowerSample)
 
         self.scrollWidget = QWidget(self)
@@ -315,10 +353,11 @@ class PowerPage(ScrollArea):
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setViewportMargins(0, 0, 0, 0)
+        self.verticalScrollBar().valueChanged.connect(self._onScrollValueChanged)
 
         self._bindSignals()
         self._applyDisconnectedState()
-        # self._refreshThemeBundle()
+        StyleSheet.POWER_PAGE.apply(self)
         self.refreshSerialPorts()
 
     def _initHeader(self) -> None:
@@ -425,6 +464,13 @@ class PowerPage(ScrollArea):
         layout.addWidget(self.logEdit)
         self.rootLayout.addWidget(self.logCard)
 
+    def _onScrollValueChanged(self, _value: int) -> None:
+        self.chartCard.chart.set_live_updates_suspended(True)
+        self._scrollIdleTimer.start()
+
+    def _resumeChartAfterScroll(self) -> None:
+        self.chartCard.chart.set_live_updates_suspended(False)
+
     def _bindSignals(self) -> None:
         self._client.log.connect(self._appendLog)
         self._client.error.connect(self._onClientError)
@@ -435,6 +481,7 @@ class PowerPage(ScrollArea):
         self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
         self._client.powerStateWritten.connect(self._onPowerStateWritten)
         self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
+        self._client.communicationFailureLimitReached.connect(self._disconnectAfterCommunicationFailures)
 
         self.attachSessionRequested.connect(self._client.attach_session)
         self.detachSessionRequested.connect(self._client.detach_session)
@@ -455,7 +502,14 @@ class PowerPage(ScrollArea):
         self.parameterEditor.applyProtectButton.clicked.connect(self._applyProtectionValues)
         self.clearLogButton.clicked.connect(self.logEdit.clear)
         self.mockButton.toggled.connect(self._setMockEnabled)
-        # cfg.themeChanged.connect(self._onThemeChanged)
+        cfg.themeChanged.connect(self._onThemeChanged)
+
+    def _onThemeChanged(self, *_):
+        StyleSheet.POWER_PAGE.apply(self)
+        for card in self.metricCards.values():
+            card.refreshTheme()
+        self.stateBadge.refreshTheme()
+        self.chartCard.refreshTheme()
 
     def refreshSerialPorts(self) -> None:
         ports = [p.strip() for p in (listSerialPorts() or []) if p and p.strip()]
@@ -484,6 +538,7 @@ class PowerPage(ScrollArea):
         try:
             session.open()
         except Exception as exc:
+            self.parameterEditor.setWriteEnabled(False)
             self._appendLog(f"错误: {exc}")
             return
         self._manualSession = session
@@ -493,6 +548,7 @@ class PowerPage(ScrollArea):
         self.attachSessionRequested.emit(session)
         self.stateBadge.setOnline(True)
         self.connectButton.setText("断开")
+        self.parameterEditor.setWriteEnabled(True)
         self._appendLog(f"已连接: {getattr(getattr(session, 'cfg', None), 'port', '未知')}")
         showMessage(self, "设备已连接", "电源设备会话已连接。", level="success")
         if self.autoPollSwitch.isChecked():
@@ -526,6 +582,7 @@ class PowerPage(ScrollArea):
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setOnline(connected)
         self.connectButton.setText("断开" if connected else "连接")
+        self.parameterEditor.setWriteEnabled(connected)
         if not connected:
             self._closeManualSessionSilently()
             self._applyDisconnectedState()
@@ -671,6 +728,13 @@ class PowerPage(ScrollArea):
         showMessage(self, "串口已断开", "连续写入失败 3 次，已关闭当前串口连接。", level="error")
         self._disconnectManualSession()
 
+    def _disconnectAfterCommunicationFailures(self, message: str) -> None:
+        if not self._client.is_connected and self._manualSession is None:
+            return
+        self._appendLog(f"连续通信失败 3 次，已断开串口。最后错误: {message}")
+        showMessage(self, "串口已断开", "连续 3 次无回复或错误，已关闭当前串口连接。", level="error")
+        self._disconnectManualSession()
+
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:
         self._writePollingRestartPending = False
         self._writePollRestartTimer.stop()
@@ -698,7 +762,7 @@ class PowerPage(ScrollArea):
     def _applyDisconnectedState(self) -> None:
         self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
-        self._setWriteControlsEnabled(True)
+        self._setWriteControlsEnabled(False)
         self._writePollRestartTimer.stop()
         self.stateBadge.setOnline(False)
         self.connectButton.setText("连接")

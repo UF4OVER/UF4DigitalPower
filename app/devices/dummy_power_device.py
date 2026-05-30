@@ -9,9 +9,6 @@
 #  @Contact : 假设备模拟数据
 #  @Python  : 
 # -------------------------------
-
-from __future__ import annotations
-
 import math
 import random
 import time

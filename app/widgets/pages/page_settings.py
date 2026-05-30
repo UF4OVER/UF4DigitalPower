@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 from config import AUTHOR, FEEDBACK_URL, HELP_URL, VERSION, YEAR, cfg
 from app.manager import (
     FontOption,
+    StyleSheet,
     apply_font_option,
     discover_font_options,
     get_saved_font_key,
@@ -27,7 +28,7 @@ from qfluentwidgets import (
     SettingCardGroup,
     SwitchSettingCard,
     Theme,
-    qconfig,
+    setTheme,
     setThemeColor,
 )
 
@@ -117,6 +118,7 @@ class SettingsPage(ScrollArea):
         self.__refreshFontOptions()
         self.__refreshThemeOptions()
         self.__applyLocalStyle()
+        StyleSheet.SETTINGS_PAGE.apply(self)
         self.__setCustomColorCardTexts('主题色', '调整应用的主色调')
 
     def __initLayout(self):
@@ -163,6 +165,7 @@ class SettingsPage(ScrollArea):
 
     def _onThemeChanged(self, *_):
         self.__applyLocalStyle()
+        StyleSheet.SETTINGS_PAGE.apply(self)
         self.__setCustomColorCardTexts('主题色', '调整应用的主色调')
 
     def showEvent(self, event):
@@ -191,7 +194,7 @@ class SettingsPage(ScrollArea):
         index = self.themeCard.comboBox.currentIndex()
         modes = [Theme.LIGHT, Theme.DARK, Theme.AUTO]
         if 0 <= index < len(modes):
-            qconfig.set(cfg.themeMode, modes[index])
+            setTheme(modes[index], save=True)
 
     def __refreshFontOptions(self):
         self._fontOptionsLoaded = False

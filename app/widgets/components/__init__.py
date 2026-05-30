@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/24
-#  @FileName: shader_program.py.py
+#  @Time    : 2026/5/30
+#  @FileName: __init__.py.py
 #  @Software: PyCharm
 #  @System  : Windows 11 25H2
 #  @Author  : UF4
-#  @Contact : 着色器封装
+#  @Contact : 
 #  @Python  : 
 # -------------------------------
+
+from .dynamicisland import DynamicIsland
+from .splashscreen import F4SplashScreen, createSplashScreen

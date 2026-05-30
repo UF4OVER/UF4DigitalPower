@@ -388,6 +388,9 @@ class HomePage(ScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         StyleSheet.HOME_PAGE.apply(self)
 
+    def _onThemeChanged(self, *_):
+        StyleSheet.HOME_PAGE.apply(self)
+
     def event(self, event):
         if event.type() == UpdateCheckFinishedEvent.EVENT_TYPE:
             self._isCheckingUpdate = False

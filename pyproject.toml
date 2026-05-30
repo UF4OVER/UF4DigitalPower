@@ -1,12 +1,12 @@
 [project]
 name = "F4CP"
-version = "0.5.0.a1"
+version = "0.5.2.a2"
 # dev1    开发快照，最早期，不稳定
 # a1       alpha 内测版，功能可能还没完整
 # b1       beta 测试版，功能基本有了，但可能有 bug
 # rc1      release candidate，候选正式版，接近正式发布
 # 无后缀   正式版
-description = "Fluor4CellPower battery and power management system"
+description = "power management system"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
@@ -20,7 +20,6 @@ dependencies = [
     "PyQt5>=5.15.2",
     "pyocd>=0.44.0",
     "pyqt-fluent-widgets>=1.11.2",
-    "pyopengl>=3.1.10",
 ]
 
 [tool.uv]
@@ -41,19 +40,6 @@ includes = [
     "PyQt5.QtCore",
     "PyQt5.QtGui",
     "PyQt5.QtWidgets",
-#    "PyQt5.QtOpenGL",
-#    "OpenGL",
-#    "OpenGL.GL",
-#    "OpenGL.error",
-#    "OpenGL.platform",
-#    "OpenGL.platform.win32",
-#    "OpenGL.platform.baseplatform",
-#    "OpenGL.raw.GL.VERSION.GL_1_0",
-#    "OpenGL.raw.GL.VERSION.GL_1_1",
-#    "OpenGL.raw.GL.VERSION.GL_1_2",
-#    "OpenGL.raw.GL.VERSION.GL_1_3",
-#    "OpenGL.raw.GL.VERSION.GL_1_4",
-#    "OpenGL.raw.GL.VERSION.GL_1_5",
     "pyocd",
     "qfluentwidgets",
     "config",
@@ -70,12 +56,6 @@ packages = [
     "app.widgets.chart",
     "app.widgets.icon",
     "app.widgets.pages",
-    "app.render",
-#    "OpenGL",
-#    "OpenGL.GL",
-#    "OpenGL.raw",
-#    "OpenGL.raw.GL",
-#    "OpenGL.platform",
     "config"
 ]
 
@@ -91,7 +71,6 @@ zip_include_packages = ["*"]
 
 zip_exclude_packages = [
    "PyQt5",
-#   "OpenGL",
    "lark",
    "pyocd",
    "cmsis_pack_manager",
@@ -128,11 +107,6 @@ excludes = [
     "PyQt5.QtQuick",
     "PyQt5.QtQml",
     "PyQt5.QtQuickWidgets",
-    # --- Qt WebEngine (not used) ---
-    "PyQt5.QtWebEngine",
-    "PyQt5.QtWebEngineCore",
-    "PyQt5.QtWebEngineWidgets",
-    "PyQt5.QtWebChannel",
     # --- Other unused Qt modules ---
     "PyQt5.QtPrintSupport",
     "PyQt5.QtSql",
