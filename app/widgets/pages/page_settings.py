@@ -28,7 +28,7 @@ from qfluentwidgets import (
     SettingCardGroup,
     SwitchSettingCard,
     Theme,
-    qconfig,
+    setTheme,
     setThemeColor,
 )
 
@@ -194,7 +194,7 @@ class SettingsPage(ScrollArea):
         index = self.themeCard.comboBox.currentIndex()
         modes = [Theme.LIGHT, Theme.DARK, Theme.AUTO]
         if 0 <= index < len(modes):
-            qconfig.set(cfg.themeMode, modes[index])
+            setTheme(modes[index], save=True)
 
     def __refreshFontOptions(self):
         self._fontOptionsLoaded = False

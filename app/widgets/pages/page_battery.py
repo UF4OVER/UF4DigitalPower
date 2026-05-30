@@ -9,9 +9,6 @@
 #  @Contact : 
 #  @Python  : 
 # -------------------------------
-
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass
 
@@ -37,7 +34,7 @@ from qfluentwidgets import (
 )
 
 from app.manager import StyleSheet
-from config import cfg
+from config import cfg, CTX
 
 
 @dataclass(frozen=True)
@@ -435,7 +432,7 @@ class BatteryPage(ScrollArea):
 
         self.refreshButton.clicked.connect(self.readBatteryRequested.emit)
         self.connectButton.clicked.connect(self._onConnectionRequested)
-        cfg.themeChanged.connect(self._onThemeChanged)
+        CTX.qcfg.themeChanged.connect(self._onThemeChanged)
 
         self._applyTexts()
         self._applyDemoSnapshot()
@@ -485,6 +482,7 @@ class BatteryPage(ScrollArea):
 
     def _initCellOverviewCard(self) -> None:
         self.cellCard = BatteryCardWidget(self.scrollWidget)
+
         self.cellCard.setObjectName("batteryCellOverviewCard")
         self.cellCard.setProperty("batteryCard", True)
         self.cellCard.setBorderRadius(10)

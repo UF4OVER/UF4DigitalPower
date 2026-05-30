@@ -132,10 +132,30 @@ class Window(MSFluentWindow):
 
     def _onThemeChanged(self, *_):
         dark = isDarkTheme()
-        bgColor = "#1F1F1F" if dark else "#F3F3F3"
-        self.setStyleSheet(f"Window {{ background: {bgColor}; }}")
+        shell_bg = "#1F1F1F" if dark else "#F3F3F3"
+        nav_bg = "#181818" if dark else "#FFFFFF"
+        text = "#F5F5F5" if dark else "#1F1F1F"
+        border = "rgba(255,255,255,0.10)" if dark else "rgba(0,0,0,0.08)"
+        self.setStyleSheet(f"""
+            MSFluentWindow#Window, Window#Window {{
+                background: {shell_bg};
+            }}
+            QWidget#navigationInterface {{
+                background: {nav_bg};
+                border-right: 1px solid {border};
+            }}
+            QWidget#titleBar {{
+                background: {shell_bg};
+                color: {text};
+            }}
+        """)
+        self.titleBar.setStyleSheet(f"background: {shell_bg}; color: {text};")
         if hasattr(self, "dynamicIsland"):
             self.dynamicIsland.setDarkTheme(dark)
+        for widget in (self, self.navigationInterface, self.titleBar):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def showDynamicIsland(self, title: str, content: str = "", level: str = "info", duration: int = 3200):
         if hasattr(self, "dynamicIsland"):
