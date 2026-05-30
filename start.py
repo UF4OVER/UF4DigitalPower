@@ -21,7 +21,13 @@ from qfluentwidgets import MSFluentWindow, NavigationItemPosition
 from app.manager import applyApplicationTheme, loadSavedFont, logger, normalizedTheme
 from app.widgets.components import DynamicIsland, createSplashScreen
 from app.widgets.icon import UF4Icon
-from app.widgets.pages import DaplinkPage, DevicePage, HomePage, PowerPage, SettingsPage
+from app.widgets.pages import (
+    DaplinkPage,
+    DevicePage,
+    HomePage,
+    PowerPage,
+    SettingsPage,
+)
 
 from config import AppIconPath, cfg
 
@@ -92,8 +98,10 @@ class Window(MSFluentWindow):
             '设备',
             UF4Icon.DEVELOPER_BOARD_FILL
         )
+
         self.daplinkNavItem = self.addSubInterface(
-            self.daplinkInterface, UF4Icon.FLASH_SETTINGS,
+            self.daplinkInterface,
+            UF4Icon.FLASH_SETTINGS,
             '烧录',
             UF4Icon.FLASH_SETTINGS_FILL
         )

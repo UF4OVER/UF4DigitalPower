@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget
@@ -8,9 +6,11 @@ from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 from config import AUTHOR, FEEDBACK_URL, HELP_URL, VERSION, YEAR, cfg
 from app.manager import (
     FontOption,
+    applyApplicationTheme,
     apply_font_option,
     discover_font_options,
     get_saved_font_key,
+    normalizedTheme,
     save_font_selection,
 )
 from qfluentwidgets import FluentIcon as FIF
@@ -27,6 +27,7 @@ from qfluentwidgets import (
     SettingCardGroup,
     SwitchSettingCard,
     Theme,
+    FluentStyleSheet,
     qconfig,
     setThemeColor,
 )
@@ -77,6 +78,7 @@ class SettingsPage(ScrollArea):
         self._fontOptionsLoaded = False
 
         self.settingLabel = LargeTitleLabel('设置', self)
+        self.settingLabel.setObjectName('settingLabel')
 
         self.appearanceGroup = SettingCardGroup('外观', self.scrollWidget)
         self.themeCard = ComboSettingCard(FIF.BRUSH, '应用主题', '切换浅色、深色或跟随系统', self.appearanceGroup)
@@ -111,12 +113,13 @@ class SettingsPage(ScrollArea):
         self.setWidgetResizable(True)
         self.setObjectName('SettingsPage')
         self.scrollWidget.setObjectName('settingsScrollWidget')
+        self.viewport().setObjectName('settingsViewport')
 
         self.__initLayout()
         self.__connectSignalToSlot()
         self.__refreshFontOptions()
         self.__refreshThemeOptions()
-        self.__applyLocalStyle()
+        self.__refreshThemeColorCardStyle()
         self.__setCustomColorCardTexts('主题色', '调整应用的主色调')
 
     def __initLayout(self):
@@ -144,26 +147,20 @@ class SettingsPage(ScrollArea):
 
     def __connectSignalToSlot(self):
         cfg.appRestartSig.connect(self.__showRestartTooltip)
+        cfg.themeChanged.connect(self._onThemeChanged)
         self.themeCard.comboBox.currentIndexChanged.connect(self.__onThemeModeChanged)
-        self.themeColorCard.colorChanged.connect(lambda c: setThemeColor(c))
+        self.themeColorCard.colorChanged.connect(self.__onThemeColorChanged)
         self.fontCard.comboBox.currentIndexChanged.connect(self.__onFontChanged)
         self.feedbackCard.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(FEEDBACK_URL)))
         self.aboutCard.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(HELP_URL)))
 
-    def __applyLocalStyle(self):
-        self.setStyleSheet('''
-            QScrollArea {
-                background-color: transparent;
-                border: none;
-            }
-            QWidget#settingsScrollWidget {
-                background-color: transparent;
-            }
-        ''')
-
     def _onThemeChanged(self, *_):
-        self.__applyLocalStyle()
+        self.__refreshThemeColorCardStyle()
         self.__setCustomColorCardTexts('主题色', '调整应用的主色调')
+        for widget in (self, self.scrollWidget, self.settingLabel):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -193,6 +190,11 @@ class SettingsPage(ScrollArea):
         if 0 <= index < len(modes):
             qconfig.set(cfg.themeMode, modes[index])
 
+    def __onThemeColorChanged(self, color) -> None:
+        setThemeColor(color)
+        applyApplicationTheme(theme=normalizedTheme(cfg.themeMode.value))
+        self._onThemeChanged()
+
     def __refreshFontOptions(self):
         self._fontOptionsLoaded = False
         self._fontOptions = discover_font_options()
@@ -214,6 +216,23 @@ class SettingsPage(ScrollArea):
         if len(labels) >= 2:
             labels[0].setText(title)
             labels[1].setText(content)
+
+    def __refreshThemeColorCardStyle(self) -> None:
+        FluentStyleSheet.EXPAND_SETTING_CARD.apply(self.themeColorCard.card)
+        FluentStyleSheet.EXPAND_SETTING_CARD.apply(self.themeColorCard)
+        for widget in (
+            self.themeColorCard.choiceLabel,
+            self.themeColorCard.customLabel,
+            self.themeColorCard.chooseColorButton,
+            self.themeColorCard.defaultRadioButton,
+            self.themeColorCard.customRadioButton,
+            self.themeColorCard.radioWidget,
+            self.themeColorCard.customColorWidget,
+            self.themeColorCard.view,
+        ):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def __onFontChanged(self):
         if not self._fontOptionsLoaded:

@@ -50,6 +50,8 @@ class PowerCommand(IntEnum):
     READ = 0x01
     WRITE = 0x02
     REPORT = 0x03
+    STREAM_START = 0x04
+    STREAM_STOP = 0x05
     NACK = 0xFF
 
 
@@ -156,6 +158,9 @@ CC_CV_NAMES = {
 }
 
 SOF = b"\xAA\x55"
+STREAM_CHANNEL_SEPARATOR = b"\xFE\xED"
+STREAM_FAST_PERIOD_MS = 20
+STREAM_SLOW_PERIOD_MS = 1000
 
 WRITE_IDLE_RETRY_MS = 25
 WRITE_IDLE_WAIT_TIMEOUT_MS = 2500
@@ -253,6 +258,51 @@ STATUS_TYPES = (
 )
 
 REPORT_STATUS_TYPES = STATUS_TYPES
+
+STREAM_FAST_TYPES = (
+    PowerDataType.INPUT_VOLTAGE,
+    PowerDataType.INPUT_CURRENT,
+    PowerDataType.OUTPUT_VOLTAGE,
+    PowerDataType.OUTPUT_CURRENT,
+)
+
+STREAM_SLOW_TYPES = (
+    PowerDataType.CORE_TEMPERATURE,
+    PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.FAN_SPEED,
+    PowerDataType.FAN_SET_VALUE,
+)
+
+STREAM_VALUE_LENGTHS: dict[PowerDataType, int] = {
+    type_id: 2 for type_id in STREAM_FAST_TYPES + STREAM_SLOW_TYPES
+}
+
+DEFAULT_STATUS_VALUES: dict[PowerDataType, int] = {
+    PowerDataType.INPUT_VOLTAGE: 0,
+    PowerDataType.INPUT_CURRENT: 0,
+    PowerDataType.OUTPUT_VOLTAGE: 0,
+    PowerDataType.OUTPUT_CURRENT: 0,
+    PowerDataType.CORE_TEMPERATURE: 0,
+    PowerDataType.BOARD_TEMPERATURE: 0,
+    PowerDataType.SET_VOLTAGE_LIMIT: 0,
+    PowerDataType.SET_CURRENT_LIMIT: 0,
+    PowerDataType.CC_CV_MODE: 0,
+    PowerDataType.POWER_STATE: 0,
+    PowerDataType.FAULT_STATE: 0,
+    PowerDataType.STATE_MACHINE_FLAG_BITS: 0,
+    PowerDataType.STATE_MACHINE_STATE: 0,
+    PowerDataType.OTP_VALUE: 0,
+    PowerDataType.OTP_SET_VALUE: 0,
+    PowerDataType.OVP_VALUE: 0,
+    PowerDataType.OVP_SET_VALUE: 0,
+    PowerDataType.OCP_VALUE: 0,
+    PowerDataType.OCP_SET_VALUE: 0,
+    PowerDataType.DUTY_CMD: 0,
+    PowerDataType.PWM_A_COMPARE: 0,
+    PowerDataType.PWM_D_COMPARE: 0,
+    PowerDataType.FAN_SPEED: 0,
+    PowerDataType.FAN_SET_VALUE: 0,
+}
 
 
 def crc16_modbus(data: bytes) -> int:
@@ -559,6 +609,14 @@ class F4CPPowerClient(QObject):
         self._poll_requested_interval_ms: int | None = None
         self._poll_resume_interval_ms: int | None = None
         self._consecutive_write_failures = 0
+        self._stream_types: tuple[PowerDataType, ...] = ()
+        self._stream_fast_types: tuple[PowerDataType, ...] = ()
+        self._stream_slow_types: tuple[PowerDataType, ...] = ()
+        self._stream_enabled = False
+        self._stream_fast_sample_size = 0
+        self._stream_slow_sample_size = 0
+        self._stream_fast_samples_until_slow = 0
+        self._stream_slow_every_fast_samples = 0
 
     @property
     def is_connected(self) -> bool:
@@ -577,6 +635,7 @@ class F4CPPowerClient(QObject):
         self._last_values.clear()
         self._last_status = None
         self._consecutive_write_failures = 0
+        self._stop_raw_stream_state()
         session.set_event_receiver(self)
         self.connectionChanged.emit(session.is_open)
         self.log.emit(f"Attached to serial session on {session.cfg.port}")
@@ -596,6 +655,7 @@ class F4CPPowerClient(QObject):
         self._last_values.clear()
         self._last_status = None
         self._consecutive_write_failures = 0
+        self._stop_raw_stream_state()
         self.connectionChanged.emit(False)
 
     @pyqtSlot()
@@ -607,6 +667,10 @@ class F4CPPowerClient(QObject):
     @pyqtSlot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
         interval = max(200, int(interval_ms))
+        if self.is_connected and not self.is_busy:
+            self.start_streaming(interval)
+            return
+
         self._poll_resume_timer.stop()
         self._poll_resume_interval_ms = None
         self._poll_requested_interval_ms = interval
@@ -620,6 +684,11 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot()
     def stop_polling(self) -> None:
+        if self._stream_enabled:
+            try:
+                self.stop_streaming()
+            except Exception as exc:
+                self.error.emit(str(exc))
         self._poll_timer.stop()
         self._poll_resume_timer.stop()
         self._poll_requested_interval_ms = None
@@ -753,6 +822,53 @@ class F4CPPowerClient(QObject):
         self._last_status = status
         self.statusUpdated.emit(status)
         return status
+
+    def start_streaming(
+        self,
+        interval_ms: int = 800,
+        types: Iterable[PowerDataType] = STREAM_FAST_TYPES,
+        timeout_ms: int = 1000,
+    ) -> None:
+        fast_types = tuple(types)
+        slow_types = STREAM_SLOW_TYPES
+        for type_id in fast_types + slow_types:
+            _ensure_readable(type_id)
+        fast_sample_size = stream_sample_size(fast_types)
+        slow_sample_size = stream_sample_size(slow_types)
+        payload = pack_stream_start_request(
+            fast_types,
+            STREAM_FAST_PERIOD_MS,
+            slow_types,
+            STREAM_SLOW_PERIOD_MS,
+        )
+        self._request(PowerCommand.STREAM_START, payload, timeout_ms=timeout_ms)
+        self._last_values.update(DEFAULT_STATUS_VALUES)
+        self._stream_types = fast_types + slow_types
+        self._stream_fast_types = fast_types
+        self._stream_slow_types = slow_types
+        self._stream_fast_sample_size = fast_sample_size
+        self._stream_slow_sample_size = slow_sample_size
+        self._stream_slow_every_fast_samples = max(1, STREAM_SLOW_PERIOD_MS // STREAM_FAST_PERIOD_MS)
+        self._stream_fast_samples_until_slow = 0
+        self._stream_enabled = True
+        self._poll_requested_interval_ms = max(200, int(interval_ms))
+        self._poll_timer.stop()
+        self._poll_resume_timer.stop()
+        self.log.emit(
+            "Raw stream started "
+            f"(fast={STREAM_FAST_PERIOD_MS} ms "
+            f"types={','.join(type_id.name for type_id in fast_types)}; "
+            f"slow={STREAM_SLOW_PERIOD_MS} ms "
+            f"types={','.join(type_id.name for type_id in slow_types)})"
+        )
+
+    def stop_streaming(self, timeout_ms: int = 1000) -> None:
+        was_enabled = self._stream_enabled
+        self._stop_raw_stream_state()
+        if self.is_connected and not self.is_busy:
+            self._request(PowerCommand.STREAM_STOP, b"", timeout_ms=timeout_ms)
+        if was_enabled:
+            self.log.emit("Raw stream stopped")
 
     def read_debug_snapshot(self, timeout_ms: int = 1000) -> DebugSnapshot:
         result = self.read_values(PowerDataType.DEBUG_SNAPSHOT, timeout_ms=timeout_ms)
@@ -926,6 +1042,12 @@ class F4CPPowerClient(QObject):
 
     def _pause_polling_for_write(self) -> None:
         self._poll_resume_timer.stop()
+        if self._stream_enabled:
+            interval = self._poll_requested_interval_ms
+            self._poll_resume_interval_ms = interval if interval is not None else 800
+            self.stop_streaming(timeout_ms=1000)
+            self.log.emit("Raw stream paused for write")
+            return
         if self._poll_requested_interval_ms is not None:
             self._poll_resume_interval_ms = self._poll_requested_interval_ms
             self._poll_timer.stop()
@@ -949,6 +1071,12 @@ class F4CPPowerClient(QObject):
 
         self._poll_resume_interval_ms = None
         self._poll_requested_interval_ms = interval
+        if self.is_connected and not self._stream_enabled:
+            try:
+                self.start_streaming(interval)
+                return
+            except Exception as exc:
+                self.error.emit(f"Raw stream resume failed: {exc}")
         self._poll_timer.start(interval)
         self.log.emit(f"Host polling resumed ({interval} ms)")
         QTimer.singleShot(0, self._poll_once)
@@ -1017,6 +1145,18 @@ class F4CPPowerClient(QObject):
             return
         self.log.emit(f"RX {data.hex(' ')}")
         self._buffer.extend(data)
+
+        if self._stream_enabled and self._pending is None:
+            try:
+                while True:
+                    values = self._extract_raw_stream_values()
+                    if values is None:
+                        break
+                    self._handle_raw_stream_values(values)
+            except Exception as exc:
+                self._stop_raw_stream_state()
+                self.error.emit(str(exc))
+            return
 
         while True:
             try:
@@ -1142,10 +1282,60 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer.stop()
         self._poll_requested_interval_ms = None
         self._poll_resume_interval_ms = None
+        self._stop_raw_stream_state()
         self._fail_pending(PowerClientError(message))
         self.connectionChanged.emit(False)
 
+    def _stop_raw_stream_state(self) -> None:
+        self._stream_enabled = False
+        self._stream_types = ()
+        self._stream_fast_types = ()
+        self._stream_slow_types = ()
+        self._stream_fast_sample_size = 0
+        self._stream_slow_sample_size = 0
+        self._stream_fast_samples_until_slow = 0
+        self._stream_slow_every_fast_samples = 0
+
+    def _extract_raw_stream_values(self) -> dict[PowerDataType, int] | None:
+        if not self._stream_enabled or not self._stream_fast_types:
+            return None
+        expected_size = self._stream_fast_sample_size
+        include_slow = self._stream_fast_samples_until_slow <= 0
+        if include_slow:
+            expected_size += self._stream_slow_sample_size
+
+        if len(self._buffer) < expected_size:
+            return None
+
+        sample = bytes(self._buffer[:expected_size])
+        del self._buffer[:expected_size]
+
+        fast_sample = sample[:self._stream_fast_sample_size]
+        values = decode_stream_sample(fast_sample, self._stream_fast_types)
+        if include_slow:
+            slow_sample = sample[self._stream_fast_sample_size:]
+            values.update(decode_stream_sample(slow_sample, self._stream_slow_types))
+            self._stream_fast_samples_until_slow = self._stream_slow_every_fast_samples - 1
+        else:
+            self._stream_fast_samples_until_slow -= 1
+        return values
+
+    def _handle_raw_stream_values(self, values: dict[PowerDataType, int]) -> None:
+        self._last_values.update(values)
+        status = self._status_from_values(values)
+        if status is None:
+            return
+        self._last_status = status
+        self.statusUpdated.emit(status)
+
     def _extract_frame(self) -> dict[str, int | bytes] | None:
+        if self._stream_enabled and self._pending is None:
+            values = self._extract_raw_stream_values()
+            if values is None:
+                return None
+            self._handle_raw_stream_values(values)
+            return None
+
         while len(self._buffer) >= 2 and self._buffer[:2] != SOF:
             self._buffer.pop(0)
 
@@ -1199,6 +1389,75 @@ def pretty_faults(mask: int) -> str:
 
 def pack_read_request(types: Iterable[PowerDataType]) -> bytes:
     return b"".join(encode_tlv(item) for item in types)
+
+
+def _stream_value_length(type_id: PowerDataType) -> int:
+    length = STREAM_VALUE_LENGTHS.get(type_id)
+    if length is None or length <= 0:
+        raise PowerClientProtocolError(f"{type_id.name} cannot be used in raw stream mode")
+    return length
+
+
+def pack_stream_start_request(
+    fast_types: Iterable[PowerDataType],
+    fast_period_ms: int,
+    slow_types: Iterable[PowerDataType] = (),
+    slow_period_ms: int = 0,
+) -> bytes:
+    fast = tuple(fast_types)
+    slow = tuple(slow_types)
+    fast_period = max(1, min(0xFFFF, int(fast_period_ms)))
+    slow_period = max(0, min(0xFFFF, int(slow_period_ms)))
+    if not fast:
+        raise PowerClientProtocolError("Raw stream requires at least one fast channel")
+    if slow and slow_period <= 0:
+        raise PowerClientProtocolError("Slow stream period must be positive when slow channels are requested")
+    if slow and slow_period % fast_period != 0:
+        raise PowerClientProtocolError("Slow stream period must be an integer multiple of fast period")
+    return (
+        fast_period.to_bytes(2, "little")
+        + bytes([len(fast) & 0xFF])
+        + pack_read_request(fast)
+        + slow_period.to_bytes(2, "little")
+        + bytes([len(slow) & 0xFF])
+        + pack_read_request(slow)
+    )
+
+
+def stream_sample_size(types: Iterable[PowerDataType]) -> int:
+    selected = tuple(types)
+    if not selected:
+        raise PowerClientProtocolError("Raw stream requires at least one channel")
+    value_size = sum(_stream_value_length(type_id) for type_id in selected)
+    return value_size + (len(selected) - 1) * len(STREAM_CHANNEL_SEPARATOR)
+
+
+def decode_stream_sample(sample: bytes, types: Iterable[PowerDataType]) -> dict[PowerDataType, int]:
+    selected = tuple(types)
+    expected_size = stream_sample_size(selected)
+    if len(sample) != expected_size:
+        raise PowerClientProtocolError(
+            f"Unexpected raw stream sample size {len(sample)}, expected {expected_size}"
+        )
+
+    offset = 0
+    values: dict[PowerDataType, int] = {}
+    for index, type_id in enumerate(selected):
+        length = _stream_value_length(type_id)
+        raw_value = sample[offset:offset + length]
+        offset += length
+
+        values[type_id] = int.from_bytes(raw_value, "little", signed=False)
+
+        if index < len(selected) - 1:
+            separator = sample[offset:offset + len(STREAM_CHANNEL_SEPARATOR)]
+            if separator != STREAM_CHANNEL_SEPARATOR:
+                raise PowerClientProtocolError(
+                    f"Raw stream separator mismatch after {type_id.name}: {separator.hex(' ')}"
+                )
+            offset += len(STREAM_CHANNEL_SEPARATOR)
+
+    return values
 
 
 class TVLHost:

@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 
 from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QDoubleValidator, QFont, QIntValidator
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel, CardWidget, CaptionLabel, ComboBox, FluentIcon as FIF,
@@ -144,9 +144,32 @@ class ParameterEditor(CardWidget):
         self.otp = LineEdit(self)
         self.fan = LineEdit(self)
 
-        for editor in (self.outputVoltage, self.outputCurrent, self.ovp, self.ocp, self.otp, self.fan):
+        self._editors = (
+            self.outputVoltage,
+            self.outputCurrent,
+            self.ovp,
+            self.ocp,
+            self.otp,
+            self.fan,
+        )
+
+        for editor in self._editors:
             editor.setFixedHeight(34)
             editor.setClearButtonEnabled(True)
+            editor.setMinimumWidth(148)
+            editor.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        decimal_validator = QDoubleValidator(0.0, 9999.999, 3, self)
+        decimal_validator.setNotation(QDoubleValidator.StandardNotation)
+        fan_validator = QIntValidator(0, 1000, self)
+
+        self.outputVoltage.setValidator(decimal_validator)
+        self.outputCurrent.setValidator(decimal_validator)
+        self.ovp.setValidator(decimal_validator)
+        self.ocp.setValidator(decimal_validator)
+        self.otp.setValidator(decimal_validator)
+        self.fan.setValidator(fan_validator)
+
         self.outputVoltage.setPlaceholderText("输出电压 V")
         self.outputCurrent.setPlaceholderText("输出电流 A")
         self.ovp.setPlaceholderText("OVP V")
@@ -159,6 +182,11 @@ class ParameterEditor(CardWidget):
         self.outputSwitch.setOffText("输出关闭")
         self.applyOutputButton = PrimaryPushButton(FIF.ACCEPT, "应用输出", self)
         self.applyProtectButton = PushButton(FIF.SAVE, "应用保护", self)
+        self.outputSwitch.setFixedHeight(34)
+        self.applyOutputButton.setFixedHeight(34)
+        self.applyProtectButton.setFixedHeight(34)
+        self.applyOutputButton.setMinimumWidth(110)
+        self.applyProtectButton.setMinimumWidth(110)
 
         form = QGridLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -199,6 +227,8 @@ class ParameterEditor(CardWidget):
                 editor.setText(value)
 
     def setWriteEnabled(self, enabled: bool) -> None:
+        for editor in self._editors:
+            editor.setEnabled(enabled)
         self.outputSwitch.setEnabled(enabled)
         self.applyOutputButton.setEnabled(enabled)
         self.applyProtectButton.setEnabled(enabled)
@@ -426,6 +456,12 @@ class PowerPage(ScrollArea):
         top.addWidget(self.logLevelCombo)
         top.addWidget(self.clearLogButton)
         self.logEdit = TextEdit(self.logCard)
+        self.logEdit.setMinimumHeight(170)
+        self.logEdit.setReadOnly(True)
+        self.logEdit.document().setMaximumBlockCount(400)
+        layout.addLayout(top)
+        layout.addWidget(self.logEdit)
+        self.rootLayout.addWidget(self.logCard)
 
     def _onScrollValueChanged(self, _value: int) -> None:
         self.chartCard.chart.set_live_updates_suspended(True)
@@ -433,12 +469,6 @@ class PowerPage(ScrollArea):
 
     def _resumeChartAfterScroll(self) -> None:
         self.chartCard.chart.set_live_updates_suspended(False)
-        self.logEdit.setMinimumHeight(170)
-        self.logEdit.setReadOnly(True)
-        self.logEdit.document().setMaximumBlockCount(400)
-        layout.addLayout(top)
-        layout.addWidget(self.logEdit)
-        self.rootLayout.addWidget(self.logCard)
 
     def _bindSignals(self) -> None:
         self._client.log.connect(self._appendLog)
@@ -499,6 +529,7 @@ class PowerPage(ScrollArea):
         try:
             session.open()
         except Exception as exc:
+            self.parameterEditor.setWriteEnabled(False)
             self._appendLog(f"错误: {exc}")
             return
         self._manualSession = session
@@ -508,6 +539,7 @@ class PowerPage(ScrollArea):
         self.attachSessionRequested.emit(session)
         self.stateBadge.setOnline(True)
         self.connectButton.setText("断开")
+        self.parameterEditor.setWriteEnabled(True)
         self._appendLog(f"已连接: {getattr(getattr(session, 'cfg', None), 'port', '未知')}")
         showMessage(self, "设备已连接", "电源设备会话已连接。", level="success")
         if self.autoPollSwitch.isChecked():
@@ -541,6 +573,7 @@ class PowerPage(ScrollArea):
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setOnline(connected)
         self.connectButton.setText("断开" if connected else "连接")
+        self.parameterEditor.setWriteEnabled(connected)
         if not connected:
             self._closeManualSessionSilently()
             self._applyDisconnectedState()
@@ -713,7 +746,7 @@ class PowerPage(ScrollArea):
     def _applyDisconnectedState(self) -> None:
         self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
-        self._setWriteControlsEnabled(True)
+        self._setWriteControlsEnabled(False)
         self._writePollRestartTimer.stop()
         self.stateBadge.setOnline(False)
         self.connectButton.setText("连接")

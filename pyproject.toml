@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.5.1.dev1"
+version = "0.5.2.a1"
 # dev1    开发快照，最早期，不稳定
 # a1       alpha 内测版，功能可能还没完整
 # b1       beta 测试版，功能基本有了，但可能有 bug
@@ -107,11 +107,6 @@ excludes = [
     "PyQt5.QtQuick",
     "PyQt5.QtQml",
     "PyQt5.QtQuickWidgets",
-    # --- Qt WebEngine (not used) ---
-    "PyQt5.QtWebEngine",
-    "PyQt5.QtWebEngineCore",
-    "PyQt5.QtWebEngineWidgets",
-    "PyQt5.QtWebChannel",
     # --- Other unused Qt modules ---
     "PyQt5.QtPrintSupport",
     "PyQt5.QtSql",

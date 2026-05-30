@@ -33,11 +33,11 @@ class F4SplashScreen(SplashScreen):
         resolved_icon = self._resolve_icon(icon, parent)
         super().__init__(resolved_icon, parent)
 
-        self._titleBar = StandardTitleBar(self)
-        self.setTitleBar(self._titleBar)
+        # self._titleBar = StandardTitleBar(self)
+        # self.setTitleBar(self._titleBar)
 
         self.setIconSize(icon_size or QSize(102, 102))
-        self.syncWindowMeta(icon=resolved_icon, title=title)
+        # self.syncWindowMeta(icon=resolved_icon, title=title)
 
     @staticmethod
     def _resolve_icon(icon: QIcon | str | None, parent: QWidget | None) -> QIcon:

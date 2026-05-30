@@ -10,7 +10,32 @@ from session import (
     PowerDataType,
     PowerStatus,
 )
+from session.session_power import (
+    DEFAULT_STATUS_VALUES,
+    STREAM_CHANNEL_SEPARATOR,
+    STREAM_FAST_PERIOD_MS,
+    STREAM_FAST_TYPES,
+    STREAM_SLOW_PERIOD_MS,
+    STREAM_SLOW_TYPES,
+    STATUS_TYPES,
+    decode_stream_sample,
+    pack_stream_start_request,
+    stream_sample_size,
+)
 from session.session_serial import SerialSession
+
+
+DEFAULT_TEST_STATUS_VALUES = dict(DEFAULT_STATUS_VALUES)
+
+
+def _pack_stream_group(types: tuple[PowerDataType, ...], base_value: int) -> bytes:
+    sample = bytearray()
+    for index, type_id in enumerate(types):
+        value = base_value + index
+        sample.extend(value.to_bytes(2, "little", signed=False))
+        if index < len(types) - 1:
+            sample.extend(STREAM_CHANNEL_SEPARATOR)
+    return bytes(sample)
 
 
 class _FakeSerialSession:
@@ -28,6 +53,8 @@ class _TestPowerClient(F4CPPowerClient):
         super().__init__()
         self.write_calls = []
         self.read_status_calls = []
+        self.stream_start_calls = []
+        self.stream_stop_calls = []
 
     def write_values(self, values: dict[PowerDataType, bytes], timeout_ms: int = 1000) -> None:
         self.write_calls.append((dict(values), timeout_ms))
@@ -64,6 +91,23 @@ class _TestPowerClient(F4CPPowerClient):
         self.statusUpdated.emit(status)
         return status
 
+    def start_streaming(self, interval_ms: int = 800, types=STREAM_FAST_TYPES, timeout_ms: int = 1000) -> None:
+        selected = tuple(types)
+        self.stream_start_calls.append((interval_ms, selected, timeout_ms))
+        self._stream_types = selected
+        self._stream_fast_types = selected
+        self._stream_slow_types = STREAM_SLOW_TYPES
+        self._stream_fast_sample_size = stream_sample_size(selected)
+        self._stream_slow_sample_size = stream_sample_size(STREAM_SLOW_TYPES)
+        self._stream_slow_every_fast_samples = STREAM_SLOW_PERIOD_MS // STREAM_FAST_PERIOD_MS
+        self._stream_fast_samples_until_slow = 0
+        self._stream_enabled = True
+        self._poll_requested_interval_ms = max(200, int(interval_ms))
+
+    def stop_streaming(self, timeout_ms: int = 1000) -> None:
+        self.stream_stop_calls.append(timeout_ms)
+        self._stop_raw_stream_state()
+
 
 class PowerClientPollingTests(unittest.TestCase):
     @classmethod
@@ -85,13 +129,13 @@ class PowerClientPollingTests(unittest.TestCase):
         client.start_polling(250)
         self._process_events()
 
-        self.assertTrue(client._poll_timer.isActive())
-        self.assertEqual(client._poll_timer.interval(), 250)
-        self.assertGreaterEqual(len(client.read_status_calls), 1)
-        self.assertIn("Host polling started (250 ms)", logs)
+        self.assertTrue(client._stream_enabled)
+        self.assertEqual(client.stream_start_calls[0][0], 250)
+        self.assertEqual(client.read_status_calls, [])
 
         client.stop_polling()
-        self.assertFalse(client._poll_timer.isActive())
+        self.assertFalse(client._stream_enabled)
+        self.assertEqual(client.stream_stop_calls, [1000])
 
     def test_output_limit_write_refreshes_status_after_ack(self):
         client = _TestPowerClient()
@@ -106,12 +150,12 @@ class PowerClientPollingTests(unittest.TestCase):
 
         self.assertEqual(len(client.write_calls), 1)
         values, timeout_ms = client.write_calls[0]
-        self.assertEqual(timeout_ms, 1000)
+        self.assertEqual(timeout_ms, 2000)
         self.assertEqual(int.from_bytes(values[PowerDataType.SET_VOLTAGE_LIMIT], "little"), 12000)
         self.assertEqual(int.from_bytes(values[PowerDataType.SET_CURRENT_LIMIT], "little"), 3500)
         self.assertEqual(int.from_bytes(values[PowerDataType.POWER_STATE], "little"), 1)
         self.assertEqual(len(written), 1)
-        self.assertEqual(client.read_status_calls, [1000])
+        self.assertEqual(client.read_status_calls, [2000])
         self.assertEqual(errors, [])
 
     def test_output_write_pauses_and_resumes_active_polling(self):
@@ -130,15 +174,14 @@ class PowerClientPollingTests(unittest.TestCase):
         self.assertFalse(client._poll_timer.isActive())
         self.assertTrue(client._poll_resume_timer.isActive())
         self.assertEqual(len(client.write_calls), 1)
-        self.assertEqual(client.read_status_calls, [1000])
-        self.assertIn("Host polling paused for write", logs)
+        self.assertEqual(client.stream_stop_calls, [1000])
+        self.assertEqual(client.read_status_calls, [2000])
+        self.assertIn("Raw stream paused for write", logs)
 
-        self._process_events(0.65)
+        self._process_events(0.95)
 
-        self.assertTrue(client._poll_timer.isActive())
-        self.assertEqual(client._poll_timer.interval(), 250)
-        self.assertIn("Host polling resumed (250 ms)", logs)
-        self.assertIn(800, client.read_status_calls)
+        self.assertTrue(client._stream_enabled)
+        self.assertEqual(client.stream_start_calls[-1][0], 250)
 
     def test_output_write_resumes_when_poll_timer_was_temporarily_inactive(self):
         client = _TestPowerClient()
@@ -153,11 +196,10 @@ class PowerClientPollingTests(unittest.TestCase):
 
         self.assertTrue(client._poll_resume_timer.isActive())
 
-        self._process_events(0.65)
+        self._process_events(0.95)
 
-        self.assertTrue(client._poll_timer.isActive())
-        self.assertEqual(client._poll_timer.interval(), 250)
-        self.assertIn(800, client.read_status_calls)
+        self.assertTrue(client._stream_enabled)
+        self.assertEqual(client.stream_start_calls[-1][0], 250)
 
     def test_protection_write_and_power_state_write_both_trigger_readback(self):
         client = _TestPowerClient()
@@ -184,8 +226,74 @@ class PowerClientPollingTests(unittest.TestCase):
         self.assertEqual(int.from_bytes(power_state_values_raw[PowerDataType.POWER_STATE], "little"), 0)
         self.assertEqual(len(protection_written), 1)
         self.assertEqual(power_state_values, [False])
-        self.assertEqual(client.read_status_calls, [1000, 1000])
+        self.assertEqual(client.read_status_calls, [2000, 2000])
         self.assertEqual(errors, [])
+
+    def test_raw_stream_sample_uses_separator_between_channel_values(self):
+        types = (
+            PowerDataType.OUTPUT_VOLTAGE,
+            PowerDataType.OUTPUT_CURRENT,
+            PowerDataType.CORE_TEMPERATURE,
+        )
+        sample = (
+            (12000).to_bytes(2, "little")
+            + STREAM_CHANNEL_SEPARATOR
+            + (500).to_bytes(2, "little")
+            + STREAM_CHANNEL_SEPARATOR
+            + (35000).to_bytes(2, "little")
+        )
+
+        self.assertEqual(stream_sample_size(types), len(sample))
+        self.assertEqual(
+            decode_stream_sample(sample, types),
+            {
+                PowerDataType.OUTPUT_VOLTAGE: 12000,
+                PowerDataType.OUTPUT_CURRENT: 500,
+                PowerDataType.CORE_TEMPERATURE: 35000,
+            },
+        )
+
+    def test_stream_start_request_contains_fast_and_slow_groups(self):
+        payload = pack_stream_start_request(
+            STREAM_FAST_TYPES,
+            STREAM_FAST_PERIOD_MS,
+            STREAM_SLOW_TYPES,
+            STREAM_SLOW_PERIOD_MS,
+        )
+
+        fast_tlv_len = len(STREAM_FAST_TYPES) * 3
+        self.assertEqual(int.from_bytes(payload[0:2], "little"), 20)
+        self.assertEqual(payload[2], len(STREAM_FAST_TYPES))
+        self.assertEqual(payload[3:3 + fast_tlv_len], b"".join(bytes([int(t), 0, 0]) for t in STREAM_FAST_TYPES))
+        slow_offset = 3 + fast_tlv_len
+        self.assertEqual(int.from_bytes(payload[slow_offset:slow_offset + 2], "little"), 1000)
+        self.assertEqual(payload[slow_offset + 2], len(STREAM_SLOW_TYPES))
+        self.assertEqual(
+            payload[slow_offset + 3:],
+            b"".join(bytes([int(t), 0, 0]) for t in STREAM_SLOW_TYPES),
+        )
+
+    def test_raw_stream_schedule_parses_slow_group_once_per_second(self):
+        client = F4CPPowerClient()
+        client._last_values.update(DEFAULT_TEST_STATUS_VALUES)
+        client._stream_enabled = True
+        client._stream_fast_types = STREAM_FAST_TYPES
+        client._stream_slow_types = STREAM_SLOW_TYPES
+        client._stream_fast_sample_size = stream_sample_size(STREAM_FAST_TYPES)
+        client._stream_slow_sample_size = stream_sample_size(STREAM_SLOW_TYPES)
+        client._stream_slow_every_fast_samples = 50
+        client._stream_fast_samples_until_slow = 0
+
+        first = _pack_stream_group(STREAM_FAST_TYPES, 12000) + _pack_stream_group(STREAM_SLOW_TYPES, 32000)
+        second = _pack_stream_group(STREAM_FAST_TYPES, 12100)
+        client._buffer.extend(first + second)
+
+        first_values = client._extract_raw_stream_values()
+        second_values = client._extract_raw_stream_values()
+
+        self.assertIn(PowerDataType.CORE_TEMPERATURE, first_values)
+        self.assertNotIn(PowerDataType.CORE_TEMPERATURE, second_values)
+        self.assertEqual(client._stream_fast_samples_until_slow, 48)
 
 
 if __name__ == "__main__":
