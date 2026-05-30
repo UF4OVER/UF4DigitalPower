@@ -199,8 +199,6 @@ if __name__ == "__main__":
 
         loadSavedFont(app)  # 加载字体
 
-        applyApplicationTheme(theme=cfg.themeMode.value)  # 加载主题
-
         w = Window()
 
         w.setMicaEffectEnabled(True)

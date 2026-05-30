@@ -742,6 +742,7 @@ class BatteryPage(ScrollArea):
         self.connectionRequested.emit(self.connectionModeCombo.currentText())
 
     def _onThemeChanged(self, *_):
+        StyleSheet.BATTERY_PAGE.apply(self)
         self._refreshStateStyles()
         for card in self.cellCards:
             card.refreshTheme()

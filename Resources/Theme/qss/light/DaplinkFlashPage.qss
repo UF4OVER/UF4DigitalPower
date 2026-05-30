@@ -3,26 +3,3 @@ QWidget#daplinkScrollWidget {
     background-color: transparent;
     border: none;
 }
-
-QScrollArea#DaplinkFlashPage QTextEdit,
-QScrollArea#DaplinkFlashPage QLineEdit,
-QScrollArea#DaplinkFlashPage LineEdit {
-    color: #000000;
-}
-
-QScrollArea#DaplinkFlashPage QTextEdit {
-    background: rgba(0, 0, 0, 0.03);
-}
-
-QScrollArea#DaplinkFlashPage QProgressBar {
-    min-height: 8px;
-    border: none;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.08);
-}
-
-QScrollArea#DaplinkFlashPage QProgressBar::chunk {
-    border-radius: 4px;
-    background: #0078D4;
-}
-

@@ -13,9 +13,8 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Iterable
 
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QWidget
 from config import CTX
 from qfluentwidgets import StyleSheetBase, Theme, isDarkTheme, qconfig, setTheme
 
@@ -112,39 +111,20 @@ def defaultWindowShellQss(theme=Theme.AUTO) -> str:
     """
 
 
-def readThemeBundle(theme=Theme.AUTO, names: Iterable[str] | None = None) -> str:
-    """Read a theme bundle from Resources/Theme/qss.
-
-    When names is None, all known StyleSheet enum files are loaded in enum order.
-    Missing QSS files are ignored so a theme can be partially defined.
-    """
-    theme = normalizedTheme(theme)
-    qssDir = themeQssDir(theme)
-    fileNames = list(names) if names is not None else [f"{item.value}.qss" for item in StyleSheet]
-
-    chunks: list[str] = [defaultWindowShellQss(theme)]
-    for fileName in fileNames:
-        filePath = qssDir / fileName
-        text = readQssFile(filePath)
-        if text:
-            chunks.append(f"/* {filePath.as_posix()} */\n{text}")
-    return "\n\n".join(chunks)
-
-
 def applyApplicationTheme(root: QWidget | None = None, theme=Theme.AUTO) -> str:
-    """Apply qfluent theme and the full Resources/Theme/qss bundle.
+    """Apply qfluent theme and the main-window shell QSS.
 
-    The returned QSS is useful for diagnostics or tests.
+    Page QSS is applied by each page with ``StyleSheet.<PAGE>.apply(page)``.
+    Keeping QSS scoped to pages matches qfluentwidgets' StyleSheetBase pattern
+    and prevents one page's selectors from becoming a global application sheet.
     """
     theme = normalizedTheme(theme)
     setTheme(theme)
 
-    qss = readThemeBundle(theme)
-    app = QApplication.instance()
-    if app is not None:
-        app.setStyleSheet(qss)
+    qss = defaultWindowShellQss(theme) if root is not None else ""
 
     if root is not None:
+        root.setStyleSheet(qss)
         root.setProperty("darkTheme", theme == Theme.DARK)
         root.style().unpolish(root)
         root.style().polish(root)

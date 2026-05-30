@@ -17,6 +17,7 @@ from qfluentwidgets import (
 from app.core.channel import ChannelConfig
 from app.core.data_hub import DataHub
 from app.core.utility import showMessage
+from app.manager import StyleSheet
 
 from app.session import (
     DebugSnapshot, F4CPPowerClient, PowerStatus, SerialConfig,
@@ -356,7 +357,7 @@ class PowerPage(ScrollArea):
 
         self._bindSignals()
         self._applyDisconnectedState()
-        # self._refreshThemeBundle()
+        StyleSheet.POWER_PAGE.apply(self)
         self.refreshSerialPorts()
 
     def _initHeader(self) -> None:
@@ -500,7 +501,14 @@ class PowerPage(ScrollArea):
         self.parameterEditor.applyProtectButton.clicked.connect(self._applyProtectionValues)
         self.clearLogButton.clicked.connect(self.logEdit.clear)
         self.mockButton.toggled.connect(self._setMockEnabled)
-        # cfg.themeChanged.connect(self._onThemeChanged)
+        cfg.themeChanged.connect(self._onThemeChanged)
+
+    def _onThemeChanged(self, *_):
+        StyleSheet.POWER_PAGE.apply(self)
+        for card in self.metricCards.values():
+            card.refreshTheme()
+        self.stateBadge.refreshTheme()
+        self.chartCard.refreshTheme()
 
     def refreshSerialPorts(self) -> None:
         ports = [p.strip() for p in (listSerialPorts() or []) if p and p.strip()]

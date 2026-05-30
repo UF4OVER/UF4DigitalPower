@@ -595,6 +595,7 @@ class DevicePage(ScrollArea):
         self._appendLog(f'RX({len(data)}): {data.hex(" ")}')
 
     def _onThemeChanged(self, *_):
+        StyleSheet.DEVICE_PAGE.apply(self)
         self._applyLocalStyle()
 
     def _refreshTexteditColor(self):

@@ -8,38 +8,3 @@ QWidget#powerScrollWidget {
     border: none;
     border-radius: 0;
 }
-
-QWidget#powerScrollWidget TitleLabel,
-QWidget#powerScrollWidget SubtitleLabel,
-QWidget#powerScrollWidget StrongBodyLabel {
-    color: #F5F7FA;
-}
-
-QWidget#powerScrollWidget BodyLabel,
-QWidget#powerScrollWidget CaptionLabel {
-    color: #9AA4B2;
-}
-
-QWidget#powerScrollWidget #trendPlotCard {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 18px;
-    background: rgba(35, 35, 35, 0.82);
-}
-
-QWidget#powerScrollWidget #trendPlotPanel {
-    background: rgba(45, 45, 45, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 14px;
-}
-
-QWidget#powerScrollWidget PillPushButton[accessBadge="true"][accessType="RO"] {
-    background: rgba(249, 115, 22, 0.22);
-    color: #FDBA74;
-    border: 1px solid rgba(249, 115, 22, 0.34);
-}
-
-QWidget#powerScrollWidget PillPushButton[accessBadge="true"][accessType="RW"] {
-    background: rgba(59, 130, 246, 0.22);
-    color: #93C5FD;
-    border: 1px solid rgba(59, 130, 246, 0.34);
-}

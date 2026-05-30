@@ -25,7 +25,7 @@ from qfluentwidgets import (
 
 from config import CTX, logger
 
-from app.manager import firmware_manager
+from app.manager import StyleSheet, firmware_manager
 from app.core.utility import showMessage
 from app.session import session_daplink as daplink_pyocd
 
@@ -64,6 +64,7 @@ class DaplinkPage(ScrollArea):
         )
         self._resetDeviceInfo()
         self._applyTexts()
+        StyleSheet.DAPLINK_PAGE.apply(self)
 
         QTimer.singleShot(0, self.preloadPackTargets)
         QTimer.singleShot(0, self.scanProbe)
@@ -102,6 +103,9 @@ class DaplinkPage(ScrollArea):
     def closeEvent(self, event):
         self._session.shutdown()
         super().closeEvent(event)
+
+    def _onThemeChanged(self, *_):
+        StyleSheet.DAPLINK_PAGE.apply(self)
 
     def _initConnectionCard(self):
         self.connectCard = CardWidget(self.view)
