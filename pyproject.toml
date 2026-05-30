@@ -6,7 +6,7 @@ version = "0.5.1.dev1"
 # b1       beta 测试版，功能基本有了，但可能有 bug
 # rc1      release candidate，候选正式版，接近正式发布
 # 无后缀   正式版
-description = "Fluor4CellPower battery and power management system"
+description = "power management system"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
@@ -40,19 +40,6 @@ includes = [
     "PyQt5.QtCore",
     "PyQt5.QtGui",
     "PyQt5.QtWidgets",
-#    "PyQt5.QtOpenGL",
-#    "OpenGL",
-#    "OpenGL.GL",
-#    "OpenGL.error",
-#    "OpenGL.platform",
-#    "OpenGL.platform.win32",
-#    "OpenGL.platform.baseplatform",
-#    "OpenGL.raw.GL.VERSION.GL_1_0",
-#    "OpenGL.raw.GL.VERSION.GL_1_1",
-#    "OpenGL.raw.GL.VERSION.GL_1_2",
-#    "OpenGL.raw.GL.VERSION.GL_1_3",
-#    "OpenGL.raw.GL.VERSION.GL_1_4",
-#    "OpenGL.raw.GL.VERSION.GL_1_5",
     "pyocd",
     "qfluentwidgets",
     "config",
@@ -84,7 +71,6 @@ zip_include_packages = ["*"]
 
 zip_exclude_packages = [
    "PyQt5",
-#   "OpenGL",
    "lark",
    "pyocd",
    "cmsis_pack_manager",
