@@ -14,7 +14,7 @@ import sys
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from PyQt5.QtCore import QSettings
 from qfluentwidgets import ConfigItem, BoolValidator, QConfig, qconfig
@@ -298,6 +298,7 @@ CTX: AppContext = AppContext()
 # Convenience shortcuts derived from CTX
 cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
 _config_json_path = CTX.dirs.ConfigDir / "config.json"
+
 qconfig.load(_config_json_path, cfg)
 
 AppIconPath = CTX.app_icon_path  # str — path to app icon
