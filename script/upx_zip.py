@@ -91,17 +91,17 @@ def delete_qt_quick_dlls(exe_dir: Path):
         print(f"[Qt5 bin]    deleted {total / (1024 * 1024):.1f} MB of QtQuick/QML DLLs")
 
 
-# def delete_unused_qt_plugins(exe_dir: Path):
-#     plugins_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "plugins"
-#     total = 0
-#     for rel in QT5_PLUGIN_EXCLUDES:
-#         path = plugins_dir / rel
-#         if path.is_file():
-#             total += path.stat().st_size
-#             path.unlink()
-#             print(f"  DEL plug  {path}")
-#     if total:
-#         print(f"[plugins]    deleted {total / (1024 * 1024):.1f} MB of unused Qt plugins")
+def delete_unused_qt_plugins(exe_dir: Path):
+    plugins_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "plugins"
+    total = 0
+    for rel in QT5_PLUGIN_EXCLUDES:
+        path = plugins_dir / rel
+        if path.is_file():
+            total += path.stat().st_size
+            path.unlink()
+            print(f"  DEL plug  {path}")
+    if total:
+        print(f"[plugins]    deleted {total / (1024 * 1024):.1f} MB of unused Qt plugins")
 
 
 def delete_lib_excludes(exe_dir: Path):
@@ -190,7 +190,7 @@ def main():
 
     delete_qt_translations(exe_dir)
     delete_qt_quick_dlls(exe_dir)
-    # delete_unused_qt_plugins(exe_dir)
+    delete_unused_qt_plugins(exe_dir)
     delete_lib_excludes(exe_dir)
     trim_cmsis_packs(exe_dir)
     compress_with_upx(exe_dir)

@@ -10,7 +10,6 @@ from typing import Any, Optional, Protocol
 from PyQt5.QtCore import QCoreApplication, QIODevice, QObject, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt5.QtWidgets import (
-    QFrame,
     QGridLayout,
     QHeaderView,
     QHBoxLayout,
@@ -39,6 +38,7 @@ except Exception:  # pragma: no cover - Qt Bluetooth 在部分精简环境中不
 
 from qfluentwidgets import (
     BodyLabel,
+    CardWidget,
     CaptionLabel,
     ComboBox,
     LineEdit,
@@ -100,15 +100,14 @@ class _TlvRow:
     typeId: int = 0
 
 
-class PageCard(QFrame):
-    """Lightweight card container used by the serial debug page."""
+class PageCard(CardWidget):
+    """QFluentWidgets card container used by the serial debug page."""
 
     def __init__(self, title: str, subtitle: str = "", parent=None):
         super().__init__(parent)
         self.setObjectName("PageCard")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.vBoxLayout = QVBoxLayout(self)
-        self.vBoxLayout.setContentsMargins(20, 16, 20, 18)
+        self.vBoxLayout.setContentsMargins(20, 18, 20, 20)
         self.vBoxLayout.setSpacing(12)
 
         header = QWidget(self)
@@ -134,13 +133,12 @@ class QLabelCompat(BodyLabel):
     pass
 
 
-class StatusPill(QFrame):
+class StatusPill(CardWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("SerialStatusPill")
         self.setFixedHeight(32)
         self.setMinimumWidth(104)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 0, 12, 0)
@@ -471,7 +469,6 @@ class DevicePage(ScrollArea):
 
     def _applyLocalStyle(self):
         dark = isDarkTheme()
-        cardBg = "rgba(255, 255, 255, 0.055)" if dark else "rgba(255, 255, 255, 0.88)"
         border = "rgba(255, 255, 255, 0.10)" if dark else "rgba(15, 23, 42, 0.08)"
         sub = "rgba(226, 232, 240, 0.72)" if dark else "rgba(71, 85, 105, 0.78)"
         console = "#0B1020" if dark else "#F8FAFC"
@@ -479,11 +476,6 @@ class DevicePage(ScrollArea):
             self.styleSheet()
             + f"""
             QWidget#deviceScrollWidget {{ background: transparent; }}
-            QFrame#PageCard {{
-                background: {cardBg};
-                border: 1px solid {border};
-                border-radius: 16px;
-            }}
             CaptionLabel {{ color: {sub}; }}
             TextEdit {{
                 background: {console};

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QImage
+from PyQt5.QtGui import QColor, QDesktopServices, QFont, QImage
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -15,7 +15,7 @@ from qfluentwidgets import (
     SimpleCardWidget,
     TransparentToolButton,
     VerticalSeparator,
-    setFont, ScrollArea,
+    setFont, ScrollArea, MessageBox,
 )
 
 from config import CTX, AppIconPath
@@ -498,13 +498,29 @@ class HomePage(ScrollArea):
 
     def _handleUpdateResult(self, result) -> None:
         if not result.manual:
+            if result.success and result.has_changes:
+                self._showAppUpdateDialog(result)
             return
 
         if result.success:
+            if result.has_changes:
+                showMessage(
+                    self,
+                    '发现软件更新',
+                    '发现新版本 {version}，可查看更新内容。'.format(
+                        version=result.release_tag or result.snapshot.latest_app_version
+                    ),
+                    "success",
+                    True,
+                    6000,
+                )
+                self._showAppUpdateDialog(result)
+                return
+
             showMessage(
                 self,
                 '更新检查完成',
-                '最新软件版本已刷新。',
+                '当前已是最新软件版本。',
                 "success",
             )
             return
@@ -515,6 +531,41 @@ class HomePage(ScrollArea):
             UPDATE_MESSAGE_TEXT.get(result.message, result.message),
             "warning",
         )
+
+    def _showAppUpdateDialog(self, result) -> None:
+        release_url = (getattr(result, "release_url", "") or "").strip()
+        release_tag = (getattr(result, "release_tag", "") or result.snapshot.latest_app_version).strip()
+        notes = self._formatReleaseNotes(getattr(result, "release_notes", "") or "")
+        content = (
+            "发现新版本：{version}\n\n"
+            "更新内容：\n{notes}\n\n"
+            "地址：{url}"
+        ).format(
+            version=release_tag or "--",
+            notes=notes,
+            url=release_url or "未提供",
+        )
+
+        dialog = MessageBox('发现软件更新', content, self.window())
+        dialog.yesButton.setText('打开发布页')
+        dialog.cancelButton.setText('稍后')
+        dialog.yesSignal.connect(lambda: self._openReleaseUrl(release_url))
+        dialog.exec()
+
+    @staticmethod
+    def _formatReleaseNotes(notes: str, limit: int = 900) -> str:
+        text = (notes or "").strip()
+        if not text:
+            return "该版本未填写更新内容。"
+        text = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + "\n..."
+
+    def _openReleaseUrl(self, url: str) -> None:
+        if not url:
+            return
+        QDesktopServices.openUrl(QUrl(url))
 
     def _handleFirmwareDownloadResult(self, result) -> None:
         if result.success and result.release is not None:
