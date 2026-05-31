@@ -71,7 +71,7 @@ class Window(MSFluentWindow):
     def _initWindowShell(self):
         self.resize(1400, 1100)
         self.setWindowIcon(QIcon(AppIconPath))
-        self.setWindowTitle("UF4 POWER")
+        self.setWindowTitle("F4CP")
         self._centerOnScreen()
 
     def _centerOnScreen(self):

@@ -11,7 +11,7 @@ from qfluentwidgets import isDarkTheme
 from app.widgets.chart.chart_value_panel import ChartValuePanel
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.chart_control_panel import ChartControlPanel
-from app.widgets.chart.fallback_chart_widget import FallbackChartWidget
+from app.widgets.chart.pyqtgraph_chart_widget import PyQtGraphChartWidget
 from config import cfg, logger
 
 
@@ -19,7 +19,7 @@ class RealtimeChartWidget(QWidget):
     """
     实时图表外层控件。
 
-    统一使用 Qt Painter 图表，并将采样输入与界面重绘解耦。
+    统一使用 PyQtGraph 图表，并将采样输入与界面重绘解耦。
     数据流可以高频写入，界面重绘限制在可控帧率内。
     """
 
@@ -83,16 +83,16 @@ class RealtimeChartWidget(QWidget):
         self.initializeChart()
 
     def initializeChart(self) -> None:
-        """Create the pure Qt chart lazily."""
+        """Create the PyQtGraph chart lazily."""
         if self._chart_initialized:
             return
         self._chart_initialized = True
 
-        self.chart_widget = FallbackChartWidget(self.chart_model, self.chart_area)
+        self.chart_widget = PyQtGraphChartWidget(self.chart_model, self.chart_area)
         self.chart_widget.set_title(self._pending_title)
         self.chart_widget.snapshotUpdated.connect(self._queue_value_panel_snapshot)
         self.chart_area_layout.insertWidget(0, self.chart_widget, 1)
-        logger.info("Using Qt Painter for realtime chart rendering.")
+        logger.info("Using PyQtGraph for realtime chart rendering.")
 
         self.refreshTheme()
         self.mark_data_dirty()

@@ -173,7 +173,7 @@ class DynamicIsland(QFrame):
         base_font = app.font() if app is not None else self.font()
 
         island_font = QFont(base_font)
-        island_font.setPointSize(12)
+        island_font.setPointSize(10)
         self.setFont(island_font)
 
         title_font = QFont(island_font)

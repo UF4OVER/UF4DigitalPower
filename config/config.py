@@ -328,8 +328,8 @@ FIRMWARE_BASE_URL_OPTION = "BaseUrl"  # FastAPI firmware update server base URL
 
 YEAR = 2026
 AUTHOR = "UF4OVER"
-VERSION = "0.5.0.a1"
-HELP_URL = "https://hepi.ng/docs/help"
+VERSION = "0.5.3.rc1"
+HELP_URL = "https://update.hepi.ng/docs/help"
 REPO_URL = "https://github.com/UF4OVER/UF4DigitalPower"
 EXAMPLE_URL = "https://github.com/UF4OVER/UF4DigitalPower"
 FEEDBACK_URL = "https://github.com/UF4OVER/UF4DigitalPower/issues"

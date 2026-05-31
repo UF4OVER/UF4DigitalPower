@@ -5,11 +5,12 @@ import time
 from dataclasses import dataclass
 
 from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QDoubleValidator, QFont, QIntValidator
-from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
-    BodyLabel, CardWidget, CaptionLabel, ComboBox, FluentIcon as FIF,
-    LineEdit, PillPushButton, PrimaryPushButton, PushButton, ScrollArea,
+    BodyLabel, CardWidget, CaptionLabel, ComboBox, DoubleSpinBox,
+    FluentIcon as FIF, PillPushButton, PrimaryPushButton, PushButton,
+    ScrollArea, SpinBox,
     StrongBodyLabel, SubtitleLabel, SwitchButton, TextEdit, TitleLabel,
     isDarkTheme, setFont,
 )
@@ -20,15 +21,15 @@ from app.core.utility import showMessage
 from app.manager import StyleSheet
 
 from app.session import (
-    DebugSnapshot, F4CPPowerClient, PowerStatus, SerialConfig,
+    DEFAULT_STATUS_VALUES, DebugSnapshot, F4CPPowerClient, PowerStatus, SerialConfig,
     SerialSession, listSerialPorts, pretty_faults,
+    build_status,
 )
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
 from config import CTX, cfg, logger
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
-DEFAULT_OVP_SET_VALUE_TEXT = f"{DEFAULT_OVP_SET_VALUE_MV / 1000.0:.3f}"
 POWER_POLL_INTERVAL_MS = 500
 POWER_SERIAL_BAUD_RATE = 921600
 WRITE_POLL_RESTART_DELAY_MS = 600
@@ -133,17 +134,57 @@ class StatusChip(PillPushButton):
         """)
 
 
+class StatusValueWidget(QWidget):
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("PowerStatusValue")
+        self.titleLabel = CaptionLabel(title, self)
+        self.valueLabel = StrongBodyLabel("--", self)
+        self.valueLabel.setWordWrap(True)
+        self.valueLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        setFont(self.titleLabel, 12)
+        setFont(self.valueLabel, 20, QFont.DemiBold)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(4)
+        layout.addWidget(self.titleLabel)
+        layout.addWidget(self.valueLabel, 1)
+        self.setMinimumHeight(96)
+        self.refreshTheme()
+
+    def setValue(self, value: str) -> None:
+        self.valueLabel.setText(value)
+
+    def refreshTheme(self) -> None:
+        dark = isDarkTheme()
+        title = "#9AA4B2" if dark else "#64748B"
+        value = "#F5F7FA" if dark else "#111827"
+        border = "rgba(255, 255, 255, 0.10)" if dark else "rgba(15, 23, 42, 0.08)"
+        background = "rgba(255, 255, 255, 0.045)" if dark else "rgba(248, 250, 252, 0.82)"
+        self.titleLabel.setStyleSheet(f"color: {title};")
+        self.valueLabel.setStyleSheet(f"color: {value};")
+        self.setStyleSheet(f"""
+            QWidget#PowerStatusValue {{
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 8px;
+            }}
+        """)
+
+
 class ParameterEditor(CardWidget):
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self.setObjectName("PowerParameterEditor")
         self.titleLabel = SubtitleLabel(title, self)
-        self.outputVoltage = LineEdit(self)
-        self.outputCurrent = LineEdit(self)
-        self.ovp = LineEdit(self)
-        self.ocp = LineEdit(self)
-        self.otp = LineEdit(self)
-        self.fan = LineEdit(self)
+        self._selectorBlocks: list[tuple[QWidget, CaptionLabel]] = []
+        self.outputVoltage = self._createDoubleSelector("V", 0.0, 80.0, 0.1)
+        self.outputCurrent = self._createDoubleSelector("A", 0.0, 60.0, 0.1)
+        self.ovp = self._createDoubleSelector("V", 0.0, 100.0, 0.1)
+        self.ocp = self._createDoubleSelector("A", 0.0, 80.0, 0.1)
+        self.otp = self._createDoubleSelector("°C", 0.0, 150.0, 1.0)
+        self.fan = self._createFanSelector()
 
         self._editors = (
             self.outputVoltage,
@@ -154,50 +195,40 @@ class ParameterEditor(CardWidget):
             self.fan,
         )
 
-        for editor in self._editors:
-            editor.setFixedHeight(34)
-            editor.setClearButtonEnabled(True)
-            editor.setMinimumWidth(148)
-            editor.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        decimal_validator = QDoubleValidator(0.0, 9999.999, 3, self)
-        decimal_validator.setNotation(QDoubleValidator.StandardNotation)
-        fan_validator = QIntValidator(0, 1000, self)
-
-        self.outputVoltage.setValidator(decimal_validator)
-        self.outputCurrent.setValidator(decimal_validator)
-        self.ovp.setValidator(decimal_validator)
-        self.ocp.setValidator(decimal_validator)
-        self.otp.setValidator(decimal_validator)
-        self.fan.setValidator(fan_validator)
-
-        self.outputVoltage.setPlaceholderText("输出电压 V")
-        self.outputCurrent.setPlaceholderText("输出电流 A")
-        self.ovp.setPlaceholderText("OVP V")
-        self.ocp.setPlaceholderText("OCP A")
-        self.otp.setPlaceholderText("OTP °C")
-        self.fan.setPlaceholderText("风扇 0-1000")
-
         self.outputSwitch = SwitchButton(self)
         self.outputSwitch.setOnText("输出开启")
         self.outputSwitch.setOffText("输出关闭")
         self.applyOutputButton = PrimaryPushButton(FIF.ACCEPT, "应用输出", self)
         self.applyProtectButton = PushButton(FIF.SAVE, "应用保护", self)
-        self.outputSwitch.setFixedHeight(34)
-        self.applyOutputButton.setFixedHeight(34)
-        self.applyProtectButton.setFixedHeight(34)
+        self.outputSwitch.setFixedHeight(38)
+        self.applyOutputButton.setFixedHeight(38)
+        self.applyProtectButton.setFixedHeight(38)
         self.applyOutputButton.setMinimumWidth(110)
         self.applyProtectButton.setMinimumWidth(110)
+        self._sectionLabels = [
+            BodyLabel("输出设定", self),
+            BodyLabel("保护阈值", self),
+        ]
 
-        form = QGridLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(10)
-        labels = (("电压", self.outputVoltage), ("电流", self.outputCurrent), ("OVP", self.ovp), ("OCP", self.ocp), ("OTP", self.otp), ("风扇", self.fan))
-        for i, (label, editor) in enumerate(labels):
-            r, c = divmod(i, 2)
-            form.addWidget(BodyLabel(label, self), r, c * 2)
-            form.addWidget(editor, r, c * 2 + 1)
+        outputGrid = QGridLayout()
+        outputGrid.setContentsMargins(0, 0, 0, 0)
+        outputGrid.setHorizontalSpacing(10)
+        outputGrid.setVerticalSpacing(8)
+        outputGrid.addWidget(self._selectorBlock("输出电压", self.outputVoltage), 0, 0)
+        outputGrid.addWidget(self._selectorBlock("输出电流", self.outputCurrent), 0, 1)
+        outputGrid.setColumnStretch(0, 1)
+        outputGrid.setColumnStretch(1, 1)
+
+        protectGrid = QGridLayout()
+        protectGrid.setContentsMargins(0, 0, 0, 0)
+        protectGrid.setHorizontalSpacing(10)
+        protectGrid.setVerticalSpacing(8)
+        protectGrid.addWidget(self._selectorBlock("过压保护", self.ovp), 0, 0)
+        protectGrid.addWidget(self._selectorBlock("过流保护", self.ocp), 0, 1)
+        protectGrid.addWidget(self._selectorBlock("过温保护", self.otp), 1, 0)
+        protectGrid.addWidget(self._selectorBlock("风扇设定", self.fan), 1, 1)
+        protectGrid.setColumnStretch(0, 1)
+        protectGrid.setColumnStretch(1, 1)
 
         control = QHBoxLayout()
         control.setContentsMargins(0, 6, 0, 0)
@@ -209,23 +240,90 @@ class ParameterEditor(CardWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        layout.setSpacing(14)
         layout.addWidget(self.titleLabel)
-        layout.addLayout(form)
+        layout.addWidget(self._sectionLabels[0])
+        layout.addLayout(outputGrid)
+        layout.addWidget(self._sectionLabels[1])
+        layout.addLayout(protectGrid)
         layout.addLayout(control)
+        self.refreshTheme()
+
+    def _createDoubleSelector(self, suffix: str, minimum: float, maximum: float, step: float) -> DoubleSpinBox:
+        selector = DoubleSpinBox(self)
+        selector.setRange(minimum, maximum)
+        selector.setDecimals(3)
+        selector.setSingleStep(step)
+        selector.setSuffix(f" {suffix}")
+        selector.setFixedHeight(40)
+        selector.setMinimumWidth(132)
+        selector.setAlignment(Qt.AlignmentFlag.AlignRight)
+        selector.setAccelerated(True)
+        return selector
+
+    def _createFanSelector(self) -> SpinBox:
+        selector = SpinBox(self)
+        selector.setRange(0, 1000)
+        selector.setSingleStep(10)
+        selector.setSuffix(" /1000")
+        selector.setFixedHeight(40)
+        selector.setMinimumWidth(132)
+        selector.setAlignment(Qt.AlignmentFlag.AlignRight)
+        selector.setAccelerated(True)
+        return selector
+
+    def _selectorBlock(self, title: str, selector) -> QWidget:
+        block = QWidget(self)
+        block.setObjectName("PowerParameterBlock")
+        label = CaptionLabel(title, block)
+        setFont(label, 12)
+        layout = QVBoxLayout(block)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+        layout.addWidget(label)
+        layout.addWidget(selector)
+        block.setMinimumHeight(92)
+        self._selectorBlocks.append((block, label))
+        return block
+
+    def refreshTheme(self) -> None:
+        dark = isDarkTheme()
+        title = "#F5F7FA" if dark else "#111827"
+        caption = "#9AA4B2" if dark else "#64748B"
+        border = "rgba(255, 255, 255, 0.10)" if dark else "rgba(15, 23, 42, 0.08)"
+        background = "rgba(255, 255, 255, 0.045)" if dark else "rgba(248, 250, 252, 0.82)"
+        self.titleLabel.setStyleSheet(f"color: {title};")
+        for sectionLabel in self._sectionLabels:
+            sectionLabel.setStyleSheet(f"color: {title}; font-weight: 700;")
+        for block, label in self._selectorBlocks:
+            label.setStyleSheet(f"color: {caption};")
+            block.setStyleSheet(f"""
+                QWidget#PowerParameterBlock {{
+                    background: {background};
+                    border: 1px solid {border};
+                    border-radius: 8px;
+                }}
+            """)
 
     def setFromStatus(self, status: PowerStatus) -> None:
         values = {
-            self.outputVoltage: f"{status.set_voltage_limit_mv / 1000.0:.3f}",
-            self.outputCurrent: f"{status.set_current_limit_ma / 1000.0:.3f}",
-            self.ovp: f"{status.ovp_set_value_v:.3f}",
-            self.ocp: f"{status.ocp_set_value_a:.3f}",
-            self.otp: f"{status.otp_set_value_c:.3f}",
-            self.fan: str(status.fan_set_value),
+            self.outputVoltage: status.set_voltage_limit_mv / 1000.0,
+            self.outputCurrent: status.set_current_limit_ma / 1000.0,
+            self.ovp: status.ovp_set_value_v,
+            self.ocp: status.ocp_set_value_a,
+            self.otp: status.otp_set_value_c,
+            self.fan: status.fan_set_value,
         }
         for editor, value in values.items():
-            if not editor.hasFocus():
-                editor.setText(value)
+            if not self._selectorHasFocus(editor):
+                editor.setValue(value)
+
+    @staticmethod
+    def _selectorHasFocus(editor) -> bool:
+        try:
+            return editor.hasFocus() or editor.lineEdit().hasFocus()
+        except Exception:
+            return editor.hasFocus()
 
     def setWriteEnabled(self, enabled: bool) -> None:
         for editor in self._editors:
@@ -348,6 +446,7 @@ class PowerPage(ScrollArea):
         self._initTelemetryChart()
         self._initStatusAndParameters()
         self._initLogCard()
+        self._initEmptyStatusView()
 
         self.setWidget(self.scrollWidget)
         self.setWidgetResizable(True)
@@ -404,7 +503,7 @@ class PowerPage(ScrollArea):
     def _initMetricCards(self) -> None:
         self.metricsGrid = QGridLayout()
         self.metricsGrid.setHorizontalSpacing(12)
-        self.metricsGrid.setVerticalSpacing(12)
+        self.metricsGrid.setVerticalSpacing(6)
         self.metricCards = {
             "vin": MetricCard("输入电压", "#2F80ED", self.scrollWidget),
             "iin": MetricCard("输入电流", "#F2994A", self.scrollWidget),
@@ -423,20 +522,40 @@ class PowerPage(ScrollArea):
 
     def _initStatusAndParameters(self) -> None:
         row = QHBoxLayout()
-        row.setSpacing(12)
+        row.setSpacing(6)
         self.statusCard = CardWidget(self.scrollWidget)
         self.statusCard.setObjectName("PowerStatusCard")
         statusLayout = QVBoxLayout(self.statusCard)
-        statusLayout.setContentsMargins(18, 18, 18, 18)
-        statusLayout.setSpacing(10)
+        statusLayout.setContentsMargins(12, 12, 12, 12)
+        statusLayout.setSpacing(6)
         self.statusTitle = SubtitleLabel("状态", self.statusCard)
-        self.statusInfo = QLabel("等待设备数据", self.statusCard)
-        self.statusInfo.setWordWrap(True)
-        self.statusInfo.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.statusGrid = QGridLayout()
+        self.statusGrid.setContentsMargins(0, 0, 0, 0)
+        self.statusGrid.setHorizontalSpacing(10)
+        self.statusGrid.setVerticalSpacing(10)
+        self.statusFields = {
+            "output": StatusValueWidget("输出", self.statusCard),
+            "topology": StatusValueWidget("拓扑", self.statusCard),
+            "mode": StatusValueWidget("控制模式", self.statusCard),
+            "state": StatusValueWidget("状态机", self.statusCard),
+            "fault": StatusValueWidget("故障", self.statusCard),
+            "core_temp": StatusValueWidget("核心温度", self.statusCard),
+            "board_temp": StatusValueWidget("板载温度", self.statusCard),
+            "pwm": StatusValueWidget("PWM A/D", self.statusCard),
+            "fan": StatusValueWidget("风扇", self.statusCard),
+        }
+        for index, key in enumerate((
+            "output", "topology", "mode",
+            "state", "fault", "core_temp",
+            "board_temp", "pwm", "fan",
+        )):
+            self.statusGrid.addWidget(self.statusFields[key], index // 3, index % 3)
+        for column in range(3):
+            self.statusGrid.setColumnStretch(column, 1)
         statusLayout.addWidget(self.statusTitle)
-        statusLayout.addWidget(self.statusInfo, 1)
+        statusLayout.addLayout(self.statusGrid, 1)
         self.parameterEditor = ParameterEditor("输出设定与保护阈值", self.scrollWidget)
-        row.addWidget(self.statusCard, 1)
+        row.addWidget(self.statusCard, 3)
         row.addWidget(self.parameterEditor, 2)
         self.rootLayout.addLayout(row)
 
@@ -508,6 +627,9 @@ class PowerPage(ScrollArea):
         StyleSheet.POWER_PAGE.apply(self)
         for card in self.metricCards.values():
             card.refreshTheme()
+        for field in self.statusFields.values():
+            field.refreshTheme()
+        self.parameterEditor.refreshTheme()
         self.stateBadge.refreshTheme()
         self.chartCard.refreshTheme()
 
@@ -522,6 +644,13 @@ class PowerPage(ScrollArea):
                 self.portCombo.setCurrentText(current)
         self.portCombo.blockSignals(False)
         self._writePageLogFile(f"串口列表: {ports}")
+
+    def _initEmptyStatusView(self) -> None:
+        self._renderStatusView(
+            build_status(dict(DEFAULT_STATUS_VALUES)),
+            update_chart=False,
+            log_changes=False,
+        )
 
     def toggleConnection(self) -> None:
         if self._client.is_connected:
@@ -588,9 +717,20 @@ class PowerPage(ScrollArea):
             self._applyDisconnectedState()
 
     def _updateStatusView(self, status: PowerStatus) -> None:
+        self._renderStatusView(status, update_chart=True, log_changes=True)
+
+    def _renderStatusView(
+        self,
+        status: PowerStatus,
+        *,
+        update_chart: bool,
+        log_changes: bool,
+    ) -> None:
         previous = self._lastStatus
-        self._lastStatus = status
-        self.chartCard.pushStatus(status)
+        if log_changes:
+            self._lastStatus = status
+        if update_chart:
+            self.chartCard.pushStatus(status)
         self.metricCards["vin"].setMetric(_MetricValue("输入电压", f"{status.vin_v:.3f}", "V", f"输入功率 {status.pin_w:.2f} W"))
         self.metricCards["iin"].setMetric(_MetricValue("输入电流", f"{status.iin_a:.3f}", "A", f"模式 {status.mode_name}"))
         self.metricCards["pin"].setMetric(_MetricValue("输入功率", f"{status.pin_w:.3f}", "W", f"故障 0x{status.fault_state:04X}"))
@@ -607,21 +747,26 @@ class PowerPage(ScrollArea):
         self.parameterEditor.outputSwitch.blockSignals(True)
         self.parameterEditor.outputSwitch.setChecked(switch_value)
         self.parameterEditor.outputSwitch.blockSignals(False)
-        faults = pretty_faults(status.fault_state) or "无"
-        self.statusInfo.setText(
-            f"输出：{'开启' if status.power_enabled else '关闭'}\n"
-            f"拓扑：{status.topology_name}\n"
-            f"控制模式：{status.mode_name}\n"
-            f"状态机：{status.state_flag_name}\n"
-            f"故障：{faults}\n"
-            f"核心温度：{status.core_temp_c:.2f} °C\n"
-            f"板载温度：{status.board_temp_c:.2f} °C\n"
-            f"PWM A/D：{status.pwm_a_compare} / {status.pwm_d_compare}\n"
-            f"风扇：{status.fan_speed} / 设定 {status.fan_set_value}"
-        )
-        if previous is None or previous.power_state != status.power_state or previous.state_machine_flag_bits != status.state_machine_flag_bits or previous.fault_state != status.fault_state:
+        faults = pretty_faults(status.fault_state)
+        if not faults or faults == "None":
+            faults = "无"
+        self.statusFields["output"].setValue("开启" if status.power_enabled else "关闭")
+        self.statusFields["topology"].setValue(status.topology_name)
+        self.statusFields["mode"].setValue(status.mode_name)
+        self.statusFields["state"].setValue(status.state_flag_name)
+        self.statusFields["fault"].setValue(faults)
+        self.statusFields["core_temp"].setValue(f"{status.core_temp_c:.2f} °C")
+        self.statusFields["board_temp"].setValue(f"{status.board_temp_c:.2f} °C")
+        self.statusFields["pwm"].setValue(f"{status.pwm_a_compare} / {status.pwm_d_compare}")
+        self.statusFields["fan"].setValue(f"{status.fan_speed} / 设定 {status.fan_set_value}")
+        if log_changes and (
+            previous is None
+            or previous.power_state != status.power_state
+            or previous.state_machine_flag_bits != status.state_machine_flag_bits
+            or previous.fault_state != status.fault_state
+        ):
             self._appendLog(f"状态 输出={'开启' if status.power_enabled else '关闭'} 状态机={status.state_flag_name} 拓扑={status.topology_name} 故障={faults} VOUT={status.vout_v:.3f}V IOUT={status.iout_a:.3f}A")
-        if self.logLevelCombo.currentData() == "verbose" and time.monotonic() - self._lastVerboseLogTs >= 2.0:
+        if log_changes and self.logLevelCombo.currentData() == "verbose" and time.monotonic() - self._lastVerboseLogTs >= 2.0:
             self._lastVerboseLogTs = time.monotonic()
             self._appendLog(self._client.pretty_print_status(status))
 
@@ -663,12 +808,8 @@ class PowerPage(ScrollArea):
         if self._writeInFlight:
             self._appendLog("写入进行中，请等待当前操作完成")
             return
-        try:
-            voltage_mv = int(round(float(self.parameterEditor.outputVoltage.text() or "0") * 1000))
-            current_ma = int(round(float(self.parameterEditor.outputCurrent.text() or "0") * 1000))
-        except ValueError:
-            self._appendLog("错误: 输出电压/电流格式不正确")
-            return
+        voltage_mv = int(round(self.parameterEditor.outputVoltage.value() * 1000))
+        current_ma = int(round(self.parameterEditor.outputCurrent.value() * 1000))
         enabled = self._stagedOutputEnabled if self._stagedOutputEnabled is not None else self.parameterEditor.outputSwitch.isChecked()
         self._setWriteControlsEnabled(False)
         self._writePollingRestartPending = True
@@ -681,14 +822,10 @@ class PowerPage(ScrollArea):
         if self._writeInFlight:
             self._appendLog("写入进行中，请等待当前操作完成")
             return
-        try:
-            ovp_mv = int(round(float(self.parameterEditor.ovp.text() or "0") * 1000))
-            ocp_ma = int(round(float(self.parameterEditor.ocp.text() or "0") * 1000))
-            otp_mc = int(round(float(self.parameterEditor.otp.text() or "0") * 1000))
-            fan_value = int(float(self.parameterEditor.fan.text() or "0"))
-        except ValueError:
-            self._appendLog("错误: 保护参数格式不正确")
-            return
+        ovp_mv = int(round(self.parameterEditor.ovp.value() * 1000))
+        ocp_ma = int(round(self.parameterEditor.ocp.value() * 1000))
+        otp_mc = int(round(self.parameterEditor.otp.value() * 1000))
+        fan_value = int(self.parameterEditor.fan.value())
         self._setWriteControlsEnabled(False)
         self._writePollingRestartPending = True
         self.protectionValuesRequested.emit(ovp_mv, ocp_ma, otp_mc, fan_value)
@@ -769,8 +906,8 @@ class PowerPage(ScrollArea):
         self.parameterEditor.outputSwitch.blockSignals(True)
         self.parameterEditor.outputSwitch.setChecked(False)
         self.parameterEditor.outputSwitch.blockSignals(False)
-        if not self.parameterEditor.ovp.text():
-            self.parameterEditor.ovp.setText(DEFAULT_OVP_SET_VALUE_TEXT)
+        if self.parameterEditor.ovp.value() <= 0:
+            self.parameterEditor.ovp.setValue(DEFAULT_OVP_SET_VALUE_MV / 1000.0)
 
     def _writePageLogFile(self, text: str) -> None:
         try:

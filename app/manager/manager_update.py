@@ -6,8 +6,9 @@ import configparser
 import json
 import socket
 from dataclasses import dataclass
+from urllib.parse import urlparse
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
@@ -52,6 +53,9 @@ class UpdateCheckResult:
 	message: str
 	snapshot: FirmwareVersionSnapshot
 	has_changes: bool = False
+	release_tag: str = ""
+	release_url: str = ""
+	release_notes: str = ""
 
 
 class UpdateCheckFinishedEvent(QEvent):
@@ -152,8 +156,7 @@ class UpdateManager:
 
 		logger.info(f"UpdateManager fetching remote firmware version info from {update_url}")
 		try:
-			with urlopen(update_url, timeout=8) as response:
-				payload = response.read().decode("utf-8-sig")
+			remote_result = self._fetch_remote_update(update_url)
 		except UPDATE_FETCH_EXCEPTIONS as exc:
 			logger.warning(f"UpdateManager failed to fetch update data: {exc}")
 			return UpdateCheckResult(
@@ -163,7 +166,7 @@ class UpdateManager:
 				snapshot=snapshot_before,
 			)
 
-		latest_versions = self._parse_remote_versions(payload)
+		latest_versions = remote_result.get("versions")
 		if latest_versions is None:
 			logger.warning("UpdateManager received an unsupported update payload")
 			return UpdateCheckResult(
@@ -187,7 +190,60 @@ class UpdateManager:
 			message="Latest app version has been refreshed.",
 			snapshot=snapshot_after,
 			has_changes=has_changes,
+			release_tag=str(remote_result.get("release_tag") or latest_versions["app"]),
+			release_url=str(remote_result.get("release_url") or update_url),
+			release_notes=str(remote_result.get("release_notes") or ""),
 		)
+
+	def _fetch_remote_update(self, update_url: str) -> dict[str, object]:
+		github_api_url = self._github_release_api_url(update_url)
+		if github_api_url:
+			return self._fetch_github_latest_release(github_api_url)
+
+		request = Request(update_url, headers={"User-Agent": "F4CP-UpdateChecker"})
+		with urlopen(request, timeout=8) as response:
+			payload = response.read().decode("utf-8-sig")
+		return {"versions": self._parse_remote_versions(payload)}
+
+	def _fetch_github_latest_release(self, api_url: str) -> dict[str, object]:
+		request = Request(
+			api_url,
+			headers={
+				"Accept": "application/vnd.github+json",
+				"User-Agent": "F4CP-UpdateChecker",
+			},
+		)
+		with urlopen(request, timeout=8) as response:
+			data = json.loads(response.read().decode("utf-8-sig"))
+
+		if not isinstance(data, dict):
+			return {"versions": None}
+
+		tag = _normalize_version(data.get("tag_name"), "")
+		if not tag:
+			return {"versions": None}
+
+		return {
+			"versions": {
+				"app": tag,
+				"upper": self.get_cached_versions().latest_upper_version,
+				"lower": self.get_cached_versions().latest_lower_version,
+			},
+			"release_tag": tag,
+			"release_url": _normalize_version(data.get("html_url"), ""),
+			"release_notes": _normalize_version(data.get("body"), ""),
+		}
+
+	@staticmethod
+	def _github_release_api_url(update_url: str) -> str:
+		parsed = urlparse(update_url.strip())
+		if parsed.netloc.lower() != "github.com":
+			return ""
+		parts = [part for part in parsed.path.split("/") if part]
+		if len(parts) < 3 or parts[2].lower() != "releases":
+			return ""
+		owner, repo = parts[0], parts[1]
+		return f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
 	def _parse_remote_versions(self, payload: str) -> dict[str, str] | None:
 		text = payload.strip()
