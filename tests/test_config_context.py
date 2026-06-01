@@ -8,12 +8,17 @@ from pathlib import Path
 
 from config.config import (
     AppContext,
+    CTX,
     DirPaths,
-    SettingsManager,
     get_default_context,
     reset_app_context,
     set_app_context,
 )
+from qfluentwidgets import Theme, qconfig
+
+
+def _restore_global_qconfig():
+    qconfig.load(str(CTX.dirs.ConfigJsonPath), CTX.cfg)
 
 
 class DirPathsTests(unittest.TestCase):
@@ -66,50 +71,9 @@ class DirPathsTests(unittest.TestCase):
         self.assertEqual(dp.AppIconPath, expected)
 
     def test_config_paths(self):
-        """ConfigIniPath and ConfigJsonPath resolve correctly."""
+        """ConfigJsonPath resolves correctly."""
         dp = DirPaths(base_dir=self.tmp)
-        self.assertEqual(dp.ConfigIniPath, self.tmp / "Resources" / "config" / "config.ini")
         self.assertEqual(dp.ConfigJsonPath, self.tmp / "Resources" / "config" / "config.json")
-
-
-class SettingsManagerTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="f4cp_test_"))
-        self.config_path = self.tmp / "test.ini"
-        self.sm = SettingsManager(self.config_path)
-
-    def tearDown(self):
-        import shutil
-        if self.tmp.exists():
-            shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def test_get_fallback(self):
-        """Missing key returns fallback."""
-        self.assertEqual(self.sm.get("NoSection", "NoKey", "default"), "default")
-        self.assertEqual(self.sm.get("S", "K", 42), 42)
-        self.assertEqual(self.sm.get("S", "K", True), True)
-
-    def test_set_and_get(self):
-        """Set then get returns the stored value."""
-        self.sm.set("Test", "name", "hello")
-        self.assertEqual(self.sm.get("Test", "name"), "hello")
-
-    def test_contains(self):
-        """contains returns True after set."""
-        self.assertFalse(self.sm.contains("Test", "flag"))
-        self.sm.set("Test", "flag", "1")
-        self.assertTrue(self.sm.contains("Test", "flag"))
-
-    def test_int_type_coercion(self):
-        """get returns int when fallback is int."""
-        self.sm.set("Numbers", "count", 99)
-        self.assertIsInstance(self.sm.get("Numbers", "count", 0), int)
-        self.assertEqual(self.sm.get("Numbers", "count", 0), 99)
-
-    def test_bool_type_coercion(self):
-        """get returns bool when fallback is bool."""
-        self.sm.set("Flags", "enabled", "true")
-        self.assertIs(self.sm.get("Flags", "enabled", False), True)
 
 
 class AppContextTests(unittest.TestCase):
@@ -120,22 +84,29 @@ class AppContextTests(unittest.TestCase):
     def tearDown(self):
         import shutil
         reset_app_context()
+        _restore_global_qconfig()
         if self.tmp.exists():
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_creates_directories(self):
-        """AppContext initializes DirPaths, logger, and settings manager."""
+        """AppContext initializes DirPaths, logger, and JSON config."""
         ctx = AppContext(base_dir=self.tmp)
         self.assertIsInstance(ctx.dirs, DirPaths)
-        self.assertIsInstance(ctx.settings, SettingsManager)
         self.assertTrue((self.tmp / "Logs").exists())
         self.assertTrue((self.tmp / "Resources" / "config").exists())
 
-    def test_qcfg_loaded(self):
-        """AppContext.qcfg is an F4CPConfig instance."""
+    def test_cfg_loaded(self):
+        """AppContext.cfg is an F4CPConfig instance."""
         ctx = AppContext(base_dir=self.tmp)
         from config.config import F4CPConfig
-        self.assertIsInstance(ctx.qcfg, F4CPConfig)
+        self.assertIsInstance(ctx.cfg, F4CPConfig)
+
+    def test_theme_items_are_qfluentwidgets_items(self):
+        """Theme switching uses qfluentwidgets' global config items."""
+        ctx = AppContext(base_dir=self.tmp)
+        self.assertIs(ctx.cfg.themeMode, qconfig.themeMode)
+        self.assertIs(ctx.cfg.themeColor, qconfig.themeColor)
+        self.assertIs(ctx.cfg.fontFamilies, qconfig.fontFamilies)
 
     def test_app_icon_path(self):
         """app_icon_path delegates to DirPaths."""
@@ -174,24 +145,7 @@ class AppContextTests(unittest.TestCase):
         self.assertIsNot(ctx1, ctx2)
 
 
-class BackwardCompatTests(unittest.TestCase):
-    """Verify legacy `from config import X` names still resolve correctly.
-
-    These names are eagerly initialized at import time from the real project
-    root.  ``set_app_context()`` does NOT retroactively update them (by design:
-    they exist for backward compatibility; new code should use ``AppContext``).
-    """
-
-    def test_dir_paths_instance_proxy(self):
-        from config import DirPathsInstance
-        self.assertIsInstance(DirPathsInstance, DirPaths)
-        self.assertTrue(DirPathsInstance.base_dir.exists())
-
-    def test_setting_manager_instance_proxy(self):
-        from config import SettingMangerInstance
-        self.assertIsInstance(SettingMangerInstance, SettingsManager)
-        self.assertTrue(SettingMangerInstance.config_path.endswith("config.ini"))
-
+class ConfigExportTests(unittest.TestCase):
     def test_cfg_proxy(self):
         from config import cfg
         from config.config import F4CPConfig
@@ -201,12 +155,6 @@ class BackwardCompatTests(unittest.TestCase):
         from config import AppIconPath
         self.assertIsInstance(AppIconPath, str)
         self.assertTrue(AppIconPath.endswith(".ico"))
-
-    def test_app_config_path_proxy(self):
-        from config import APP_CONFIG_PATH
-        self.assertIsInstance(APP_CONFIG_PATH, Path)
-        self.assertEqual(APP_CONFIG_PATH.name, "config.ini")
-
 
 class ManagerFontInjectTests(unittest.TestCase):
     """Verify manager_font functions accept optional ctx."""
@@ -219,30 +167,30 @@ class ManagerFontInjectTests(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+        _restore_global_qconfig()
         if self.tmp.exists():
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_discover_font_options_with_ctx(self):
-        from manager import discover_font_options
+        from app.manager import discover_font_options
         options = discover_font_options(ctx=self.ctx)
         self.assertGreaterEqual(len(options), 1)
         self.assertEqual(options[0].key, "__system__")
 
     def test_get_saved_font_key_with_ctx(self):
-        from manager import get_saved_font_key
+        from app.manager import get_saved_font_key
         key = get_saved_font_key(ctx=self.ctx)
         self.assertIsInstance(key, str)
         self.assertTrue(len(key) > 0)
 
     def test_discover_font_options_without_ctx(self):
-        """Backward compat: calling without ctx still works."""
-        from manager import discover_font_options
+        from app.manager import discover_font_options
         options = discover_font_options()
         self.assertGreaterEqual(len(options), 1)
 
 
-class StyleSheetInjectTests(unittest.TestCase):
-    """Verify StyleSheet.set_dirs() injection."""
+class StyleSheetPathTests(unittest.TestCase):
+    """Verify StyleSheet.path() uses the global CTX directories."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="f4cp_test_"))
@@ -255,13 +203,10 @@ class StyleSheetInjectTests(unittest.TestCase):
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_injected_dirs_used_in_path(self):
-        from manager import StyleSheet
-        StyleSheet.set_dirs(self.dirs)
-        try:
-            p = StyleSheet.HOME_PAGE.path()
-            self.assertIn(str(self.tmp), p)
-        finally:
-            StyleSheet.set_dirs(None)
+        from app.manager import StyleSheet
+        p = StyleSheet.HOME_PAGE.path(Theme.LIGHT)
+        expected = str(CTX.dirs.ThemeDir / "qss" / "light" / "HomePage.qss")
+        self.assertEqual(p, expected)
 
 
 class DaplinkSessionInjectTests(unittest.TestCase):
@@ -279,7 +224,7 @@ class DaplinkSessionInjectTests(unittest.TestCase):
             shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_injected_dirs_resolve(self):
-        from session.session_daplink import DaplinkPyocdSession
+        from app.session.session_daplink import DaplinkPyocdSession
         DaplinkPyocdSession.set_dirs(self.dirs)
         try:
             resolved = DaplinkPyocdSession._resolve_dirs()
@@ -289,7 +234,7 @@ class DaplinkSessionInjectTests(unittest.TestCase):
             DaplinkPyocdSession.set_dirs(None)
 
     def test_pack_dir_uses_injected_dirs(self):
-        from session.session_daplink import DaplinkPyocdSession
+        from app.session.session_daplink import DaplinkPyocdSession
         DaplinkPyocdSession.set_dirs(self.dirs)
         try:
             pd = DaplinkPyocdSession.pack_dir()

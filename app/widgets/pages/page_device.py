@@ -68,19 +68,28 @@ from app.session import (
     listSerialPorts,
     logger,
 )
-from app.core.const import (
-    SESSION_PAGE_BAUD_RATES,
-    SESSION_PAGE_RAW_FORMATS,
-    SESSION_PAGE_SEND_MODES,
-    SESSION_PAGE_V2_DEFAULT_CMD,
-    SESSION_PAGE_V2_TYPE_ALIAS_TO_ID,
-)
+
 from app.protocol import Dispatcher as V2Dispatcher
 from app.protocol import FrameBuilder as V2FrameBuilder
 from app.protocol import FrameParser as V2FrameParser
 from app.protocol import Payload as V2Payload, TYPE_REGISTRY
 from app.protocol.dataType import DataFloat, DataInt, DataString, TypeBase
 
+SESSION_PAGE_BAUD_RATES = ("9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600")
+SESSION_PAGE_SEND_MODES = ("Raw(HEX/ASCII)", "TVLCOM_V2")
+SESSION_PAGE_RAW_FORMATS = ("HEX", "ASCII")
+SESSION_PAGE_V2_DEFAULT_CMD = 0x01
+
+SESSION_PAGE_V2_TYPE_ALIAS_TO_ID = {
+    "u8": 0x01,
+    "uint8": 0x01,
+    "u16": 0x02,
+    "uint16": 0x02,
+    "u32": 0x03,
+    "uint32": 0x03,
+    "float": 0x10,
+    "string": 0x20,
+}
 
 class DeviceTransport(Protocol):
     @property
@@ -193,7 +202,9 @@ class BluetoothSession(QObject):
             or QBluetoothUuid is None
             or QBluetoothServiceInfo is None
         ):
-            raise RuntimeError("当前环境不支持 Qt Bluetooth")
+            message = "当前环境不支持 Qt Bluetooth"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
 
         self._post_event(StateEvent(SerialState.OPENING))
         self._socket = QBluetoothSocket(QBluetoothServiceInfo.RfcommProtocol)
@@ -216,7 +227,9 @@ class BluetoothSession(QObject):
 
     def write(self, data: bytes) -> int:
         if not self.is_open:
-            raise RuntimeError("蓝牙设备未连接")
+            message = "蓝牙设备未连接"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         written = int(self._socket.write(data))
         self._post_event(TxEvent(data))
         return written
@@ -482,7 +495,6 @@ class DevicePage(ScrollArea):
                 border: 1px solid {border};
                 border-radius: 12px;
                 padding: 8px;
-                font-family: Consolas, 'Cascadia Mono', 'Microsoft YaHei UI';
             }}
             """
         )

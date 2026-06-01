@@ -9,7 +9,7 @@ from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import qconfig
 
-from config import CTX, logger
+from config import CTX, cfg, logger
 
 if TYPE_CHECKING:
     from config import AppContext
@@ -37,9 +37,9 @@ def _resolve_dirs(ctx: "AppContext | None" = None):
     return ctx.dirs if ctx is not None else CTX.dirs
 
 
-def _resolve_settings(ctx: "AppContext | None" = None):
-    """Resolve SettingsManager from context or fall back to CTX."""
-    return ctx.settings if ctx is not None else CTX.settings
+def _resolve_qcfg(ctx: "AppContext | None" = None):
+    """Resolve QConfig from context or fall back to module-level cfg."""
+    return ctx.cfg if ctx is not None else cfg
 
 
 def _iter_font_files(ctx: AppContext | None = None):
@@ -98,14 +98,15 @@ def discover_font_options(ctx: AppContext | None = None) -> list[FontOption]:
 
 def get_saved_font_key(ctx: AppContext | None = None) -> str:
     default_key = SYSTEM_FONT_KEY
-    settings = _resolve_settings(ctx)
-    return settings.get(FONT_SECTION, FONT_FILE_OPTION, default_key) or default_key
+    qcfg_obj = _resolve_qcfg(ctx)
+    configured_key = getattr(getattr(qcfg_obj, "fontFile", None), "value", default_key) or default_key
+    return configured_key
 
 
 def save_font_selection(option: FontOption, ctx: AppContext | None = None):
-    settings = _resolve_settings(ctx)
-    settings.set(FONT_SECTION, FONT_FILE_OPTION, option.key)
-    settings.set(FONT_SECTION, FONT_FAMILY_OPTION, option.family)
+    qcfg_obj = _resolve_qcfg(ctx)
+    qconfig.set(qcfg_obj.fontFile, option.key)
+    qconfig.set(qcfg_obj.fontFamily, option.family)
 
 
 def apply_font_option(app: QApplication, option: FontOption) -> list[str]:
@@ -126,7 +127,7 @@ def _system_font_option() -> FontOption:
 
 def loadSavedFont(app: QApplication, ctx: AppContext | None = None) -> list[str]:
     dirs = _resolve_dirs(ctx)
-    settings = _resolve_settings(ctx)
+    qcfg_obj = _resolve_qcfg(ctx)
 
     selected_key = get_saved_font_key(ctx)
     if selected_key == SYSTEM_FONT_KEY:
@@ -141,6 +142,9 @@ def loadSavedFont(app: QApplication, ctx: AppContext | None = None) -> list[str]
     if not families:
         return apply_font_option(app, _system_font_option())
 
-    saved_family = settings.get(FONT_SECTION, FONT_FAMILY_OPTION, families[0]) or families[0]
+    saved_family = getattr(getattr(qcfg_obj, "fontFamily", None), "value", "") or ""
+    if not saved_family:
+        saved_family = families[0]
+        qconfig.set(qcfg_obj.fontFamily, saved_family)
     primary_family = saved_family if saved_family in families else families[0]
     return apply_font_option(app, FontOption(selected_key, primary_family, primary_family, selected_key))

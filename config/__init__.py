@@ -15,7 +15,6 @@ from .config import (
     AppContext,
     DirPaths,
     F4CPConfig,
-    SettingsManager,
     # ---- convenience shortcuts ----
     cfg,
     AppIconPath,

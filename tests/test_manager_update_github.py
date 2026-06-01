@@ -20,36 +20,33 @@ class _FakeResponse:
         return self._payload
 
 
-class _FakeSettings:
+class _FakeItem:
+    def __init__(self, value):
+        self.value = value
+
+
+class _FakeCfg:
     def __init__(self):
-        self.values = {
-            ("update", "UpdateUrl"): "https://github.com/UF4OVER/UF4DigitalPower/releases",
-            ("NewVersion", "NewLocalVersion"): "v0.1.0",
-            ("NewVersion", "NewUpperVersion"): "--",
-            ("NewVersion", "NewLowerVersion"): "--",
-            ("OldVersion", "OldLocalVersion"): "v0.1.0",
-            ("OldVersion", "OldUpperVersion"): "--",
-            ("OldVersion", "OldLowerVersion"): "--",
-        }
-
-    def get(self, section, option, fallback=None):
-        return self.values.get((section, option), fallback)
-
-    def set(self, section, option, value):
-        self.values[(section, option)] = value
+        self.updateUrl = _FakeItem("https://github.com/UF4OVER/UF4DigitalPower/releases")
+        self.localAppVersion = _FakeItem("v0.1.0")
+        self.latestAppVersion = _FakeItem("v0.1.0")
+        self.localUpperVersion = _FakeItem("--")
+        self.latestUpperVersion = _FakeItem("--")
+        self.localLowerVersion = _FakeItem("--")
+        self.latestLowerVersion = _FakeItem("--")
 
 
 class UpdateManagerGithubTests(unittest.TestCase):
-    def test_github_releases_url_refreshes_new_local_version_from_latest_tag(self):
+    def test_github_releases_url_returns_latest_tag_without_writing_cached_version(self):
         manager = UpdateManager()
-        fake_settings = _FakeSettings()
+        fake_cfg = _FakeCfg()
         release = {
             "tag_name": "v0.2.0",
             "html_url": "https://github.com/UF4OVER/UF4DigitalPower/releases/tag/v0.2.0",
             "body": "## 更新内容\n- 新增 Power 页面",
         }
 
-        with patch("app.manager.manager_update.CTX", SimpleNamespace(settings=fake_settings)), patch(
+        with patch("app.manager.manager_update.CTX", SimpleNamespace(cfg=fake_cfg)), patch(
             "app.manager.manager_update.firmware_manager.get_latest_local_release",
             return_value=None,
         ), patch("app.manager.manager_update.urlopen", return_value=_FakeResponse(release)) as mocked_urlopen:
@@ -66,7 +63,7 @@ class UpdateManagerGithubTests(unittest.TestCase):
         self.assertEqual(result.release_tag, "v0.2.0")
         self.assertIn("Power 页面", result.release_notes)
         self.assertEqual(result.release_url, release["html_url"])
-        self.assertEqual(fake_settings.get("NewVersion", "NewLocalVersion"), "v0.2.0")
+        self.assertEqual(fake_cfg.latestAppVersion.value, "v0.1.0")
 
 
 if __name__ == "__main__":

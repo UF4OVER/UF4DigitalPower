@@ -11,7 +11,7 @@
 
 - Home / Settings：`App/Pages/page_home.py`、`App/Pages/page_settings.py` 和 `App/Core/Manager/*`。
 - 串口控制台：`App/Pages/page_device.py` 使用 `App/Core/Session/session_serial.py`，并结合 `App/Core/TVLCOMV2_FULL/*` 处理原始串口流量与 TVLCOM V2 解析。
-- 电源仪表盘：`App/Pages/page_power.py` 从 `Resources/Config/config.ini` 读取 VID/PID，自动发现目标串口设备，然后挂接到 `App/Core/Session/session_power.py` 中的 `F4CPPowerClient`。
+- 电源仪表盘：`app/widgets/pages/page_power.py` 通过 `app/session/session_power.py` 中的 `F4CPPowerClient` 管理数字电源会话。
 - DAPLink 烧录：`App/Pages/page_daplink.py` 通过自定义事件投递请求，`App/Core/Session/session_daplink.py` 在线程中执行 pyOCD 工作，并从 `Resources/Tools/Pack` 加载 CMSIS Pack。
 - 标题栏通知：`start.py` 中的 `DynamicIsland` 挂在 `titleBar` 中间，页面仍通过 `App/Core/utility.py` 的 `showMessage(...)` 发送通知。
 
@@ -31,8 +31,7 @@
 
 ## 配置、资源与生成文件
 
-- `Resources/Config/config.ini` 保存自定义 `QSettings` 值，例如端口 VID/PID、字体、版本和更新地址。
-- `Resources/Config/config.json` 保存 qfluentwidgets 主题配置。
+- `Resources/Config/config.json` 保存应用配置，包括主题、字体、版本和更新地址。
 - 主题 QSS 位于 `Resources/Theme/qss/{dark,light}/`；`StyleSheet` 枚举、页面 `objectName` 和 QSS 文件名需要一致。
 - `Build/exe/`、`Logs/`、`__pycache__/` 和 `.pytest_cache/` 是生成或运行时产物，不作为源码维护。
 
@@ -49,7 +48,7 @@ uv run python Script/upx_zip.py
 ## 仓库约定
 
 - 顶部提示统一复用 `App/Core/utility.py` 中的 `showMessage(...)`。
-- 新增设置项优先走 `SettingMangerInstance` / `QSettings`。
+- 新增设置项统一走 `config.CTX.cfg` / qfluentwidgets `QConfig`。
 - 新增页面样式时，在 `StyleSheet` 中注册，并保持控件 `objectName` 与 QSS 文件名一致。
 - DAPLink 相关逻辑默认依赖 `Resources/Tools/Pack` 中的本地 `.pack` 文件。
 

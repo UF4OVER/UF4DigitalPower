@@ -432,7 +432,7 @@ class BatteryPage(ScrollArea):
 
         self.refreshButton.clicked.connect(self.readBatteryRequested.emit)
         self.connectButton.clicked.connect(self._onConnectionRequested)
-        CTX.qcfg.themeChanged.connect(self._onThemeChanged)
+        CTX.cfg.themeChanged.connect(self._onThemeChanged)
 
         self._applyTexts()
         self._applyDemoSnapshot()

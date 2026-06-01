@@ -11,6 +11,7 @@
 # -------------------------------
 import sys
 import time
+time_ = time.time()
 
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QCloseEvent, QIcon, QColor
@@ -36,13 +37,13 @@ class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
         self.setObjectName("Window")
-
+        # self.resize(1400,1200)
         self._initWindowShell()
         self.splashScreen = createSplashScreen(
             parent=self,
             icon=self.windowIcon(),
             title=self.windowTitle(),
-            icon_size=QSize(102, 102),
+            icon_size=QSize(300, 300),
             show_immediately=False,
         )
         self.splashScreen.show()
@@ -132,24 +133,6 @@ class Window(MSFluentWindow):
 
     def _onThemeChanged(self, *_):
         dark = isDarkTheme()
-        shell_bg = "#1F1F1F" if dark else "#F3F3F3"
-        nav_bg = "#181818" if dark else "#FFFFFF"
-        text = "#F5F5F5" if dark else "#1F1F1F"
-        border = "rgba(255,255,255,0.10)" if dark else "rgba(0,0,0,0.08)"
-        self.setStyleSheet(f"""
-            MSFluentWindow#Window, Window#Window {{
-                background: {shell_bg};
-            }}
-            QWidget#navigationInterface {{
-                background: {nav_bg};
-                border-right: 1px solid {border};
-            }}
-            QWidget#titleBar {{
-                background: {shell_bg};
-                color: {text};
-            }}
-        """)
-        self.titleBar.setStyleSheet(f"background: {shell_bg}; color: {text};")
         if hasattr(self, "dynamicIsland"):
             self.dynamicIsland.setDarkTheme(dark)
         for widget in (self, self.navigationInterface, self.titleBar):
@@ -167,25 +150,24 @@ class Window(MSFluentWindow):
 
 
 if __name__ == "__main__":
+    time_ = time.time()
     logger.info("main is running")
-
-    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+    if cfg.highDpiScaling.value:
+        logger.info("highDpiScaling is running")
+        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     logger.info("Application started")
     try:
-        time_ = time.time()
         app = QApplication(sys.argv)
-
         loadSavedFont(app)  # 加载字体
-
         w = Window()
-
+        # w.show()
         w.setMicaEffectEnabled(True)
-
         logger.info(f"start time: {time.time() - time_}")
 
-        app.exec_()
+        sys.exit(app.exec_())
     except Exception as e:
         logger.error(e)
+        sys.exit(-1)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 import signal
 import sys
@@ -11,6 +12,8 @@ from enum import IntEnum
 
 from PyQt5.QtCore import QCoreApplication, QIODevice, QObject, QTimer
 from PyQt5.QtSerialPort import QSerialPort
+
+logger = logging.getLogger("F4CP.sim_power_device")
 
 
 class PowerCommand(IntEnum):
@@ -263,7 +266,9 @@ class SimPowerDevice(QObject):
 
     def open(self) -> None:
         if not self.serial.open(QIODevice.OpenModeFlag.ReadWrite):
-            raise RuntimeError(f"open {self.serial.portName()} failed: {self.serial.errorString()}")
+            message = f"open {self.serial.portName()} failed: {self.serial.errorString()}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         print(f"Sim power device listening on {self.serial.portName()} @ {self.serial.baudRate()}")
         if self.fault_mode != "normal" and self.fault_count > 0:
             print(

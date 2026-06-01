@@ -10,14 +10,19 @@
 #  @Python  :
 # -------------------------------
 import logging
+import os
+import shutil
 import sys
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
-from typing import Any
-
-from PyQt5.QtCore import QSettings
-from qfluentwidgets import ConfigItem, BoolValidator, QConfig, qconfig
+from PyQt5.QtCore import pyqtSignal
+from qfluentwidgets import (
+    BoolValidator,
+    ConfigItem,
+    QConfig,
+    qconfig,
+)
 
 
 # ============================================================================
@@ -31,6 +36,18 @@ def _detect_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _detect_data_dir(base_dir: Path, explicit_base_dir: bool) -> Path:
+    """Return the writable per-user data directory for installed apps."""
+    if explicit_base_dir:
+        return base_dir
+    if getattr(sys, "frozen", False):
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "F4CP"
+        return Path.home() / "AppData" / "Local" / "F4CP"
+    return base_dir
+
+
 # ============================================================================
 #  DirPaths — path resolver
 # ============================================================================
@@ -41,8 +58,10 @@ class DirPaths:
     Uses *cached_property* so each directory is created on first access.
     """
 
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(self, base_dir: Path | None = None, data_dir: Path | None = None):
+        explicit_base_dir = base_dir is not None
         self._base = base_dir if base_dir is not None else _detect_base_dir()
+        self._data = data_dir if data_dir is not None else _detect_data_dir(self._base, explicit_base_dir)
 
     @property
     def base_dir(self) -> Path:
@@ -53,8 +72,17 @@ class DirPaths:
         """Backward-compatible alias for base_dir."""
         return self._base
 
+    @property
+    def data_dir(self) -> Path:
+        return self._data
+
     def _ensure_dir(self, *parts: str) -> Path:
         directory = self._base.joinpath(*parts)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _ensure_data_dir(self, *parts: str) -> Path:
+        directory = self._data.joinpath(*parts)
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
@@ -63,11 +91,29 @@ class DirPaths:
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
+    def _copy_seed_dir(self, source: Path, target: Path) -> None:
+        if not source.exists():
+            return
+        for item in source.rglob("*"):
+            relative = item.relative_to(source)
+            destination = target / relative
+            if item.is_dir():
+                destination.mkdir(parents=True, exist_ok=True)
+            elif not destination.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, destination)
+
     # ---- public cached properties ----
 
     @cached_property
     def ResourcesDir(self) -> Path:
-        return self._ensure_dir("Resources")
+        directory = self._base / "Resources"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @cached_property
+    def UserResourcesDir(self) -> Path:
+        return self._ensure_data_dir("Resources")
 
     @cached_property
     def AssetsDir(self) -> Path:
@@ -75,7 +121,10 @@ class DirPaths:
 
     @cached_property
     def ConfigDir(self) -> Path:
-        return self._ensure_sub_dir(self.ResourcesDir, "config")
+        config_dir = self._ensure_sub_dir(self.UserResourcesDir, "config")
+        bundled_config_dir = self.ResourcesDir / "config"
+        self._copy_seed_dir(bundled_config_dir, config_dir)
+        return config_dir
 
     @cached_property
     def ThemeDir(self) -> Path:
@@ -87,7 +136,7 @@ class DirPaths:
 
     @cached_property
     def LogDir(self) -> Path:
-        return self._ensure_dir("Logs")
+        return self._ensure_data_dir("Logs")
 
     @cached_property
     def ToolsDir(self) -> Path:
@@ -95,7 +144,10 @@ class DirPaths:
 
     @cached_property
     def FirmwareDir(self) -> Path:
-        return self._ensure_sub_dir(self.ResourcesDir, "Firmware")
+        firmware_dir = self._ensure_sub_dir(self.UserResourcesDir, "Firmware")
+        bundled_firmware_dir = self.ResourcesDir / "Firmware"
+        self._copy_seed_dir(bundled_firmware_dir, firmware_dir)
+        return firmware_dir
 
     @cached_property
     def McuPackDir(self) -> Path:
@@ -120,10 +172,6 @@ class DirPaths:
     @cached_property
     def AppIconPath(self) -> str:
         return str(self.AssetsDir / "F4CP_ICO_256.ico")
-
-    @cached_property
-    def ConfigIniPath(self) -> Path:
-        return self.ConfigDir / "config.ini"
 
     @cached_property
     def ConfigJsonPath(self) -> Path:
@@ -166,46 +214,6 @@ def _init_logger_once(log_dir: Path):
 
 
 # ============================================================================
-#  SettingsManager
-# ============================================================================
-
-class SettingsManager:
-    """Thin wrapper around QSettings with typed get/set."""
-
-    def __init__(self, config_path: Path):
-        self._config_path = str(config_path.resolve())
-        self._settings = QSettings(self._config_path, QSettings.Format.IniFormat)
-
-    @property
-    def config_path(self) -> str:
-        return self._config_path
-
-    def get(self, section: str, option: str, fallback: Any = None) -> Any:
-        key = f"{section}/{option}"
-        if self._settings.contains(key):
-            value = self._settings.value(key)
-            if isinstance(fallback, bool):
-                return value.lower() == "true" if isinstance(value, str) else bool(value)
-            if isinstance(fallback, int):
-                try:
-                    return int(value)
-                except (ValueError, TypeError):
-                    return fallback
-            return value
-        return fallback
-
-    def set(self, section: str, option: str, value: Any):
-        key = f"{section}/{option}"
-        logger.info(f"SettingsManager: {key} = {value}")
-        self._settings.setValue(key, value)
-        self._settings.sync()
-
-    def contains(self, section: str, option: str) -> bool:
-        key = f"{section}/{option}"
-        return self._settings.contains(key)
-
-
-# ============================================================================
 #  F4CP QConfig (qfluentwidgets)
 # ============================================================================
 
@@ -216,8 +224,38 @@ def _is_win11() -> bool:
 
 class F4CPConfig(QConfig):
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", _is_win11(), BoolValidator())
-    checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
     enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
+    highDpiScaling = ConfigItem("MainWindow", "HighDpiScaling", True, BoolValidator(), restart=True)
+
+    checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
+    updateUrl = ConfigItem("Update", "UpdateUrl", "https://github.com/UF4OVER/UF4DigitalPower/releases")
+
+    firmwareBaseUrl = ConfigItem("FirmwareRemote", "BaseUrl", "")
+    firmwareGithubOwner = ConfigItem("FirmwareRemote", "GithubOwner", "UF4OVER")
+    firmwareGithubRepo = ConfigItem("FirmwareRemote", "GithubRepo", "UF4DigitalPower")
+
+    localAppVersion = ConfigItem("OldVersion", "OldLocalVersion", "")
+    localUpperVersion = ConfigItem("OldVersion", "OldUpperVersion", "")
+    localLowerVersion = ConfigItem("OldVersion", "OldLowerVersion", "")
+    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v0.5.3")
+    latestUpperVersion = ConfigItem("NewVersion", "NewUpperVersion", "v0.0.2")
+    latestLowerVersion = ConfigItem("NewVersion", "NewLowerVersion", "v0.0.2")
+
+    appYear = ConfigItem("Application", "Year", 2026)
+    appAuthor = ConfigItem("Application", "Author", "UF4OVER")
+    appVersion = ConfigItem("Application", "Version", "0.5.3.rc1")
+    appHelpUrl = ConfigItem("Application", "HelpUrl", "https://update.hepi.ng/docs/help")
+    appRepoUrl = ConfigItem("Application", "RepoUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+    appExampleUrl = ConfigItem("Application", "ExampleUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+    appFeedbackUrl = ConfigItem("Application", "FeedbackUrl", "https://github.com/UF4OVER/UF4DigitalPower/issues")
+    appReleaseUrl = ConfigItem("Application", "ReleaseUrl", "https://github.com/UF4OVER/UF4DigitalPower/releases/latest")
+    appZhSupportUrl = ConfigItem("Application", "ZhSupportUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+    appEnSupportUrl = ConfigItem("Application", "EnSupportUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+
+    fontFile = ConfigItem("Appearance", "FontFile", "__system__")
+    fontFamily = ConfigItem("Appearance", "FontFamily", "")
+
+    appRestartSig = pyqtSignal()
 
 
 # ============================================================================
@@ -237,18 +275,19 @@ class AppContext:
 
         # Access
         ctx.dirs.FontDir
-        ctx.settings.get("section", "key")
-        ctx.qcfg.themeMode.value
+        ctx.cfg.themeMode.value
     """
 
-    def __init__(self, *, base_dir: Path | None = None):
-        self._dirs = DirPaths(base_dir)
+    def __init__(self, *, base_dir: Path | None = None, data_dir: Path | None = None):
+        self._dirs = DirPaths(base_dir, data_dir)
         _init_logger_once(self._dirs.LogDir)
 
-        self._settings = SettingsManager(self._dirs.ConfigIniPath)
         self._qconfig = F4CPConfig()
 
         json_path = self._dirs.ConfigJsonPath
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        if not json_path.exists():
+            json_path.write_text("{}", encoding="utf-8")
         if json_path.exists():
             qconfig.load(str(json_path), self._qconfig)
 
@@ -260,13 +299,13 @@ class AppContext:
         return self._dirs
 
     @property
-    def settings(self) -> SettingsManager:
-        """Typed QSettings wrapper."""
-        return self._settings
-
-    @property
     def qcfg(self) -> F4CPConfig:
         """qfluentwidgets application config."""
+        return self._qconfig
+
+    @property
+    def cfg(self) -> F4CPConfig:
+        """JSON-backed application config."""
         return self._qconfig
 
     @property
@@ -287,6 +326,24 @@ class AppContext:
 # ============================================================================
 
 
+_default_context: AppContext | None = None
+
+
+def get_default_context() -> AppContext:
+    global _default_context
+    if _default_context is None:
+        _default_context = CTX
+    return _default_context
+
+
+def set_app_context(ctx: AppContext) -> None:
+    global _default_context
+    _default_context = ctx
+
+
+def reset_app_context() -> None:
+    global _default_context
+    _default_context = None
 
 # ============================================================================
 #  CTX — module-level singleton, the one thing you need to import
@@ -296,8 +353,11 @@ CTX: AppContext = AppContext()
 
 # CTX: AppContext  = AppContext(base_dir=Path(__file__).resolve().parent.parent / ".config")
 # Convenience shortcuts derived from CTX
-cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
+cfg         = CTX.cfg          # F4CPConfig (qfluentwidgets)
 _config_json_path = CTX.dirs.ConfigDir / "config.json"
+if not _config_json_path.exists():
+    _config_json_path.parent.mkdir(parents=True, exist_ok=True)
+    _config_json_path.write_text("{}", encoding="utf-8")
 
 qconfig.load(_config_json_path, cfg)
 
@@ -327,13 +387,13 @@ FIRMWARE_GITHUB_OWNER_OPTION = "GithubOwner"
 FIRMWARE_GITHUB_REPO_OPTION = "GithubRepo"
 FIRMWARE_BASE_URL_OPTION = "BaseUrl"  # FastAPI firmware update server base URL
 
-YEAR = 2026
-AUTHOR = "UF4OVER"
-VERSION = "0.5.3.rc1"
-HELP_URL = "https://update.hepi.ng/docs/help"
-REPO_URL = "https://github.com/UF4OVER/UF4DigitalPower"
-EXAMPLE_URL = "https://github.com/UF4OVER/UF4DigitalPower"
-FEEDBACK_URL = "https://github.com/UF4OVER/UF4DigitalPower/issues"
-RELEASE_URL = "https://github.com/UF4OVER/UF4DigitalPower/releases/latest"
-ZH_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
-EN_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+YEAR = cfg.appYear.value
+AUTHOR = cfg.appAuthor.value
+VERSION = cfg.appVersion.value
+HELP_URL = cfg.appHelpUrl.value
+REPO_URL = cfg.appRepoUrl.value
+EXAMPLE_URL = cfg.appExampleUrl.value
+FEEDBACK_URL = cfg.appFeedbackUrl.value
+RELEASE_URL = cfg.appReleaseUrl.value
+ZH_SUPPORT_URL = cfg.appZhSupportUrl.value
+EN_SUPPORT_URL = cfg.appEnSupportUrl.value

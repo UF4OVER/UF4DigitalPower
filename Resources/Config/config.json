@@ -1,0 +1,52 @@
+{
+    "Application": {
+        "Author": "UF4OVER",
+        "EnSupportUrl": "https://github.com/UF4OVER/UF4DigitalPower",
+        "ExampleUrl": "https://github.com/UF4OVER/UF4DigitalPower",
+        "FeedbackUrl": "https://github.com/UF4OVER/UF4DigitalPower/issues",
+        "HelpUrl": "https://update.hepi.ng/docs/help",
+        "ReleaseUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases/latest",
+        "RepoUrl": "https://github.com/UF4OVER/UF4DigitalPower",
+        "Version": "0.5.3.rc2",
+        "Year": 2026,
+        "ZhSupportUrl": "https://github.com/UF4OVER/UF4DigitalPower"
+    },
+    "Update": {
+        "CheckUpdateAtStartUp": false,
+        "UpdateUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases"
+    },
+    "MainWindow": {
+        "EnableAcrylicBackground": false,
+        "HighDpiScaling": true,
+        "MicaEnabled": true
+    },
+    "FirmwareRemote": {
+        "BaseUrl": "",
+        "GithubOwner": "UF4OVER",
+        "GithubRepo": "UF4DigitalPower"
+    },
+    "QFluentWidgets": {
+        "FontFamilies": [
+            "SAIBA-45",
+            "Segoe UI",
+            "Microsoft YaHei",
+            "PingFang SC"
+        ],
+        "ThemeColor": "#ffff0000",
+        "ThemeMode": "Light"
+    },
+    "Appearance": {
+        "FontFamily": "SAIBA-45",
+        "FontFile": "SAIBA-45-Regular.otf"
+    },
+    "NewVersion": {
+        "NewLocalVersion": "",
+        "NewLowerVersion": "",
+        "NewUpperVersion": ""
+    },
+    "OldVersion": {
+        "OldLocalVersion": "",
+        "OldLowerVersion": "",
+        "OldUpperVersion": ""
+    }
+}
