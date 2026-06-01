@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import html
 import math
 import time
 from dataclasses import dataclass
@@ -27,7 +28,7 @@ from app.session import (
 )
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
-from config import CTX, cfg, logger
+from config import CTX, cfg
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 POWER_POLL_INTERVAL_MS = 500
@@ -66,15 +67,18 @@ class MetricCard(CardWidget):
         self.unitLabel = StrongBodyLabel("", self)
         self.extraLabel = CaptionLabel("等待数据", self)
         self.extraLabel.setWordWrap(True)
+        self.valueLabel.setWordWrap(False)
+        self.unitLabel.setWordWrap(False)
+        self.unitLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        self.unitLabel.setMinimumWidth(44)
         setFont(self.valueLabel, 28, QFont.DemiBold)
-        setFont(self.unitLabel, 15, QFont.DemiBold)
+        setFont(self.unitLabel, 18, QFont.DemiBold)
 
         value_row = QHBoxLayout()
         value_row.setContentsMargins(0, 0, 0, 0)
         value_row.setSpacing(8)
-        value_row.addWidget(self.valueLabel)
+        value_row.addWidget(self.valueLabel, 1)
         value_row.addWidget(self.unitLabel)
-        value_row.addStretch(1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
@@ -88,17 +92,21 @@ class MetricCard(CardWidget):
     def setMetric(self, metric: _MetricValue) -> None:
         self.titleLabel.setText(metric.title)
         self.valueLabel.setText(metric.value)
-        self.unitLabel.setText(metric.unit)
-        self.extraLabel.setText(metric.extra)
+        self._setAccentText(self.unitLabel, metric.unit)
+        self._setAccentText(self.extraLabel, metric.extra)
+
+    def _setAccentText(self, label, text: str) -> None:
+        if not text:
+            label.setText("")
+            return
+        safe_text = html.escape(text).replace("\n", "<br/>")
+        label.setText(f'<span style="color: {self._accent};">{safe_text}</span>')
 
     def refreshTheme(self) -> None:
         dark = isDarkTheme()
         text = "#F5F7FA" if dark else "#111827"
-        muted = "#9AA4B2" if dark else "#64748B"
         self.titleLabel.setStyleSheet(f"color: {self._accent};")
-        self.unitLabel.setStyleSheet(f"color: {self._accent};")
         self.valueLabel.setStyleSheet(f"color: {text};")
-        self.extraLabel.setStyleSheet(f"color: {muted};")
 
 
 class StatusChip(PillPushButton):
@@ -625,6 +633,10 @@ class PowerPage(ScrollArea):
 
     def _onThemeChanged(self, *_):
         StyleSheet.POWER_PAGE.apply(self)
+        self._refreshThemeWidgets()
+        QTimer.singleShot(0, self._refreshThemeWidgets)
+
+    def _refreshThemeWidgets(self) -> None:
         for card in self.metricCards.values():
             card.refreshTheme()
         for field in self.statusFields.values():

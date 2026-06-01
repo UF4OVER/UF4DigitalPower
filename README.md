@@ -51,6 +51,48 @@ cx_Freeze 配置位于 `pyproject.toml`，打包产物输出到 `build/exe/`。�
 uv run python script\upx_zip.py
 ```
 
+### 打包为 Windows MSIX 安装包
+
+MSIX 打包依赖 Windows 10/11 SDK 中的 `makeappx.exe` 和 `signtool.exe`。仓库提供的脚本会先复用 cx_Freeze 生成 `build/exe/`，再生成带开始菜单/磁贴声明的 MSIX 包：
+
+```powershell
+.\script\package_msix.ps1
+```
+
+产物输出到 `build/msix/out/`。默认会读取 `pyproject.toml` 的版本号，并把 `0.5.3.rc2` 转换成 MSIX 需要的四段数字版本 `0.5.3.2`。
+
+MSIX 安装包必须签名后才能正常安装。开发自测可以先创建自签名证书，再把证书加入本机“受信任的人员/Trusted People”证书存储：
+
+```powershell
+$cert = New-SelfSignedCertificate `
+  -Type Custom `
+  -Subject "CN=UF4OVER" `
+  -KeyUsage DigitalSignature `
+  -FriendlyName "F4CP MSIX Test Certificate" `
+  -CertStoreLocation "Cert:\CurrentUser\My" `
+  -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+
+Export-PfxCertificate `
+  -cert $cert `
+  -FilePath .\build\msix\F4CP-TestCert.pfx `
+  -Password (ConvertTo-SecureString -String "123456" -Force -AsPlainText)
+
+Export-Certificate `
+  -Cert $cert `
+  -FilePath .\build\msix\F4CP-TestCert.cer
+```
+
+然后用同一个 Publisher 重新打包并签名：
+
+```powershell
+.\script\package_msix.ps1 `
+  -Publisher "CN=UF4OVER" `
+  -CertificatePath .\build\msix\F4CP-TestCert.pfx `
+  -CertificatePassword "123456"
+```
+
+在 Windows 10 上安装后，F4CP 会出现在开始菜单。右键应用选择“固定到开始屏幕”即可生成磁贴，磁贴图标来自 `Resources/Assets/Square44x44Logo.png`、`Square70x70Logo.png`、`Square150x150Logo.png`、`Wide310x150Logo.png` 和 `Square310x310Logo.png`。
+
 ## 项目结构
 
 ```text

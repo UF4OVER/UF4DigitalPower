@@ -10,6 +10,8 @@
 #  @Python  :
 # -------------------------------
 import logging
+import os
+import shutil
 import sys
 from datetime import datetime
 from functools import cached_property
@@ -34,6 +36,18 @@ def _detect_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _detect_data_dir(base_dir: Path, explicit_base_dir: bool) -> Path:
+    """Return the writable per-user data directory for installed apps."""
+    if explicit_base_dir:
+        return base_dir
+    if getattr(sys, "frozen", False):
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "F4CP"
+        return Path.home() / "AppData" / "Local" / "F4CP"
+    return base_dir
+
+
 # ============================================================================
 #  DirPaths — path resolver
 # ============================================================================
@@ -44,8 +58,10 @@ class DirPaths:
     Uses *cached_property* so each directory is created on first access.
     """
 
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(self, base_dir: Path | None = None, data_dir: Path | None = None):
+        explicit_base_dir = base_dir is not None
         self._base = base_dir if base_dir is not None else _detect_base_dir()
+        self._data = data_dir if data_dir is not None else _detect_data_dir(self._base, explicit_base_dir)
 
     @property
     def base_dir(self) -> Path:
@@ -56,8 +72,17 @@ class DirPaths:
         """Backward-compatible alias for base_dir."""
         return self._base
 
+    @property
+    def data_dir(self) -> Path:
+        return self._data
+
     def _ensure_dir(self, *parts: str) -> Path:
         directory = self._base.joinpath(*parts)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _ensure_data_dir(self, *parts: str) -> Path:
+        directory = self._data.joinpath(*parts)
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
@@ -66,11 +91,29 @@ class DirPaths:
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
+    def _copy_seed_dir(self, source: Path, target: Path) -> None:
+        if not source.exists():
+            return
+        for item in source.rglob("*"):
+            relative = item.relative_to(source)
+            destination = target / relative
+            if item.is_dir():
+                destination.mkdir(parents=True, exist_ok=True)
+            elif not destination.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, destination)
+
     # ---- public cached properties ----
 
     @cached_property
     def ResourcesDir(self) -> Path:
-        return self._ensure_dir("Resources")
+        directory = self._base / "Resources"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @cached_property
+    def UserResourcesDir(self) -> Path:
+        return self._ensure_data_dir("Resources")
 
     @cached_property
     def AssetsDir(self) -> Path:
@@ -78,7 +121,10 @@ class DirPaths:
 
     @cached_property
     def ConfigDir(self) -> Path:
-        return self._ensure_sub_dir(self.ResourcesDir, "config")
+        config_dir = self._ensure_sub_dir(self.UserResourcesDir, "config")
+        bundled_config_dir = self.ResourcesDir / "config"
+        self._copy_seed_dir(bundled_config_dir, config_dir)
+        return config_dir
 
     @cached_property
     def ThemeDir(self) -> Path:
@@ -90,7 +136,7 @@ class DirPaths:
 
     @cached_property
     def LogDir(self) -> Path:
-        return self._ensure_dir("Logs")
+        return self._ensure_data_dir("Logs")
 
     @cached_property
     def ToolsDir(self) -> Path:
@@ -98,7 +144,10 @@ class DirPaths:
 
     @cached_property
     def FirmwareDir(self) -> Path:
-        return self._ensure_sub_dir(self.ResourcesDir, "Firmware")
+        firmware_dir = self._ensure_sub_dir(self.UserResourcesDir, "Firmware")
+        bundled_firmware_dir = self.ResourcesDir / "Firmware"
+        self._copy_seed_dir(bundled_firmware_dir, firmware_dir)
+        return firmware_dir
 
     @cached_property
     def McuPackDir(self) -> Path:
@@ -229,8 +278,8 @@ class AppContext:
         ctx.cfg.themeMode.value
     """
 
-    def __init__(self, *, base_dir: Path | None = None):
-        self._dirs = DirPaths(base_dir)
+    def __init__(self, *, base_dir: Path | None = None, data_dir: Path | None = None):
+        self._dirs = DirPaths(base_dir, data_dir)
         _init_logger_once(self._dirs.LogDir)
 
         self._qconfig = F4CPConfig()
@@ -277,25 +326,24 @@ class AppContext:
 # ============================================================================
 
 
-# _default_context: AppContext | None = None
+_default_context: AppContext | None = None
 
 
-# def get_default_context() -> AppContext:
-#     global _default_context
-#     if _default_context is None:
-#         _default_context = CTX
-#     return _default_context
-#
-#
-# def set_app_context(ctx: AppContext) -> None:
-#     global _default_context
-#     _default_context = ctx
-#
-#
-# def reset_app_context() -> None:
-#     global _default_context
-#     _default_context = None
-# 跑单测用的
+def get_default_context() -> AppContext:
+    global _default_context
+    if _default_context is None:
+        _default_context = CTX
+    return _default_context
+
+
+def set_app_context(ctx: AppContext) -> None:
+    global _default_context
+    _default_context = ctx
+
+
+def reset_app_context() -> None:
+    global _default_context
+    _default_context = None
 
 # ============================================================================
 #  CTX — module-level singleton, the one thing you need to import
