@@ -84,13 +84,21 @@ class SettingsPage(ScrollArea):
         self.themeColorCard = CustomColorSettingCard(cfg.themeColor, FIF.PALETTE, '主题色', '调整应用的主色调', self.appearanceGroup)
         self.fontCard = ComboSettingCard(FIF.FONT, '全局字体', '选择 Resources/Font 中的字体，当前会话立即应用。', self.appearanceGroup)
 
-        self.behaviorGroup = SettingCardGroup('启动与行为', self.scrollWidget)
+        self.behaviorGroup = SettingCardGroup('启动', self.scrollWidget)
         self.updateOnStartUpCard = SwitchSettingCard(
             FIF.UPDATE,
             '启动时检查更新',
             '应用启动时自动检查是否有新版本。',
-            configItem=cfg.checkUpdateAtStartUp,
-            parent=self.behaviorGroup,
+            cfg.checkUpdateAtStartUp,
+            self.behaviorGroup,
+        )
+
+        self.scaledCard = SwitchSettingCard(
+            FIF.SCROLL,
+            "高 DPI 适配",
+            "启用后会使用更高分辨率的图标和界面元素，适合高 DPI 显示器。重启应用后生效。",
+            cfg.highDpiScaling,
+            self.behaviorGroup,
         )
 
         self.projectGroup = SettingCardGroup('项目', self.scrollWidget)
@@ -129,6 +137,8 @@ class SettingsPage(ScrollArea):
         self.appearanceGroup.addSettingCard(self.fontCard)
 
         self.behaviorGroup.addSettingCard(self.updateOnStartUpCard)
+        self.behaviorGroup.addSettingCard(self.scaledCard)
+
 
         self.projectGroup.addSettingCard(self.versionCard)
         self.projectGroup.addSettingCard(self.authorCard)

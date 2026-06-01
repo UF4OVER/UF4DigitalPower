@@ -28,16 +28,6 @@ from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 
 from config import (
     CTX,
-    FIRMWARE_BASE_URL_OPTION,
-    FIRMWARE_GITHUB_OWNER_OPTION,
-    FIRMWARE_GITHUB_REPO_OPTION,
-    FIRMWARE_REMOTE_SECTION,
-    LATEST_LOWER_VERSION_OPTION,
-    LATEST_UPPER_VERSION_OPTION,
-    LOCAL_LOWER_VERSION_OPTION,
-    LOCAL_UPPER_VERSION_OPTION,
-    VERSION_LOCAL_SECTION,
-    VERSION_REMOTE_SECTION,
     logger,
 )
 
@@ -100,11 +90,10 @@ class FirmwareCheckThread(QThread):
     def run(self) -> None:
         try:
             latest = firmware_manager.get_latest_remote_releases()
-            firmware_manager.write_latest_versions(latest)
             has_updates = firmware_manager.build_update_flags(latest)
             result = FirmwareCheckResult(
                 success=True,
-                message="Latest firmware versions have been refreshed.",
+                message="Latest firmware versions have been checked.",
                 latest=latest,
                 has_updates=has_updates,
             )
@@ -233,9 +222,7 @@ class FirmwareManager:
         return self._fetch_from_github()
 
     def _get_base_url(self) -> str:
-        url = str(
-            CTX.settings.get(FIRMWARE_REMOTE_SECTION, FIRMWARE_BASE_URL_OPTION, "") or ""
-        ).strip().rstrip("/")
+        url = str(CTX.cfg.firmwareBaseUrl.value or "").strip().rstrip("/")
         return url
 
     # --- FastAPI server path ---
@@ -268,11 +255,13 @@ class FirmwareManager:
                 else:
                     errors.append(f"{kind}: could not parse manifest for {version}")
             except Exception as exc:
-                logger.warning(f"FirmwareManager failed to fetch {kind} firmware info: {exc}")
+                logger.error(f"{self.__class__.__name__}: FirmwareManager failed to fetch {kind} firmware info: {exc}")
                 errors.append(f"{kind}: {exc}")
 
         if not latest and errors:
-            raise RuntimeError(f"Failed to fetch firmware info from update server: {'; '.join(errors)}")
+            message = f"Failed to fetch firmware info from update server: {'; '.join(errors)}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
 
         return latest
 
@@ -337,14 +326,12 @@ class FirmwareManager:
         """Legacy GitHub API root — only used when BaseUrl is not configured."""
         if self._apiRoot:
             return self._apiRoot
-        owner = str(
-            CTX.settings.get(FIRMWARE_REMOTE_SECTION, FIRMWARE_GITHUB_OWNER_OPTION, "") or ""
-        ).strip()
-        repo = str(
-            CTX.settings.get(FIRMWARE_REMOTE_SECTION, FIRMWARE_GITHUB_REPO_OPTION, "") or ""
-        ).strip()
+        owner = str(CTX.cfg.firmwareGithubOwner.value or "").strip()
+        repo = str(CTX.cfg.firmwareGithubRepo.value or "").strip()
         if not owner or not repo:
-            raise RuntimeError("Firmware remote BaseUrl and GitHub owner/repo are both not configured.")
+            message = "Firmware remote BaseUrl and GitHub owner/repo are both not configured."
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         return f"https://api.github.com/repos/{owner}/{repo}"
 
     def fetch_releases(self) -> list[FirmwareRelease]:
@@ -382,14 +369,16 @@ class FirmwareManager:
     def download_latest(self, kind: str) -> FirmwareRelease:
         latest = self.get_latest_remote_releases().get(self._normalize_kind(kind))
         if latest is None:
-            raise RuntimeError(f"No remote {kind} firmware release was found.")
+            message = f"No remote {kind} firmware release was found."
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         return self.download_release(latest)
 
     def download_release(self, release: FirmwareRelease) -> FirmwareRelease:
         if not release.download_url:
-            raise RuntimeError(
-                f"Release {release.tag} does not contain a downloadable firmware asset."
-            )
+            message = f"Release {release.tag} does not contain a downloadable firmware asset."
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
 
         target_dir = self._kind_dir(release.kind) / self._version_dir_name(release)
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -417,10 +406,12 @@ class FirmwareManager:
                 if actual_digest.lower() != release.sha256.lower().strip():
                     tmp_path.unlink(missing_ok=True)
                     tmp_path = None
-                    raise RuntimeError(
+                    message = (
                         f"SHA-256 mismatch for {asset_name}: "
                         f"expected {release.sha256}, got {actual_digest}"
                     )
+                    logger.error(f"{self.__class__.__name__}: {message}")
+                    raise RuntimeError(message)
 
             tmp_path.replace(target_path)
             tmp_path = None
@@ -454,22 +445,13 @@ class FirmwareManager:
 
     def write_local_version(self, release: FirmwareRelease) -> None:
         if release.kind == "Upper":
-            local_option = LOCAL_UPPER_VERSION_OPTION
-            latest_option = LATEST_UPPER_VERSION_OPTION
+            item = CTX.cfg.localUpperVersion
         else:
-            local_option = LOCAL_LOWER_VERSION_OPTION
-            latest_option = LATEST_LOWER_VERSION_OPTION
+            item = CTX.cfg.localLowerVersion
 
-        CTX.settings.set(VERSION_LOCAL_SECTION, local_option, release.version)
-        CTX.settings.set(VERSION_REMOTE_SECTION, latest_option, release.version)
+        from qfluentwidgets import qconfig
 
-    def write_latest_versions(self, latest: dict[str, FirmwareRelease]) -> None:
-        upper = latest.get("Upper")
-        power = latest.get("Power")
-        if upper is not None:
-            CTX.settings.set(VERSION_REMOTE_SECTION, LATEST_UPPER_VERSION_OPTION, upper.version)
-        if power is not None:
-            CTX.settings.set(VERSION_REMOTE_SECTION, LATEST_LOWER_VERSION_OPTION, power.version)
+        qconfig.set(item, release.version)
 
     def build_update_flags(self, latest: dict[str, FirmwareRelease]) -> dict[str, bool]:
         flags: dict[str, bool] = {}
@@ -638,17 +620,17 @@ class FirmwareManager:
             with urlopen(request, timeout=15) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
-            raise RuntimeError(
-                f"HTTP {exc.code} from update server ({url}): {exc.reason}"
-            ) from exc
+            message = f"HTTP {exc.code} from update server ({url}): {exc.reason}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message) from exc
         except URLError as exc:
-            raise RuntimeError(
-                f"Cannot connect to update server ({url}): {exc}"
-            ) from exc
+            message = f"Cannot connect to update server ({url}): {exc}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message) from exc
         except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"Update server returned invalid JSON ({url}): {exc}"
-            ) from exc
+            message = f"Update server returned invalid JSON ({url}): {exc}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message) from exc
 
     def _github_get_json(self, url: str) -> object:
         request = self._build_request(url)

@@ -14,10 +14,13 @@ import sys
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
-from typing import Any
-
-from PyQt5.QtCore import QSettings
-from qfluentwidgets import ConfigItem, BoolValidator, QConfig, qconfig
+from PyQt5.QtCore import pyqtSignal
+from qfluentwidgets import (
+    BoolValidator,
+    ConfigItem,
+    QConfig,
+    qconfig,
+)
 
 
 # ============================================================================
@@ -122,10 +125,6 @@ class DirPaths:
         return str(self.AssetsDir / "F4CP_ICO_256.ico")
 
     @cached_property
-    def ConfigIniPath(self) -> Path:
-        return self.ConfigDir / "config.ini"
-
-    @cached_property
     def ConfigJsonPath(self) -> Path:
         return self.ConfigDir / "config.json"
 
@@ -166,46 +165,6 @@ def _init_logger_once(log_dir: Path):
 
 
 # ============================================================================
-#  SettingsManager
-# ============================================================================
-
-class SettingsManager:
-    """Thin wrapper around QSettings with typed get/set."""
-
-    def __init__(self, config_path: Path):
-        self._config_path = str(config_path.resolve())
-        self._settings = QSettings(self._config_path, QSettings.Format.IniFormat)
-
-    @property
-    def config_path(self) -> str:
-        return self._config_path
-
-    def get(self, section: str, option: str, fallback: Any = None) -> Any:
-        key = f"{section}/{option}"
-        if self._settings.contains(key):
-            value = self._settings.value(key)
-            if isinstance(fallback, bool):
-                return value.lower() == "true" if isinstance(value, str) else bool(value)
-            if isinstance(fallback, int):
-                try:
-                    return int(value)
-                except (ValueError, TypeError):
-                    return fallback
-            return value
-        return fallback
-
-    def set(self, section: str, option: str, value: Any):
-        key = f"{section}/{option}"
-        logger.info(f"SettingsManager: {key} = {value}")
-        self._settings.setValue(key, value)
-        self._settings.sync()
-
-    def contains(self, section: str, option: str) -> bool:
-        key = f"{section}/{option}"
-        return self._settings.contains(key)
-
-
-# ============================================================================
 #  F4CP QConfig (qfluentwidgets)
 # ============================================================================
 
@@ -216,8 +175,38 @@ def _is_win11() -> bool:
 
 class F4CPConfig(QConfig):
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", _is_win11(), BoolValidator())
-    checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
     enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
+    highDpiScaling = ConfigItem("MainWindow", "HighDpiScaling", True, BoolValidator(), restart=True)
+
+    checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())
+    updateUrl = ConfigItem("Update", "UpdateUrl", "https://github.com/UF4OVER/UF4DigitalPower/releases")
+
+    firmwareBaseUrl = ConfigItem("FirmwareRemote", "BaseUrl", "")
+    firmwareGithubOwner = ConfigItem("FirmwareRemote", "GithubOwner", "UF4OVER")
+    firmwareGithubRepo = ConfigItem("FirmwareRemote", "GithubRepo", "UF4DigitalPower")
+
+    localAppVersion = ConfigItem("OldVersion", "OldLocalVersion", "")
+    localUpperVersion = ConfigItem("OldVersion", "OldUpperVersion", "")
+    localLowerVersion = ConfigItem("OldVersion", "OldLowerVersion", "")
+    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v0.5.3")
+    latestUpperVersion = ConfigItem("NewVersion", "NewUpperVersion", "v0.0.2")
+    latestLowerVersion = ConfigItem("NewVersion", "NewLowerVersion", "v0.0.2")
+
+    appYear = ConfigItem("Application", "Year", 2026)
+    appAuthor = ConfigItem("Application", "Author", "UF4OVER")
+    appVersion = ConfigItem("Application", "Version", "0.5.3.rc1")
+    appHelpUrl = ConfigItem("Application", "HelpUrl", "https://update.hepi.ng/docs/help")
+    appRepoUrl = ConfigItem("Application", "RepoUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+    appExampleUrl = ConfigItem("Application", "ExampleUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+    appFeedbackUrl = ConfigItem("Application", "FeedbackUrl", "https://github.com/UF4OVER/UF4DigitalPower/issues")
+    appReleaseUrl = ConfigItem("Application", "ReleaseUrl", "https://github.com/UF4OVER/UF4DigitalPower/releases/latest")
+    appZhSupportUrl = ConfigItem("Application", "ZhSupportUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+    appEnSupportUrl = ConfigItem("Application", "EnSupportUrl", "https://github.com/UF4OVER/UF4DigitalPower")
+
+    fontFile = ConfigItem("Appearance", "FontFile", "__system__")
+    fontFamily = ConfigItem("Appearance", "FontFamily", "")
+
+    appRestartSig = pyqtSignal()
 
 
 # ============================================================================
@@ -237,18 +226,19 @@ class AppContext:
 
         # Access
         ctx.dirs.FontDir
-        ctx.settings.get("section", "key")
-        ctx.qcfg.themeMode.value
+        ctx.cfg.themeMode.value
     """
 
     def __init__(self, *, base_dir: Path | None = None):
         self._dirs = DirPaths(base_dir)
         _init_logger_once(self._dirs.LogDir)
 
-        self._settings = SettingsManager(self._dirs.ConfigIniPath)
         self._qconfig = F4CPConfig()
 
         json_path = self._dirs.ConfigJsonPath
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        if not json_path.exists():
+            json_path.write_text("{}", encoding="utf-8")
         if json_path.exists():
             qconfig.load(str(json_path), self._qconfig)
 
@@ -260,13 +250,13 @@ class AppContext:
         return self._dirs
 
     @property
-    def settings(self) -> SettingsManager:
-        """Typed QSettings wrapper."""
-        return self._settings
-
-    @property
     def qcfg(self) -> F4CPConfig:
         """qfluentwidgets application config."""
+        return self._qconfig
+
+    @property
+    def cfg(self) -> F4CPConfig:
+        """JSON-backed application config."""
         return self._qconfig
 
     @property
@@ -287,6 +277,25 @@ class AppContext:
 # ============================================================================
 
 
+_default_context: AppContext | None = None
+
+
+def get_default_context() -> AppContext:
+    global _default_context
+    if _default_context is None:
+        _default_context = CTX
+    return _default_context
+
+
+def set_app_context(ctx: AppContext) -> None:
+    global _default_context
+    _default_context = ctx
+
+
+def reset_app_context() -> None:
+    global _default_context
+    _default_context = None
+
 
 # ============================================================================
 #  CTX — module-level singleton, the one thing you need to import
@@ -296,8 +305,11 @@ CTX: AppContext = AppContext()
 
 # CTX: AppContext  = AppContext(base_dir=Path(__file__).resolve().parent.parent / ".config")
 # Convenience shortcuts derived from CTX
-cfg         = CTX.qcfg          # F4CPConfig (qfluentwidgets)
+cfg         = CTX.cfg          # F4CPConfig (qfluentwidgets)
 _config_json_path = CTX.dirs.ConfigDir / "config.json"
+if not _config_json_path.exists():
+    _config_json_path.parent.mkdir(parents=True, exist_ok=True)
+    _config_json_path.write_text("{}", encoding="utf-8")
 
 qconfig.load(_config_json_path, cfg)
 
@@ -327,13 +339,13 @@ FIRMWARE_GITHUB_OWNER_OPTION = "GithubOwner"
 FIRMWARE_GITHUB_REPO_OPTION = "GithubRepo"
 FIRMWARE_BASE_URL_OPTION = "BaseUrl"  # FastAPI firmware update server base URL
 
-YEAR = 2026
-AUTHOR = "UF4OVER"
-VERSION = "0.5.3.rc1"
-HELP_URL = "https://update.hepi.ng/docs/help"
-REPO_URL = "https://github.com/UF4OVER/UF4DigitalPower"
-EXAMPLE_URL = "https://github.com/UF4OVER/UF4DigitalPower"
-FEEDBACK_URL = "https://github.com/UF4OVER/UF4DigitalPower/issues"
-RELEASE_URL = "https://github.com/UF4OVER/UF4DigitalPower/releases/latest"
-ZH_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
-EN_SUPPORT_URL = "https://github.com/UF4OVER/UF4DigitalPower"
+YEAR = cfg.appYear.value
+AUTHOR = cfg.appAuthor.value
+VERSION = cfg.appVersion.value
+HELP_URL = cfg.appHelpUrl.value
+REPO_URL = cfg.appRepoUrl.value
+EXAMPLE_URL = cfg.appExampleUrl.value
+FEEDBACK_URL = cfg.appFeedbackUrl.value
+RELEASE_URL = cfg.appReleaseUrl.value
+ZH_SUPPORT_URL = cfg.appZhSupportUrl.value
+EN_SUPPORT_URL = cfg.appEnSupportUrl.value

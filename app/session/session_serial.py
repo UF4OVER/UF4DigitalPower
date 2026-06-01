@@ -174,11 +174,12 @@ class SerialSession(QObject):
             # error() 返回 QSerialPort.SerialPortError 枚举
             error_code = self._ser.error()
             error_str = self._ser.errorString()
-
-            raise RuntimeError(
+            message = (
                 f"串口打开失败 {self.cfg.port}: "
                 f"{error_str} (代码: {error_code})"
             )
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         self._ser.readyRead.connect(self._on_ready_read)
         self._ser.errorOccurred.connect(self._on_error_occurred)
         self._post_event(StateEvent(SerialState.OPEN))
@@ -202,19 +203,23 @@ class SerialSession(QObject):
 
     def write(self, data: bytes) -> int:
         if not self.is_open:
-            raise RuntimeError("Serial port is not open")
+            message = "Serial port is not open"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         if not data:
             return 0
 
         with QMutexLocker(self._write_lock):  # PyQt 的 QMutex 并不完全兼容 Python 的 with 语法，需要用 QMutexLocker 来自动解锁
             written = self._ser.write(data)
             if written != len(data):
-                raise RuntimeError(
-                    f"串口写入不完整: 期望 {len(data)} 字节，实际 {written} 字节"
-                )
+                message = f"串口写入不完整: 期望 {len(data)} 字节，实际 {written} 字节"
+                logger.error(f"{self.__class__.__name__}: {message}")
+                raise RuntimeError(message)
             timeout_ms = max(500, int(getattr(self.cfg, "read_timeout_s", 0.1) * 1000))
             if not self._ser.waitForBytesWritten(timeout_ms):
-                raise RuntimeError(f"串口写入超时: {self._ser.errorString()}")
+                message = f"串口写入超时: {self._ser.errorString()}"
+                logger.error(f"{self.__class__.__name__}: {message}")
+                raise RuntimeError(message)
             logger.info(f"{self.__class__.__name__} 写入数据: {data.hex()}")
 
         self._post_event(TxEvent(data))

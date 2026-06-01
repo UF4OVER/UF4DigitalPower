@@ -16,5 +16,5 @@ class StyleSheet(StyleSheetBase, Enum):
     BASE_PAGE = "Base"
 
     def path(self, theme=Theme.AUTO):
-        theme = CTX.qcfg.theme if theme == Theme.AUTO else theme
+        theme = CTX.cfg.theme if theme == Theme.AUTO else theme
         return str(CTX.dirs.ThemeDir / "qss" / theme.value.lower() / f"{self.value}.qss")

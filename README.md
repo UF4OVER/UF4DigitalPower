@@ -66,11 +66,11 @@ F4CP/
 │     ├─ components/         # 启动画面、DynamicIsland 等复用组件
 │     ├─ icon/               # UF4 图标资源与封装
 │     └─ pages/              # Home/Device/Power/Daplink/Settings/Battery 页面
-├─ config/                   # 路径、QSettings、qfluentwidgets 配置和日志初始化
+├─ config/                   # 路径、JSON 配置和日志初始化
 ├─ docs/                     # 项目协作说明
 ├─ Resources/
 │  ├─ Assets/                # 应用图标、图片资源
-│  ├─ Config/                # config.ini / config.json，运行时配置
+│  ├─ Config/                # config.json，运行时配置
 │  ├─ Firmware/              # 本地上下位机固件
 │  ├─ Font/                  # 字体资源
 │  ├─ Theme/qss/             # light/dark 页面样式
@@ -86,7 +86,7 @@ F4CP/
 | 模块 | 说明 |
 | --- | --- |
 | `start.py` | 应用入口、主窗口导航、启动画面和标题栏 DynamicIsland 通知 |
-| `config/config.py` | `AppContext`、路径解析、日志、`QSettings` 与 qfluentwidgets 配置 |
+| `config/config.py` | `AppContext`、路径解析、日志和 JSON 配置 |
 | `app/widgets/pages/page_home.py` | 首页、软件更新检查、固件版本检查与下载 |
 | `app/widgets/pages/page_device.py` | 串口/蓝牙调试页，支持 Raw 和 TVLCOM V2 模式 |
 | `app/widgets/pages/page_power.py` | 数字电源仪表盘、输出控制、保护参数、实时曲线 |
@@ -131,7 +131,7 @@ Power 页面使用 `app/session/session_power.py` 中的专用协议，不与 `a
 
 - 页面提示统一调用 `app/core/utility.py` 的 `showMessage(...)`；主窗口会同时显示右上角 InfoBar 和标题栏 DynamicIsland。
 - 跨线程通信使用 Qt 信号或自定义 Qt 事件，不要从 worker 线程直接操作控件。
-- 新增持久化设置优先走 `config.AppContext`、`SettingsManager` 或 qfluentwidgets `QConfig`。
+- 新增持久化设置统一走 `config.CTX.cfg` / qfluentwidgets `QConfig`。
 - 新增页面样式时，同步 `StyleSheet` 枚举、页面 `objectName` 和 `Resources/Theme/qss/{light,dark}/` 下的 QSS 文件名。
 - 修改 Power 协议前，先更新协议表，再同步上下位机枚举、元数据、读写处理和测试。
 - DAPLink 烧录默认依赖 `Resources/Tools/Pack/` 中的本地 `.pack` 文件。

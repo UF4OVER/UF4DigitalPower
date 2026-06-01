@@ -761,27 +761,35 @@ class DaplinkPyocdSession(QObject):
             options=options,
         )
         if session is None:
-            raise RuntimeError("未找到可用的 DAPLink/CMSIS-DAP 调试器。")
+            message = "未找到可用的 DAPLink/CMSIS-DAP 调试器。"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         return session
 
     def _target_by_name(self, target_name: str) -> DaplinkTargetInfo:
         for item in self._require_targets():
             if item.target_name == (target_name or "").strip().lower():
                 return item
-        raise RuntimeError("请选择来自本地 Pack 的有效 target。")
+        message = "请选择来自本地 Pack 的有效 target。"
+        logger.error(f"{self.__class__.__name__}: {message}")
+        raise RuntimeError(message)
 
     def _require_targets(self) -> list[DaplinkTargetInfo]:
         if not self._target_items:
             self._pack_paths, self._target_items = self.discover_pack_targets()
         if not self._target_items:
-            raise RuntimeError(f"在 {self.pack_dir()} 中未发现可用的 CMSIS-Pack target。")
+            message = f"在 {self.pack_dir()} 中未发现可用的 CMSIS-Pack target。"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         return self._target_items
 
     def _require_pack_paths(self) -> list[Path]:
         if not self._pack_paths:
             self._pack_paths, self._target_items = self.discover_pack_targets()
         if not self._pack_paths:
-            raise RuntimeError(f"在 {self.pack_dir()} 中未找到 .pack 文件。")
+            message = f"在 {self.pack_dir()} 中未找到 .pack 文件。"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         return self._pack_paths
 
     def _build_device_info(self, session, target_info: DaplinkTargetInfo) -> DaplinkDeviceInfo:

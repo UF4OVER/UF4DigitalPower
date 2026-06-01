@@ -17,14 +17,8 @@ from config import (
 	LATEST_APP_VERSION_OPTION,
 	LATEST_LOWER_VERSION_OPTION,
 	LATEST_UPPER_VERSION_OPTION,
-	LOCAL_APP_VERSION_OPTION,
-	LOCAL_LOWER_VERSION_OPTION,
-	LOCAL_UPPER_VERSION_OPTION,
-	UPDATE_SECTION,
-	UPDATE_URL_OPTION,
-	VERSION_LOCAL_SECTION,
 	VERSION_REMOTE_SECTION,
-logger,
+	logger,
 )
 from .manage_firmware import firmware_manager
 
@@ -97,27 +91,27 @@ class UpdateManager:
 		return bool(self._worker and self._worker.isRunning())
 
 	def get_cached_versions(self) -> FirmwareVersionSnapshot:
-		settings = CTX.settings
+		cfg = CTX.cfg
 		local_upper = firmware_manager.get_latest_local_release("Upper")
 		local_lower = firmware_manager.get_latest_local_release("Power")
 		return FirmwareVersionSnapshot(
 			local_app_version=_normalize_version(
-				settings.get(VERSION_LOCAL_SECTION, LOCAL_APP_VERSION_OPTION, "--")
+				cfg.localAppVersion.value
 			),
 			latest_app_version=_normalize_version(
-				settings.get(VERSION_REMOTE_SECTION, LATEST_APP_VERSION_OPTION, "--")
+				cfg.latestAppVersion.value
 			),
 			local_upper_version=_normalize_version(
-				local_upper.version if local_upper else settings.get(VERSION_LOCAL_SECTION, LOCAL_UPPER_VERSION_OPTION, "--")
+				local_upper.version if local_upper else cfg.localUpperVersion.value
 			),
 			latest_upper_version=_normalize_version(
-				settings.get(VERSION_REMOTE_SECTION, LATEST_UPPER_VERSION_OPTION, "--")
+				cfg.latestUpperVersion.value
 			),
 			local_lower_version=_normalize_version(
-				local_lower.version if local_lower else settings.get(VERSION_LOCAL_SECTION, LOCAL_LOWER_VERSION_OPTION, "--")
+				local_lower.version if local_lower else cfg.localLowerVersion.value
 			),
 			latest_lower_version=_normalize_version(
-				settings.get(VERSION_REMOTE_SECTION, LATEST_LOWER_VERSION_OPTION, "--")
+				cfg.latestLowerVersion.value
 			),
 		)
 
@@ -142,8 +136,7 @@ class UpdateManager:
 
 	def _perform_check(self, manual: bool) -> UpdateCheckResult:
 		snapshot_before = self.get_cached_versions()
-		settings = CTX.settings
-		update_url = str(settings.get(UPDATE_SECTION, UPDATE_URL_OPTION, "") or "").strip()
+		update_url = str(CTX.cfg.updateUrl.value or "").strip()
 
 		if not update_url:
 			logger.info("UpdateManager skipped app update check because UpdateUrl is empty")
@@ -176,10 +169,15 @@ class UpdateManager:
 				snapshot=snapshot_before,
 			)
 
-		settings.set(VERSION_REMOTE_SECTION, LATEST_APP_VERSION_OPTION, latest_versions["app"])
-
-		snapshot_after = self.get_cached_versions()
-		has_changes = snapshot_before.latest_app_version != snapshot_after.latest_app_version
+		snapshot_after = FirmwareVersionSnapshot(
+			local_app_version=snapshot_before.local_app_version,
+			latest_app_version=_normalize_version(latest_versions["app"]),
+			local_upper_version=snapshot_before.local_upper_version,
+			latest_upper_version=_normalize_version(latest_versions["upper"]),
+			local_lower_version=snapshot_before.local_lower_version,
+			latest_lower_version=_normalize_version(latest_versions["lower"]),
+		)
+		has_changes = snapshot_after.latest_app_version != snapshot_after.local_app_version
 		logger.info(
 			"UpdateManager refreshed latest app version: "
 			f"app={snapshot_after.latest_app_version}"

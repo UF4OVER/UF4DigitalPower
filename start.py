@@ -11,6 +11,7 @@
 # -------------------------------
 import sys
 import time
+time_ = time.time()
 
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QCloseEvent, QIcon, QColor
@@ -167,25 +168,23 @@ class Window(MSFluentWindow):
 
 
 if __name__ == "__main__":
+    time_ = time.time()
     logger.info("main is running")
-
-    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+    if cfg.highDpiScaling.value:
+        logger.info("highDpiScaling is running")
+        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     logger.info("Application started")
     try:
-        time_ = time.time()
         app = QApplication(sys.argv)
-
         loadSavedFont(app)  # 加载字体
-
         w = Window()
-
         w.setMicaEffectEnabled(True)
-
         logger.info(f"start time: {time.time() - time_}")
 
-        app.exec_()
+        sys.exit(app.exec_())
     except Exception as e:
         logger.error(e)
+        sys.exit(-1)

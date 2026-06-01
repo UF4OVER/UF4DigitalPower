@@ -193,7 +193,9 @@ class BluetoothSession(QObject):
             or QBluetoothUuid is None
             or QBluetoothServiceInfo is None
         ):
-            raise RuntimeError("当前环境不支持 Qt Bluetooth")
+            message = "当前环境不支持 Qt Bluetooth"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
 
         self._post_event(StateEvent(SerialState.OPENING))
         self._socket = QBluetoothSocket(QBluetoothServiceInfo.RfcommProtocol)
@@ -216,7 +218,9 @@ class BluetoothSession(QObject):
 
     def write(self, data: bytes) -> int:
         if not self.is_open:
-            raise RuntimeError("蓝牙设备未连接")
+            message = "蓝牙设备未连接"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message)
         written = int(self._socket.write(data))
         self._post_event(TxEvent(data))
         return written
@@ -482,7 +486,6 @@ class DevicePage(ScrollArea):
                 border: 1px solid {border};
                 border-radius: 12px;
                 padding: 8px;
-                font-family: Consolas, 'Cascadia Mono', 'Microsoft YaHei UI';
             }}
             """
         )

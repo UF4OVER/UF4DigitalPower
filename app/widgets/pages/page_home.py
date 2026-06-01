@@ -402,7 +402,6 @@ class HomePage(ScrollArea):
         if event.type() == FirmwareCheckFinishedEvent.EVENT_TYPE:
             self._isCheckingFirmware = False
             self.firmwareUpdateCard.setFirmwareCheckInProgress(False)
-            self._applyVersionSnapshot(update_manager.get_cached_versions())
             self._handleFirmwareCheckResult(event.result)
             return True
 
@@ -596,6 +595,14 @@ class HomePage(ScrollArea):
                 "warning",
             )
             return
+
+        snapshot = update_manager.get_cached_versions()
+        self.firmwareUpdateCard.setVersions(
+            powerLocalVersion=snapshot.local_lower_version,
+            powerLatestVersion=getattr(result.latest.get("Power"), "version", snapshot.latest_lower_version),
+            upperLocalVersion=snapshot.local_upper_version,
+            upperLatestVersion=getattr(result.latest.get("Upper"), "version", snapshot.latest_upper_version),
+        )
 
         self._firmwareUpdateAvailable = {
             "Power": bool(result.has_updates.get("Power", False)),
