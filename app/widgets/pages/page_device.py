@@ -68,19 +68,28 @@ from app.session import (
     listSerialPorts,
     logger,
 )
-from app.core.const import (
-    SESSION_PAGE_BAUD_RATES,
-    SESSION_PAGE_RAW_FORMATS,
-    SESSION_PAGE_SEND_MODES,
-    SESSION_PAGE_V2_DEFAULT_CMD,
-    SESSION_PAGE_V2_TYPE_ALIAS_TO_ID,
-)
+
 from app.protocol import Dispatcher as V2Dispatcher
 from app.protocol import FrameBuilder as V2FrameBuilder
 from app.protocol import FrameParser as V2FrameParser
 from app.protocol import Payload as V2Payload, TYPE_REGISTRY
 from app.protocol.dataType import DataFloat, DataInt, DataString, TypeBase
 
+SESSION_PAGE_BAUD_RATES = ("9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600")
+SESSION_PAGE_SEND_MODES = ("Raw(HEX/ASCII)", "TVLCOM_V2")
+SESSION_PAGE_RAW_FORMATS = ("HEX", "ASCII")
+SESSION_PAGE_V2_DEFAULT_CMD = 0x01
+
+SESSION_PAGE_V2_TYPE_ALIAS_TO_ID = {
+    "u8": 0x01,
+    "uint8": 0x01,
+    "u16": 0x02,
+    "uint16": 0x02,
+    "u32": 0x03,
+    "uint32": 0x03,
+    "float": 0x10,
+    "string": 0x20,
+}
 
 class DeviceTransport(Protocol):
     @property

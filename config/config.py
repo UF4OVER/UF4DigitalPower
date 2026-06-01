@@ -277,25 +277,25 @@ class AppContext:
 # ============================================================================
 
 
-_default_context: AppContext | None = None
+# _default_context: AppContext | None = None
 
 
-def get_default_context() -> AppContext:
-    global _default_context
-    if _default_context is None:
-        _default_context = CTX
-    return _default_context
-
-
-def set_app_context(ctx: AppContext) -> None:
-    global _default_context
-    _default_context = ctx
-
-
-def reset_app_context() -> None:
-    global _default_context
-    _default_context = None
-
+# def get_default_context() -> AppContext:
+#     global _default_context
+#     if _default_context is None:
+#         _default_context = CTX
+#     return _default_context
+#
+#
+# def set_app_context(ctx: AppContext) -> None:
+#     global _default_context
+#     _default_context = ctx
+#
+#
+# def reset_app_context() -> None:
+#     global _default_context
+#     _default_context = None
+# 跑单测用的
 
 # ============================================================================
 #  CTX — module-level singleton, the one thing you need to import

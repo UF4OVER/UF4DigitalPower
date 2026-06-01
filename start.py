@@ -37,13 +37,13 @@ class Window(MSFluentWindow):
     def __init__(self):
         super().__init__()
         self.setObjectName("Window")
-
+        # self.resize(1400,1200)
         self._initWindowShell()
         self.splashScreen = createSplashScreen(
             parent=self,
             icon=self.windowIcon(),
             title=self.windowTitle(),
-            icon_size=QSize(102, 102),
+            icon_size=QSize(300, 300),
             show_immediately=False,
         )
         self.splashScreen.show()
@@ -181,6 +181,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         loadSavedFont(app)  # 加载字体
         w = Window()
+        # w.show()
         w.setMicaEffectEnabled(True)
         logger.info(f"start time: {time.time() - time_}")
 
