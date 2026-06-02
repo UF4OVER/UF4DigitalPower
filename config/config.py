@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026 - 01-14 14:13
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: config.py
+#  @FileType: 配置文件，负责路径、日志、主题和持久化设置
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
 #  @Contact :
-#  @Python  :
+#  @Python  : 3.10
 # -------------------------------
+
 import logging
 import os
 import shutil

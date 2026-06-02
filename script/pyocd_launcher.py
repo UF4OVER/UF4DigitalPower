@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: pyocd_launcher.py
+#  @FileType: pyOCD 启动辅助脚本，用于烧录流程兼容处理
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 """Entry point for pyOCD CLI bundled inside a cx_Freeze frozen application.
 
 This script is packaged as a ``console`` executable separate from the main

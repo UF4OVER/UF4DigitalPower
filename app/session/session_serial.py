@@ -1,4 +1,15 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: session_serial.py
+#  @FileType: 串口会话文件，负责串口收发和 Qt 事件转发
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
 
 from __future__ import annotations
 
@@ -124,6 +135,10 @@ class SerialConfig:
 
 class SerialSession(QObject):
     def __init__(self, cfg: SerialConfig,_event_receiver: Optional[QObject] = None):
+        """创建串口会话。
+
+        这个类只关心串口收发和事件投递，不理解上层协议内容。
+        """
         super().__init__()
 
         # 事件接收器
@@ -158,6 +173,7 @@ class SerialSession(QObject):
 
 
     def open(self):
+        """按配置打开串口，并把 readyRead/error 信号接到本会话。"""
         if self.is_open:
             return
         self._post_event(StateEvent(SerialState.OPENING))
@@ -189,6 +205,7 @@ class SerialSession(QObject):
         return bool(self._ser) and self._ser.isOpen()
 
     def close(self):
+        """关闭串口并广播 CLOSED 状态，便于页面和协议层统一收尾。"""
         if not self._ser:
             self._post_event(StateEvent(SerialState.CLOSED))
             return
@@ -202,6 +219,7 @@ class SerialSession(QObject):
         self._post_event(StateEvent(SerialState.CLOSED))
 
     def write(self, data: bytes) -> int:
+        """线程内写入数据，成功后再投递 TX 事件给界面日志。"""
         if not self.is_open:
             message = "Serial port is not open"
             logger.error(f"{self.__class__.__name__}: {message}")
@@ -226,6 +244,7 @@ class SerialSession(QObject):
         return len(data)
 
     def _post_event(self, evt: SerialEvent):
+        """优先把事件投递给 Qt 接收者；没有接收者时退回到 Python 回调。"""
         if self._event_receiver is not None:
             QCoreApplication.postEvent(self._event_receiver, evt)
         else:
@@ -238,6 +257,7 @@ class SerialSession(QObject):
                 self.on_error(RuntimeError(evt.payload.message))
 
     def _on_ready_read(self):
+        """读取 Qt 缓冲区里的全部字节，并交给上层协议去拆包。"""
         if not self._ser:
             return
 
@@ -248,6 +268,7 @@ class SerialSession(QObject):
             self._post_event(RxEvent(data))
 
     def _on_error_occurred(self, err):
+        """把 QSerialPort 的错误统一转成 ErrorEvent 和 StateEvent。"""
         if err == QSerialPort.SerialPortError.NoError:
             return
         msg = self._ser.errorString() if self._ser else str(err)
@@ -255,6 +276,7 @@ class SerialSession(QObject):
         self._post_event(StateEvent(SerialState.ERROR, info=msg))
 
     def event(self, e: QEvent):
+        """处理 UI 或协议层投递过来的 SEND 事件，保证写串口发生在对象所属线程。"""
         # 处理 从 UI 发布的发送事件：在该对象的线程中执行写入
         try:
             if e.type() == int(SerialEventType.SEND):

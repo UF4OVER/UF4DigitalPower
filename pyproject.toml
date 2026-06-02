@@ -64,7 +64,6 @@ packages = [
 
     "config"
 ]
-
 include_files = [
     ["Resources/assets", "Resources/assets"],
     ["Resources/font", "Resources/font"],

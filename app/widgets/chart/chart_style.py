@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/24
-#  @FileName: chart_style.py.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: chart_style.py
+#  @FileType: 图表组件文件，负责实时曲线、图表模型和数据展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 颜色、线宽、字体等样式
-#  @Python  : 
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
+

@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: demo_notification_sidebar_minimal.py
+#  @FileType: 演示脚本，用于独立预览通知和界面组件
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 """Minimal manual demo to verify notification sidebar does not block mouse input."""
 
 from __future__ import annotations

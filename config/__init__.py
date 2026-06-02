@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026 - 01-16 14:58
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: __init__.py
+#  @FileType: 配置包初始化文件，统一导出应用配置上下文
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
 #  @Contact :
-#  @Python  :
+#  @Python  : 3.10
 # -------------------------------
 
 from .config import (

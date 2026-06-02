@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/9
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: cell.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @FileType: 自动化测试文件，用来守住关键功能行为
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 
-#  @Python  : 
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
+
 import sys
 import math
 from dataclasses import dataclass

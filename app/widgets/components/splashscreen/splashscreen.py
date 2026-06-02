@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/30
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: splashscreen.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @FileType: 启动页组件文件，负责应用加载时的品牌展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
 
 from PyQt5.QtCore import QEventLoop, QSize, QTimer

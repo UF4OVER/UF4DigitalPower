@@ -3,12 +3,14 @@
 #  @Project : F4CP
 #  @Time    : 2026 - 01-08 12:30
 #  @FileName: start.py
+#  @FileType: 应用入口文件，负责创建主窗口并启动 Qt 事件循环
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
 #  @Contact :
-#  @Python  :
+#  @Python  : 3.10
 # -------------------------------
+
 import sys
 import time
 time_ = time.time()
@@ -35,6 +37,7 @@ from config import AppIconPath, cfg
 
 class Window(MSFluentWindow):
     def __init__(self):
+        """创建主窗口、启动页和所有业务页面。"""
         super().__init__()
         self.setObjectName("Window")
         # self.resize(1400,1200)
@@ -70,6 +73,7 @@ class Window(MSFluentWindow):
             self.dynamicIsland.recenter()
 
     def _initWindowShell(self):
+        """设置主窗口尺寸、图标和标题，并放到屏幕中央。"""
         self.resize(1400, 1100)
         self.setWindowIcon(QIcon(AppIconPath))
         self.setWindowTitle("F4CP")
@@ -81,6 +85,7 @@ class Window(MSFluentWindow):
         self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
 
     def __initNavigation(self):
+        """注册左侧导航项，把首页、串口、电源、烧录、设置挂到主窗口。"""
         self.homeNavItem = self.addSubInterface(
             self.homeInterface,
             UF4Icon.GAUGE,
@@ -116,6 +121,7 @@ class Window(MSFluentWindow):
         self.navigationInterface.setCurrentItem(self.homeInterface.objectName())
 
     def __initWindow(self):
+        """初始化标题栏上的动态岛消息组件。"""
         self.titleBar.raise_()
         self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
@@ -128,10 +134,12 @@ class Window(MSFluentWindow):
         super().close()
 
     def closeEvent(self, event: QCloseEvent):
+        """窗口关闭前先让电源页停掉串口和轮询，避免后台还在收发。"""
         self.powerInterface.shutdown()
         super().closeEvent(event)
 
     def _onThemeChanged(self, *_):
+        """主题切换后刷新主窗口、导航栏、标题栏和动态岛的样式。"""
         dark = isDarkTheme()
         if hasattr(self, "dynamicIsland"):
             self.dynamicIsland.setDarkTheme(dark)
@@ -145,6 +153,7 @@ class Window(MSFluentWindow):
             self.dynamicIsland.notify(title, content, level, duration)
 
     def _checkUpdateOnStartUp(self):
+        """按用户设置决定启动后是否自动检查应用更新。"""
         if getattr(cfg.checkUpdateAtStartUp, "value", False):
             self.homeInterface.requestUpdateCheck(manual=False)
 

@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_daplink.py
+#  @FileType: 烧录页面文件，负责 DAPLink 连接、目标选择和固件下载
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from __future__ import annotations
 
 import os

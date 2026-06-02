@@ -1,4 +1,15 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: manager_update.py
+#  @FileType: 软件更新管理文件，负责应用和固件版本检查
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
 
 from __future__ import annotations
 
@@ -69,10 +80,11 @@ class UpdateCheckThread(QThread):
 		self.manual = manual
 
 	def run(self) -> None:
+		"""后台执行更新检查，失败时也返回一个可显示的结果对象。"""
 		try:
-			result = self.manager._perform_check(self.manual)
-		except Exception:
-			logger.exception("Unexpected error during app update check")
+			result = self.manager._perform_check(self.manual)  # NOQA
+		except Exception as e:
+			logger.exception(f"{self.__class__.__name__}: Unexpected error during app update check :{e}")
 			result = UpdateCheckResult(
 				success=False,
 				manual=self.manual,
@@ -91,6 +103,10 @@ class UpdateManager:
 		return bool(self._worker and self._worker.isRunning())
 
 	def get_cached_versions(self) -> FirmwareVersionSnapshot:
+		"""读取当前缓存版本。
+
+		本地固件版本优先从实际固件目录推断，配置项只作为兜底显示。
+		"""
 		cfg = CTX.cfg
 		local_upper = firmware_manager.get_latest_local_release("Upper")
 		local_lower = firmware_manager.get_latest_local_release("Power")
@@ -116,6 +132,7 @@ class UpdateManager:
 		)
 
 	def check_for_updates(self, receiver: QObject, manual: bool = False) -> bool:
+		"""启动一次更新检查；如果已有检查在跑，就直接跳过本次请求。"""
 		if self.is_checking:
 			logger.info("UpdateManager skipped app update check because another check is running")
 			return False
@@ -135,6 +152,7 @@ class UpdateManager:
 			self._worker = None
 
 	def _perform_check(self, manual: bool) -> UpdateCheckResult:
+		"""拉取远程版本信息，并和本地应用版本做一次轻量对比。"""
 		snapshot_before = self.get_cached_versions()
 		update_url = str(CTX.cfg.updateUrl.value or "").strip()
 
@@ -194,6 +212,7 @@ class UpdateManager:
 		)
 
 	def _fetch_remote_update(self, update_url: str) -> dict[str, object]:
+		"""根据配置的 URL 自动选择 GitHub latest release 或普通版本文件。"""
 		github_api_url = self._github_release_api_url(update_url)
 		if github_api_url:
 			return self._fetch_github_latest_release(github_api_url)
@@ -204,6 +223,7 @@ class UpdateManager:
 		return {"versions": self._parse_remote_versions(payload)}
 
 	def _fetch_github_latest_release(self, api_url: str) -> dict[str, object]:
+		"""读取 GitHub latest release，并把 tag 当作应用最新版本。"""
 		request = Request(
 			api_url,
 			headers={
@@ -244,6 +264,7 @@ class UpdateManager:
 		return f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
 	def _parse_remote_versions(self, payload: str) -> dict[str, str] | None:
+		"""兼容 JSON 和 INI 两种远程版本文件格式。"""
 		text = payload.strip()
 		if not text:
 			return None
@@ -254,6 +275,7 @@ class UpdateManager:
 		return self._parse_ini_versions(text)
 
 	def _parse_json_versions(self, payload: str) -> dict[str, str] | None:
+		"""解析 JSON 格式版本文件，支持顶层字段或 latest_version 分区。"""
 		try:
 			data = json.loads(payload)
 		except json.JSONDecodeError as exc:
@@ -270,6 +292,7 @@ class UpdateManager:
 		return self._build_remote_version_map(latest_section)
 
 	def _parse_ini_versions(self, payload: str) -> dict[str, str] | None:
+		"""解析 INI 格式版本文件，兼容新版 latest_version 和旧版 version。"""
 		parser = configparser.ConfigParser()
 		try:
 			parser.read_string(payload)

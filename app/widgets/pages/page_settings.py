@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_settings.py
+#  @FileType: 设置页面文件，负责应用偏好和运行信息展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt, QUrl

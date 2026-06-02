@@ -1,4 +1,15 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_power.py
+#  @FileType: 电源页面文件，负责电源监控、参数设置和日志展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
 
 import html
 import math
@@ -665,12 +676,14 @@ class PowerPage(ScrollArea):
         )
 
     def toggleConnection(self) -> None:
+        """连接按钮入口：根据当前状态在打开串口和断开会话之间切换。"""
         if self._client.is_connected:
             self._disconnectManualSession()
         else:
             self._connectSerialTarget()
 
     def _connectSerialTarget(self) -> None:
+        """按页面选择创建串口会话，打开成功后交给电源协议客户端接管。"""
         port = self.portCombo.currentText().strip()
         if not port:
             self._appendLog("错误: 未选择串口。请先刷新并选择串口。")
@@ -686,6 +699,7 @@ class PowerPage(ScrollArea):
         self.onDeviceConnected(session)
 
     def onDeviceConnected(self, session) -> None:
+        """串口建立后同步 UI 状态，并按开关决定读一次还是持续轮询。"""
         self.attachSessionRequested.emit(session)
         self.stateBadge.setOnline(True)
         self.connectButton.setText("断开")
@@ -698,6 +712,7 @@ class PowerPage(ScrollArea):
             self.readStatusRequested.emit()
 
     def _disconnectManualSession(self) -> None:
+        """主动断开页面自己创建的串口会话，并让协议客户端清空状态。"""
         self.stopPollingRequested.emit()
         self.detachSessionRequested.emit()
         try:
@@ -738,6 +753,7 @@ class PowerPage(ScrollArea):
         update_chart: bool,
         log_changes: bool,
     ) -> None:
+        """把一帧 PowerStatus 映射到指标卡、状态栏、参数编辑器和曲线图。"""
         previous = self._lastStatus
         if log_changes:
             self._lastStatus = status
@@ -795,6 +811,7 @@ class PowerPage(ScrollArea):
         self.debugSnapshotRequested.emit()
 
     def _onAutoPollChanged(self, checked: bool) -> None:
+        """自动轮询开关变化时，直接通知协议客户端启动或停止刷新。"""
         if checked:
             self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
         else:
@@ -802,6 +819,7 @@ class PowerPage(ScrollArea):
             self._appendLog("主机轮询已关闭")
 
     def _onOutputSwitchChanged(self, checked: bool) -> None:
+        """输出开关先暂存用户意图，再交给协议层写入，避免界面被旧状态立刻覆盖。"""
         self._stagedOutputEnabled = checked
         if not self._client.is_connected:
             return
@@ -814,6 +832,7 @@ class PowerPage(ScrollArea):
         self.powerStateRequested.emit(checked)
 
     def _applyOutputLimits(self) -> None:
+        """提交输出限制值；界面用 V/A，协议层用 mV/mA。"""
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
@@ -828,6 +847,7 @@ class PowerPage(ScrollArea):
         self.outputLimitsRequested.emit(voltage_mv, current_ma, enabled)
 
     def _applyProtectionValues(self) -> None:
+        """提交保护参数；温度在界面是摄氏度，协议层按毫摄氏度传输。"""
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
@@ -864,6 +884,7 @@ class PowerPage(ScrollArea):
         self._scheduleAutoPollingRestartAfterWrite()
 
     def _onClientError(self, message: str) -> None:
+        """协议层错误统一落到这里，恢复按钮状态并给用户一个明确提示。"""
         self._appendLog(f"错误: {message}")
         self._setWriteControlsEnabled(True)
         showMessage(self, "通信错误", message, level="error")
@@ -885,6 +906,7 @@ class PowerPage(ScrollArea):
         self._disconnectManualSession()
 
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:
+        """写操作结束后延迟恢复轮询，给设备一点时间完成内部状态更新。"""
         self._writePollingRestartPending = False
         self._writePollRestartTimer.stop()
         self._writePollRestartTimer.start(WRITE_POLL_RESTART_DELAY_MS)
@@ -896,6 +918,7 @@ class PowerPage(ScrollArea):
         self._appendLog("写入后已请求重启主机轮询")
 
     def _handleDebugSnapshotReady(self, snapshot: DebugSnapshot) -> None:
+        """显示调试快照，并附带一段面向硬件排查的判断提示。"""
         self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
         self._appendLog(self._diagnoseDebugSnapshot(snapshot))
 
@@ -909,6 +932,7 @@ class PowerPage(ScrollArea):
         return "调试判断: type27 数值合理；如果界面仍异常，请检查主机解析和绑定。"
 
     def _applyDisconnectedState(self) -> None:
+        """回到离线 UI 状态，清掉暂存开关和正在写入的标记。"""
         self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
         self._setWriteControlsEnabled(False)
@@ -990,4 +1014,3 @@ class PowerPage(ScrollArea):
             self._clientThread.quit()
             if not self._clientThread.wait(3000):
                 self._writePageLogFile("PowerPage client thread did not exit within 3000 ms")
-

@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/24
-#  @FileName: chart_model.py.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: chart_model.py
+#  @FileType: 图表组件文件，负责实时曲线、图表模型和数据展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 曲线模型、通道模型、视图状态
-#  @Python  : 
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
+
 from __future__ import annotations
 
 from dataclasses import dataclass
