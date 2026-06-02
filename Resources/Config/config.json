@@ -27,26 +27,26 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
-            "SAIBA-45",
+            "Blender Pro Book",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
         ],
         "ThemeColor": "#ffff0000",
-        "ThemeMode": "Light"
+        "ThemeMode": "Dark"
     },
     "Appearance": {
-        "FontFamily": "SAIBA-45",
-        "FontFile": "SAIBA-45-Regular.otf"
+        "FontFamily": "Blender Pro Book",
+        "FontFile": "Blender.otf"
     },
     "NewVersion": {
-        "NewLocalVersion": "",
-        "NewLowerVersion": "",
-        "NewUpperVersion": ""
+        "NewLocalVersion": "v0.5.3.rc2",
+        "NewLowerVersion": "v0.1.0",
+        "NewUpperVersion": "v0.0.2"
     },
     "OldVersion": {
-        "OldLocalVersion": "",
-        "OldLowerVersion": "",
-        "OldUpperVersion": ""
+        "OldLocalVersion": "0.5.3.rc2",
+        "OldLowerVersion": "v0.1.0",
+        "OldUpperVersion": "v0.0.2"
     }
 }

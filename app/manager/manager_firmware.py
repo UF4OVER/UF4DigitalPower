@@ -2,7 +2,7 @@
 # -------------------------------
 #  @Project : F4CP
 #  @Time    : 2026 - 01-08 12:30
-#  @FileName: manage_firmware.py
+#  @FileName: manager_firmware.py
 #  @FileType: 固件管理文件，负责本地固件、远程版本和下载流程
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
@@ -26,6 +26,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
+from qfluentwidgets import qconfig
 
 from config import (
     CTX,
@@ -463,12 +464,11 @@ class FirmwareManager:
         else:
             item = CTX.cfg.localLowerVersion
 
-        from qfluentwidgets import qconfig
-
         qconfig.set(item, release.version)
 
     def build_update_flags(self, latest: dict[str, FirmwareRelease]) -> dict[str, bool]:
         """对比远程和本地版本，生成页面上的“是否有更新”标记。"""
+        self.sync_versions_to_config(latest)
         flags: dict[str, bool] = {}
         for kind in ("Power", "Upper"):
             remote = latest.get(kind)
@@ -478,6 +478,30 @@ class FirmwareManager:
                 or self._release_sort_key(remote) > self._release_sort_key(local)
             )
         return flags
+
+    def sync_versions_to_config(self, latest: dict[str, FirmwareRelease] | None = None) -> None:
+        """把配置 JSON 和固件目录保持一致。
+
+        本地版本以已经存在的固件文件为准；远程版本以刚检查到的 latest 为准。
+        """
+        local_power = self.get_latest_local_release("Power")
+        local_upper = self.get_latest_local_release("Upper")
+        pairs = []
+        if local_power is not None:
+            pairs.append((CTX.cfg.localLowerVersion, local_power.version))
+        if local_upper is not None:
+            pairs.append((CTX.cfg.localUpperVersion, local_upper.version))
+        if latest:
+            remote_power = latest.get("Power")
+            remote_upper = latest.get("Upper")
+            if remote_power is not None:
+                pairs.append((CTX.cfg.latestLowerVersion, remote_power.version))
+            if remote_upper is not None:
+                pairs.append((CTX.cfg.latestUpperVersion, remote_upper.version))
+
+        for item, value in pairs:
+            if value and getattr(item, "value", None) != value:
+                qconfig.set(item, value)
 
     # ------------------------------------------------------------------
     # Static normalisation / parsing helpers
@@ -493,11 +517,34 @@ class FirmwareManager:
         raise ValueError(f"Unsupported firmware kind: {kind!r}")
 
     @staticmethod
-    def _parse_semver(version: str) -> tuple[int, int, int] | None:
-        """Parse 'v0.1.3' or '0.1.3' -> (0, 1, 3), return None if not semver."""
-        m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", str(version or "").strip())
+    def _canonical_version(version: str) -> str:
+        text = str(version or "").strip().lower()
+        text = text.lstrip("v").replace("-", ".").replace("_", ".")
+        text = re.sub(r"\.?(rc|beta|b|alpha|a|dev)\.?", r".\1", text)
+        return ".".join(part for part in text.split(".") if part)
+
+    @classmethod
+    def _parse_semver(cls, version: str) -> tuple[int, int, int, int, int] | None:
+        """Parse 'v0.1.3.rc2' or '0.1.3' into a sortable tuple."""
+        text = cls._canonical_version(version)
+        m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:\.(dev|a|alpha|b|beta|rc)(\d+))?$", text)
         if m:
-            return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            stage_rank = {
+                "dev": -4,
+                "a": -3,
+                "alpha": -3,
+                "b": -2,
+                "beta": -2,
+                "rc": -1,
+                None: 0,
+            }
+            return (
+                int(m.group(1)),
+                int(m.group(2)),
+                int(m.group(3)),
+                stage_rank[m.group(4)],
+                int(m.group(5) or 0),
+            )
         return None
 
     @classmethod
@@ -505,7 +552,7 @@ class FirmwareManager:
         """Return a sortable key, where semver releases (era=1) always rank above old-style (era=0)."""
         semver = cls._parse_semver(release.version)
         if semver:
-            return (1, semver[0], semver[1], semver[2], 0)
+            return (1, semver[0], semver[1], semver[2], semver[3] * 1000 + semver[4])
         # Old-style: encode date "MM_DD" or "YYYY-MM-DD" as numeric
         try:
             parts = str(release.date).replace("-", "_").split("_")

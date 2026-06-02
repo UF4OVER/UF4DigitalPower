@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import configparser
 import json
+import re
 import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -22,6 +23,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
+from qfluentwidgets import qconfig
 
 from config import (
 	CTX,
@@ -31,7 +33,7 @@ from config import (
 	VERSION_REMOTE_SECTION,
 	logger,
 )
-from .manage_firmware import firmware_manager
+from .manager_firmware import firmware_manager
 
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 
@@ -39,6 +41,38 @@ UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 def _normalize_version(value: object, fallback: str = "--") -> str:
 	text = str(value or "").strip()
 	return text or fallback
+
+
+def _canonical_version(value: object) -> str:
+	"""把 v0.5.3.rc2 / 0.5.3-rc2 这类写法统一成可比较的字符串。"""
+	text = str(value or "").strip().lower()
+	if not text or text == "--":
+		return ""
+	text = text.lstrip("v").replace("-", ".").replace("_", ".")
+	text = re.sub(r"\.?(rc|beta|b|alpha|a|dev)\.?", r".\1", text)
+	return ".".join(part for part in text.split(".") if part)
+
+
+def _version_is_newer(remote: object, local: object) -> bool:
+	"""判断远程版本是否比本地新；版本解析失败时退回到标准化字符串比较。"""
+	remote_text = _canonical_version(remote)
+	local_text = _canonical_version(local)
+	if not remote_text:
+		return False
+	if not local_text:
+		return True
+	if remote_text == local_text:
+		return False
+
+	try:
+		from packaging.version import InvalidVersion, Version
+
+		try:
+			return Version(remote_text) > Version(local_text)
+		except InvalidVersion:
+			return remote_text != local_text
+	except Exception:
+		return remote_text != local_text
 
 
 @dataclass(frozen=True)
@@ -110,26 +144,49 @@ class UpdateManager:
 		cfg = CTX.cfg
 		local_upper = firmware_manager.get_latest_local_release("Upper")
 		local_lower = firmware_manager.get_latest_local_release("Power")
-		return FirmwareVersionSnapshot(
-			local_app_version=_normalize_version(
-				cfg.localAppVersion.value
-			),
-			latest_app_version=_normalize_version(
-				cfg.latestAppVersion.value
-			),
-			local_upper_version=_normalize_version(
-				local_upper.version if local_upper else cfg.localUpperVersion.value
-			),
-			latest_upper_version=_normalize_version(
-				cfg.latestUpperVersion.value
-			),
-			local_lower_version=_normalize_version(
-				local_lower.version if local_lower else cfg.localLowerVersion.value
-			),
-			latest_lower_version=_normalize_version(
-				cfg.latestLowerVersion.value
-			),
+		local_app_version = _normalize_version(cfg.appVersion.value)
+		local_upper_version = _normalize_version(
+			local_upper.version if local_upper else cfg.localUpperVersion.value
 		)
+		local_lower_version = _normalize_version(
+			local_lower.version if local_lower else cfg.localLowerVersion.value
+		)
+		self._sync_local_versions_to_config(
+			local_app_version,
+			local_upper_version,
+			local_lower_version,
+		)
+		latest_app_version = _normalize_version(cfg.latestAppVersion.value)
+		latest_upper_version = _normalize_version(cfg.latestUpperVersion.value, local_upper_version)
+		if latest_upper_version == "--":
+			latest_upper_version = local_upper_version
+		latest_lower_version = _normalize_version(cfg.latestLowerVersion.value, local_lower_version)
+		if latest_lower_version == "--":
+			latest_lower_version = local_lower_version
+		return FirmwareVersionSnapshot(
+			local_app_version=local_app_version,
+			latest_app_version=latest_app_version,
+			local_upper_version=local_upper_version,
+			latest_upper_version=latest_upper_version,
+			local_lower_version=local_lower_version,
+			latest_lower_version=latest_lower_version,
+		)
+
+	def _sync_local_versions_to_config(
+		self,
+		local_app_version: str,
+		local_upper_version: str,
+		local_lower_version: str,
+	) -> None:
+		"""把“当前真实版本”写回 JSON，避免配置里的旧值影响下一次检查。"""
+		cfg = CTX.cfg
+		for item, value in (
+			(cfg.localAppVersion, local_app_version),
+			(cfg.localUpperVersion, local_upper_version),
+			(cfg.localLowerVersion, local_lower_version),
+		):
+			if value != "--" and getattr(item, "value", None) != value:
+				qconfig.set(item, value)
 
 	def check_for_updates(self, receiver: QObject, manual: bool = False) -> bool:
 		"""启动一次更新检查；如果已有检查在跑，就直接跳过本次请求。"""
@@ -195,7 +252,11 @@ class UpdateManager:
 			local_lower_version=snapshot_before.local_lower_version,
 			latest_lower_version=_normalize_version(latest_versions["lower"]),
 		)
-		has_changes = snapshot_after.latest_app_version != snapshot_after.local_app_version
+		self._sync_latest_versions_to_config(snapshot_after)
+		has_changes = _version_is_newer(
+			snapshot_after.latest_app_version,
+			snapshot_after.local_app_version,
+		)
 		logger.info(
 			"UpdateManager refreshed latest app version: "
 			f"app={snapshot_after.latest_app_version}"
@@ -210,6 +271,17 @@ class UpdateManager:
 			release_url=str(remote_result.get("release_url") or update_url),
 			release_notes=str(remote_result.get("release_notes") or ""),
 		)
+
+	def _sync_latest_versions_to_config(self, snapshot: FirmwareVersionSnapshot) -> None:
+		"""把远程最新版本写回 JSON，首页和设置页下次启动能直接读到。"""
+		cfg = CTX.cfg
+		for item, value in (
+			(cfg.latestAppVersion, snapshot.latest_app_version),
+			(cfg.latestUpperVersion, snapshot.latest_upper_version),
+			(cfg.latestLowerVersion, snapshot.latest_lower_version),
+		):
+			if value != "--" and getattr(item, "value", None) != value:
+				qconfig.set(item, value)
 
 	def _fetch_remote_update(self, update_url: str) -> dict[str, object]:
 		"""根据配置的 URL 自动选择 GitHub latest release 或普通版本文件。"""

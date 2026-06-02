@@ -41,6 +41,7 @@ class _FakeItem:
 class _FakeCfg:
     def __init__(self):
         self.updateUrl = _FakeItem("https://github.com/UF4OVER/UF4DigitalPower/releases")
+        self.appVersion = _FakeItem("v0.1.0")
         self.localAppVersion = _FakeItem("v0.1.0")
         self.latestAppVersion = _FakeItem("v0.1.0")
         self.localUpperVersion = _FakeItem("--")
@@ -62,7 +63,9 @@ class UpdateManagerGithubTests(unittest.TestCase):
         with patch("app.manager.manager_update.CTX", SimpleNamespace(cfg=fake_cfg)), patch(
             "app.manager.manager_update.firmware_manager.get_latest_local_release",
             return_value=None,
-        ), patch("app.manager.manager_update.urlopen", return_value=_FakeResponse(release)) as mocked_urlopen:
+        ), patch("app.manager.manager_update.qconfig.set") as mocked_set, patch(
+            "app.manager.manager_update.urlopen", return_value=_FakeResponse(release)
+        ) as mocked_urlopen:
             result = manager._perform_check(manual=True)
 
         request = mocked_urlopen.call_args.args[0]
@@ -76,7 +79,51 @@ class UpdateManagerGithubTests(unittest.TestCase):
         self.assertEqual(result.release_tag, "v0.2.0")
         self.assertIn("Power 页面", result.release_notes)
         self.assertEqual(result.release_url, release["html_url"])
-        self.assertEqual(fake_cfg.latestAppVersion.value, "v0.1.0")
+        self.assertIn((fake_cfg.latestAppVersion, "v0.2.0"), [call.args for call in mocked_set.call_args_list])
+
+    def test_same_version_with_v_prefix_does_not_report_update(self):
+        manager = UpdateManager()
+        fake_cfg = _FakeCfg()
+        fake_cfg.appVersion.value = "0.5.3.rc2"
+        release = {
+            "tag_name": "v0.5.3.rc2",
+            "html_url": "https://github.com/UF4OVER/UF4DigitalPower/releases/tag/v0.5.3.rc2",
+            "body": "",
+        }
+
+        with patch("app.manager.manager_update.CTX", SimpleNamespace(cfg=fake_cfg)), patch(
+            "app.manager.manager_update.firmware_manager.get_latest_local_release",
+            return_value=None,
+        ), patch("app.manager.manager_update.qconfig.set"), patch(
+            "app.manager.manager_update.urlopen", return_value=_FakeResponse(release)
+        ):
+            result = manager._perform_check(manual=True)
+
+        self.assertTrue(result.success)
+        self.assertFalse(result.has_changes)
+        self.assertEqual(result.snapshot.local_app_version, "0.5.3.rc2")
+        self.assertEqual(result.snapshot.latest_app_version, "v0.5.3.rc2")
+
+    def test_newer_rc_version_reports_update(self):
+        manager = UpdateManager()
+        fake_cfg = _FakeCfg()
+        fake_cfg.appVersion.value = "v0.5.3.rc1"
+        release = {
+            "tag_name": "v0.5.3.rc2",
+            "html_url": "https://github.com/UF4OVER/UF4DigitalPower/releases/tag/v0.5.3.rc2",
+            "body": "",
+        }
+
+        with patch("app.manager.manager_update.CTX", SimpleNamespace(cfg=fake_cfg)), patch(
+            "app.manager.manager_update.firmware_manager.get_latest_local_release",
+            return_value=None,
+        ), patch("app.manager.manager_update.qconfig.set"), patch(
+            "app.manager.manager_update.urlopen", return_value=_FakeResponse(release)
+        ):
+            result = manager._perform_check(manual=True)
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.has_changes)
 
 
 if __name__ == "__main__":

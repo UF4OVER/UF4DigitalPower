@@ -105,6 +105,11 @@ class DirPaths:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, destination)
 
+    def _copy_seed_dir_when_empty(self, source: Path, target: Path) -> None:
+        if target.exists() and any(target.iterdir()):
+            return
+        self._copy_seed_dir(source, target)
+
     # ---- public cached properties ----
 
     @cached_property
@@ -148,7 +153,7 @@ class DirPaths:
     def FirmwareDir(self) -> Path:
         firmware_dir = self._ensure_sub_dir(self.UserResourcesDir, "Firmware")
         bundled_firmware_dir = self.ResourcesDir / "Firmware"
-        self._copy_seed_dir(bundled_firmware_dir, firmware_dir)
+        self._copy_seed_dir_when_empty(bundled_firmware_dir, firmware_dir)
         return firmware_dir
 
     @cached_property
@@ -239,13 +244,13 @@ class F4CPConfig(QConfig):
     localAppVersion = ConfigItem("OldVersion", "OldLocalVersion", "")
     localUpperVersion = ConfigItem("OldVersion", "OldUpperVersion", "")
     localLowerVersion = ConfigItem("OldVersion", "OldLowerVersion", "")
-    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v0.5.3")
+    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v0.5.3.rc2")
     latestUpperVersion = ConfigItem("NewVersion", "NewUpperVersion", "v0.0.2")
     latestLowerVersion = ConfigItem("NewVersion", "NewLowerVersion", "v0.0.2")
 
     appYear = ConfigItem("Application", "Year", 2026)
     appAuthor = ConfigItem("Application", "Author", "UF4OVER")
-    appVersion = ConfigItem("Application", "Version", "0.5.3.rc1")
+    appVersion = ConfigItem("Application", "Version", "0.5.3.rc2")
     appHelpUrl = ConfigItem("Application", "HelpUrl", "https://update.hepi.ng/docs/help")
     appRepoUrl = ConfigItem("Application", "RepoUrl", "https://github.com/UF4OVER/UF4DigitalPower")
     appExampleUrl = ConfigItem("Application", "ExampleUrl", "https://github.com/UF4OVER/UF4DigitalPower")

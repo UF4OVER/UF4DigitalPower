@@ -47,7 +47,7 @@ ORDERED_FILES = [
     "app/core/utility.py",
     "app/devices/device_power.py",
     "app/devices/dummy_power_device.py",
-    "app/manager/manage_firmware.py",
+    "app/manager/manager_firmware.py",
     "app/manager/manager_update.py",
     "app/manager/manager_stylesheet.py",
     "app/manager/manager_font.py",
