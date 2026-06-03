@@ -15,7 +15,7 @@ import unittest
 
 from PyQt5.QtCore import QCoreApplication
 
-from session.session_daplink import (
+from app.session.session_daplink import (
     DaplinkProgrammerEventType,
     DaplinkPyocdSession,
     DaplinkRequestPayload,
@@ -83,4 +83,3 @@ class DaplinkStartupPreloadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

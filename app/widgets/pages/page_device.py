@@ -982,7 +982,7 @@ class DevicePage(ScrollArea):
         if not self._session or not self._session.is_open:
             return
         try:
-            from session.session_serial import SendEvent
+            from app.session.session_serial import SendEvent
             if isinstance(self._session, SerialSession):
                 QCoreApplication.postEvent(self._session, SendEvent(data))
             else:

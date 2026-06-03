@@ -20,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
-from widgets.pages import PowerPage
+from app.widgets.pages import PowerPage
 
 
 class _FakeScanner(QObject):
