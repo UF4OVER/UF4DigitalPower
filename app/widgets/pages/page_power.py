@@ -30,6 +30,7 @@ from qfluentwidgets import (
 from app.core.channel import ChannelConfig
 from app.core.data_hub import DataHub
 from app.core.utility import showMessage
+from app.controllers import PowerPageController
 from app.manager import StyleSheet
 
 from app.session import (
@@ -39,7 +40,7 @@ from app.session import (
 )
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
-from config import CTX, cfg
+from config import CTX
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 POWER_POLL_INTERVAL_MS = 500
@@ -473,6 +474,7 @@ class PowerPage(ScrollArea):
         self.setViewportMargins(0, 0, 0, 0)
         self.verticalScrollBar().valueChanged.connect(self._onScrollValueChanged)
 
+        self._controller = PowerPageController(self)
         self._bindSignals()
         self._applyDisconnectedState()
         StyleSheet.POWER_PAGE.apply(self)
@@ -610,37 +612,8 @@ class PowerPage(ScrollArea):
         self.chartCard.chart.set_live_updates_suspended(False)
 
     def _bindSignals(self) -> None:
-        self._client.log.connect(self._appendLog)
-        self._client.error.connect(self._onClientError)
-        self._client.connectionChanged.connect(self._onConnectionChanged)
-        self._client.statusUpdated.connect(self._updateStatusView)
-        self._client.debugSnapshotReady.connect(self._handleDebugSnapshotReady)
-        self._client.outputLimitsWritten.connect(self._onOutputLimitsWritten)
-        self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
-        self._client.powerStateWritten.connect(self._onPowerStateWritten)
-        self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
-        self._client.communicationFailureLimitReached.connect(self._disconnectAfterCommunicationFailures)
-
-        self.attachSessionRequested.connect(self._client.attach_session)
-        self.detachSessionRequested.connect(self._client.detach_session)
-        self.readStatusRequested.connect(self._client.request_read_status)
-        self.debugSnapshotRequested.connect(self._client.request_debug_snapshot)
-        self.outputLimitsRequested.connect(self._client.request_set_output_limits)
-        self.protectionValuesRequested.connect(self._client.request_set_protection_values)
-        self.powerStateRequested.connect(self._client.request_set_power_state)
-        self.startPollingRequested.connect(self._client.start_polling)
-        self.stopPollingRequested.connect(self._client.stop_polling)
-        self.refreshTargetButton.clicked.connect(self.refreshSerialPorts)
-        self.connectButton.clicked.connect(self.toggleConnection)
-        self.refreshButton.clicked.connect(self._readStatusOnce)
-        self.debugButton.clicked.connect(self._runDebugSnapshot)
-        self.autoPollSwitch.checkedChanged.connect(self._onAutoPollChanged)
-        self.parameterEditor.outputSwitch.checkedChanged.connect(self._onOutputSwitchChanged)
-        self.parameterEditor.applyOutputButton.clicked.connect(self._applyOutputLimits)
-        self.parameterEditor.applyProtectButton.clicked.connect(self._applyProtectionValues)
-        self.clearLogButton.clicked.connect(self.logEdit.clear)
-        self.mockButton.toggled.connect(self._setMockEnabled)
-        cfg.themeChanged.connect(self._onThemeChanged)
+        # 复杂信号注册下沉到 Controller，页面保留 UI 创建和状态渲染。
+        self._controller.bind()
 
     def _onThemeChanged(self, *_):
         StyleSheet.POWER_PAGE.apply(self)

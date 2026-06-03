@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PyQt5.QtCore import QCoreApplication, QTimer
+from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -35,6 +35,7 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
+from app.controllers import DaplinkPageController
 from config import CTX, logger
 
 from app.manager import StyleSheet, firmware_manager
@@ -78,8 +79,10 @@ class DaplinkPage(ScrollArea):
         self._applyTexts()
         StyleSheet.DAPLINK_PAGE.apply(self)
 
-        QTimer.singleShot(0, self.preloadPackTargets)
-        QTimer.singleShot(0, self.scanProbe)
+        # 页面创建控件和展示状态，Controller 负责统一连接用户动作。
+        self._controller = DaplinkPageController(self)
+        self._controller.bind()
+        self._controller.scheduleStartupTasks()
 
     def event(self, e):
         eventType = e.type()
@@ -134,11 +137,9 @@ class DaplinkPage(ScrollArea):
         probeRow.addWidget(self.probeCombo, 1)
 
         self.scanProbeBtn = PushButton(FIF.SYNC, "", self.connectCard)
-        self.scanProbeBtn.clicked.connect(self.scanProbe)
         probeRow.addWidget(self.scanProbeBtn)
 
         self.connectBtn = PrimaryPushButton(FIF.LINK, "", self.connectCard)
-        self.connectBtn.clicked.connect(self.readInfo)
         probeRow.addWidget(self.connectBtn)
         layout.addLayout(probeRow)
 
@@ -150,18 +151,15 @@ class DaplinkPage(ScrollArea):
         grid.addWidget(self.targetLabel, 0, 0)
         self.targetCombo = ComboBox(self.connectCard)
         self.targetCombo.setMinimumWidth(360)
-        self.targetCombo.currentIndexChanged.connect(self._onTargetChanged)
         grid.addWidget(self.targetCombo, 0, 1)
 
         self.reloadPackBtn = PushButton(FIF.ROTATE, "", self.connectCard)
-        self.reloadPackBtn.clicked.connect(self.reloadPackTargets)
         grid.addWidget(self.reloadPackBtn, 0, 2)
 
         self.targetFilterLabel = BodyLabel(self.connectCard)
         grid.addWidget(self.targetFilterLabel, 1, 0)
         self.targetFilterInput = LineEdit(self.connectCard)
         self.targetFilterInput.setText("G474CB")
-        self.targetFilterInput.textChanged.connect(self._applyTargetFilter)
         grid.addWidget(self.targetFilterInput, 1, 1)
 
         self.frequencyLabel = BodyLabel(self.connectCard)
@@ -259,17 +257,14 @@ class DaplinkPage(ScrollArea):
         self.firmwareSourceLabel = BodyLabel(self.downloadCard)
         sourceRow.addWidget(self.firmwareSourceLabel)
         self.firmwareSourceCombo = ComboBox(self.downloadCard)
-        self.firmwareSourceCombo.currentIndexChanged.connect(self._onFirmwareSourceChanged)
         sourceRow.addWidget(self.firmwareSourceCombo, 1)
         layout.addLayout(sourceRow)
 
         internalRow = QHBoxLayout()
         self.internalFirmwareCombo = ComboBox(self.downloadCard)
-        self.internalFirmwareCombo.currentIndexChanged.connect(self._onInternalFirmwareChanged)
         internalRow.addWidget(self.internalFirmwareCombo, 1)
 
         self.refreshFirmwareButton = PushButton(FIF.SYNC, "", self.downloadCard)
-        self.refreshFirmwareButton.clicked.connect(self._reloadInternalFirmwareOptions)
         internalRow.addWidget(self.refreshFirmwareButton)
         layout.addLayout(internalRow)
 
@@ -280,7 +275,6 @@ class DaplinkPage(ScrollArea):
         fileRow.addWidget(self.filePathInput, 1)
 
         self.browseButton = PushButton(FIF.FOLDER, "", self.downloadCard)
-        self.browseButton.clicked.connect(self.browseFile)
         fileRow.addWidget(self.browseButton)
         layout.addWidget(self.externalFileRowWidget)
 
@@ -313,7 +307,6 @@ class DaplinkPage(ScrollArea):
         grid.addWidget(self.resetAfterDownloadSwitch, 1, 2)
 
         self.downloadButton = PrimaryPushButton(FIF.DOWNLOAD, "", self.downloadCard)
-        self.downloadButton.clicked.connect(self.startDownload)
         grid.addWidget(self.downloadButton, 1, 3)
         layout.addLayout(grid)
 
@@ -338,11 +331,9 @@ class DaplinkPage(ScrollArea):
         titleRow.addStretch(1)
 
         self.clearLogButton = PushButton(FIF.BROOM, "", self.logCard)
-        self.clearLogButton.clicked.connect(self.clearLog)
         titleRow.addWidget(self.clearLogButton)
 
         self.saveLogButton = PushButton(FIF.SAVE, "", self.logCard)
-        self.saveLogButton.clicked.connect(self.saveLog)
         titleRow.addWidget(self.saveLogButton)
         layout.addLayout(titleRow)
 

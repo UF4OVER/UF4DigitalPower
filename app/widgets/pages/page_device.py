@@ -66,7 +66,7 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
-from config import cfg
+from app.controllers import DevicePageController
 from app.manager import StyleSheet
 from app.session import (
     ErrorEvent,
@@ -305,20 +305,9 @@ class DevicePage(ScrollArea):
         StyleSheet.DEVICE_PAGE.apply(self)
         self._applyLocalStyle()
 
-        cfg.themeChanged.connect(self._onThemeChanged)
-        self.refreshButton.clicked.connect(self.refreshCurrentConnectionTargets)
-        self.connectButton.clicked.connect(self.toggleConnection)
-        self.connectionTypeCombo.currentTextChanged.connect(self._onConnectionTypeChanged)
-        self.sendButton.clicked.connect(self.onSend)
-        self.clearButton.clicked.connect(lambda: self.logEdit.setPlainText(""))
-        self.modeCombo.currentIndexChanged.connect(self._applyMode)
-        self.addTlvBtn.clicked.connect(self._addDefaultTlvRow)
-        self.delTlvBtn.clicked.connect(self._deleteSelectedTlvRows)
-        self.exportTlvBtn.clicked.connect(self._exportTlvJsonToTx)
-        self.importTlvBtn.clicked.connect(self._importTlvJsonFromTx)
-        self.rxEventSignal.connect(self._appendLog)
-        self.stateSignal.connect(self._onState)
-        self.errSignal.connect(self._onError)
+        # 控制器集中处理页面事件绑定，避免初始化函数继续膨胀。
+        self._controller = DevicePageController(self)
+        self._controller.bind()
 
         self._applyTexts()
         self.refreshPorts()

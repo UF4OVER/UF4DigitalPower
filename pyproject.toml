@@ -52,6 +52,7 @@ packages = [
     "app",
 
     "app.core",
+    "app.controllers",
     "app.devices",
     "app.manager",
     "app.protocol",
