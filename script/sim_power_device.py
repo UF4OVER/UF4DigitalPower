@@ -22,8 +22,8 @@ import time
 from dataclasses import dataclass
 from enum import IntEnum
 
-from PyQt5.QtCore import QCoreApplication, QIODevice, QObject, QTimer
-from PyQt5.QtSerialPort import QSerialPort
+from PySide6.QtCore import QCoreApplication, QIODevice, QObject, QTimer
+from PySide6.QtSerialPort import QSerialPort
 
 logger = logging.getLogger("F4CP.sim_power_device")
 
@@ -595,7 +595,7 @@ def main() -> int:
         return 1
 
     app.aboutToQuit.connect(device.close)
-    return app.exec_()
+    return app.exec()
 
 
 if __name__ == "__main__":

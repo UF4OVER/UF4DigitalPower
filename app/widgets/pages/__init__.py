@@ -11,8 +11,8 @@
 #  @Python  : 3.10
 # -------------------------------
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QLabel
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel
 from qfluentwidgets import isDarkTheme
 
 from .page_device import *

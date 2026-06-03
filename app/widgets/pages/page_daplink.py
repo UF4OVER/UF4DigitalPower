@@ -16,9 +16,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PyQt5.QtCore import QCoreApplication
-from PyQt5.QtGui import QTextCursor
-from PyQt5.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import QCoreApplication
+from PySide6.QtGui import QTextCursor
+from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,

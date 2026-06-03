@@ -13,9 +13,9 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, StrongBodyLabel, isDarkTheme, setFont
 
 from app.widgets.chart.chart_model import ChartSnapshot

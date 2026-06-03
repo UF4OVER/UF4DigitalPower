@@ -13,9 +13,9 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from config import AUTHOR, FEEDBACK_URL, HELP_URL, VERSION, YEAR, cfg
 from app.manager import (

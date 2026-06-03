@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, Signal
 from qfluentwidgets import qconfig
 
 from config import (
@@ -106,7 +106,7 @@ class UpdateCheckFinishedEvent(QEvent):
 
 
 class UpdateCheckThread(QThread):
-	resultReady = pyqtSignal(object)
+	resultReady = Signal(object)
 
 	def __init__(self, manager: "UpdateManager", manual: bool, parent: QObject | None = None):
 		super().__init__(parent)

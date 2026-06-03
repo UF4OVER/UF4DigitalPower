@@ -11,9 +11,9 @@
 #  @Python  : 3.10
 # -------------------------------
 
-from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
-from PyQt5.QtGui import QColor, QDesktopServices, QFont, QImage
-from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import QSize, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -293,9 +293,9 @@ class FirmwareInfoCard(SimpleCardWidget):
 
 
 class FirmwareUpdateCard(HeaderCardWidget):
-    firmwareCheckRequested = pyqtSignal()
-    powerFirmwareDownloadRequested = pyqtSignal()
-    upperFirmwareDownloadRequested = pyqtSignal()
+    firmwareCheckRequested = Signal()
+    powerFirmwareDownloadRequested = Signal()
+    upperFirmwareDownloadRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)

@@ -16,8 +16,8 @@ import math
 from dataclasses import dataclass
 from typing import List
 
-from PyQt5.QtCore import Qt, QTimer, QRectF, pyqtSignal
-from PyQt5.QtGui import (
+from PySide6.QtCore import Qt, QTimer, QRectF, Signal
+from PySide6.QtGui import (
     QColor,
     QPainter,
     QPainterPath,
@@ -26,7 +26,7 @@ from PyQt5.QtGui import (
     QFont,
     QLinearGradient,
 )
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QWidget,
     QVBoxLayout,
@@ -93,7 +93,7 @@ class PackState:
 
 
 class WaterTankWidget(QWidget):
-    clicked = pyqtSignal()
+    clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -460,4 +460,4 @@ if __name__ == "__main__":
     window = DemoWindow()
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

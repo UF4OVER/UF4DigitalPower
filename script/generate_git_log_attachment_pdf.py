@@ -18,9 +18,9 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QMarginsF, QRectF
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QPageLayout, QPageSize, QPainter, QPdfWriter
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtCore import QMarginsF, QRectF
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPageLayout, QPageSize, QPainter, QPdfWriter
+from PySide6.QtWidgets import QApplication
 
 
 ROOT = Path(__file__).resolve().parents[1]

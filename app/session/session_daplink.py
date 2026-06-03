@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from typing import Optional
 from xml.etree import ElementTree as ET
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, QTimer, pyqtSignal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, QTimer, Signal
 
 from config import CTX, logger
 
@@ -279,7 +279,7 @@ class ActionFinishedEvent(DaplinkProgrammerEvent):
 
 
 class DaplinkActionThread(QThread):
-    resultReady = pyqtSignal(str, bool, int)
+    resultReady = Signal(str, bool, int)
 
     def __init__(self, action: str, session: "DaplinkPyocdSession", worker, parent: QObject | None = None):
         super().__init__(parent)

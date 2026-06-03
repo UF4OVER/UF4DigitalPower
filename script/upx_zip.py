@@ -18,13 +18,14 @@ Run after ``script/package_exe.ps1``::
     uv run python script/upx_zip.py
 
 What it does:
-1. Deletes unused Qt5 translations (5.2 MB)
+1. Deletes unused Qt6 translations (5.2 MB)
 2. Deletes QtQuick / QML DLLs (7.8 MB)
-3. Deletes unused Qt5 platform/plugin DLLs (~2 MB)
-4. Deletes pyOCD SVD debug data (14.5 MB)
-5. Deletes capstone disassembly DLL (7.2 MB)
-6. Strips CMSIS Pack files — keep STM32G474/H743/H750 related packs only
-7. UPX-compresses remaining .exe / .dll / .pyd files
+3. Deletes unused Qt6 platform/plugin DLLs (~2 MB)
+4. Deletes unused QtPdf / virtual keyboard / image-format files
+5. Deletes pyOCD SVD debug data (14.5 MB)
+6. Deletes capstone disassembly DLL (7.2 MB)
+7. Strips CMSIS Pack files — keep STM32G474/H743/H750 related packs only
+8. UPX-compresses remaining .exe / .dll / .pyd files
 """
 
 import os
@@ -35,22 +36,31 @@ from pathlib import Path
 
 # ── files / subdirs to delete ──────────────────────────────────────────────
 
-QT5_BIN_EXCLUDES = [
-    "Qt5Quick.dll",
-    "Qt5Qml.dll",
-    "Qt5QmlModels.dll",
-    "Qt5QmlWorkerScript.dll",
+QT6_BIN_EXCLUDES = [
+    "Qt6Pdf.dll",
+    "Qt6Quick.dll",
+    "Qt6Qml.dll",
+    "Qt6QmlMeta.dll",
+    "Qt6QmlModels.dll",
+    "Qt6QmlWorkerScript.dll",
+    "Qt6VirtualKeyboard.dll",
 ]
 
-QT5_PLUGIN_EXCLUDES = [
+QT6_PLUGIN_EXCLUDES = [
     "generic/qtuiotouchplugin.dll",
+    "platforms/qdirect2d.dll",
     "platforms/qminimal.dll",
     "platforms/qoffscreen.dll",
     "platforms/qwebgl.dll",
     "platformthemes/qxdgdesktopportal.dll",
+    "platforminputcontexts/qtvirtualkeyboardplugin.dll",
+    "imageformats/qgif.dll",
     "imageformats/qicns.dll",
+    "imageformats/qpdf.dll",
     "imageformats/qtga.dll",
+    "imageformats/qtiff.dll",
     "imageformats/qwbmp.dll",
+    "imageformats/qwebp.dll",
 ]
 
 LIB_EXCLUDES = [
@@ -59,6 +69,26 @@ LIB_EXCLUDES = [
 
 LIB_DLL_EXCLUDES = [
     "capstone.dll",
+]
+
+AGGRESSIVE_LIB_EXCLUDES = [
+    "libcrypto-3-x64.dll",
+    "libssl-3-x64.dll",
+]
+
+AGGRESSIVE_QT_BIN_EXCLUDES = [
+    "Qt6Network.dll",
+]
+
+AGGRESSIVE_QT_PYD_EXCLUDES = [
+    "QtNetwork.pyd",
+]
+
+AGGRESSIVE_QT_PLUGIN_EXCLUDES = [
+    "networkinformation/qnetworklistmanager.dll",
+    "tls/qcertonlybackend.dll",
+    "tls/qopensslbackend.dll",
+    "tls/qschannelbackend.dll",
 ]
 
 PACK_KEEP_KEYWORDS = ("g474", "h743", "h750")
@@ -83,7 +113,7 @@ def _delete(path: Path) -> bool:
 
 
 def delete_qt_translations(exe_dir: Path):
-    translations_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "translations"
+    translations_dir = exe_dir / "lib" / "PySide6" / "translations"
     if translations_dir.is_dir():
         size_mb = sum(f.stat().st_size for f in translations_dir.rglob("*.qm")) / (1024 * 1024)
         shutil.rmtree(translations_dir)
@@ -91,22 +121,22 @@ def delete_qt_translations(exe_dir: Path):
 
 
 def delete_qt_quick_dlls(exe_dir: Path):
-    bin_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "bin"
+    bin_dir = exe_dir / "lib" / "PySide6"
     total = 0
-    for name in QT5_BIN_EXCLUDES:
+    for name in QT6_BIN_EXCLUDES:
         path = bin_dir / name
         if path.is_file():
             total += path.stat().st_size
             path.unlink()
             print(f"  DEL DLL   {path}")
     if total:
-        print(f"[Qt5 bin]    deleted {total / (1024 * 1024):.1f} MB of QtQuick/QML DLLs")
+        print(f"[Qt6 bin]    deleted {total / (1024 * 1024):.1f} MB of QtQuick/QML DLLs")
 
 
 def delete_unused_qt_plugins(exe_dir: Path):
-    plugins_dir = exe_dir / "lib" / "PyQt5" / "Qt5" / "plugins"
+    plugins_dir = exe_dir / "lib" / "PySide6" / "plugins"
     total = 0
-    for rel in QT5_PLUGIN_EXCLUDES:
+    for rel in QT6_PLUGIN_EXCLUDES:
         path = plugins_dir / rel
         if path.is_file():
             total += path.stat().st_size
@@ -114,6 +144,25 @@ def delete_unused_qt_plugins(exe_dir: Path):
             print(f"  DEL plug  {path}")
     if total:
         print(f"[plugins]    deleted {total / (1024 * 1024):.1f} MB of unused Qt plugins")
+
+
+def delete_aggressive_qt_network(exe_dir: Path):
+    if os.environ.get("F4CP_AGGRESSIVE_TRIM") != "1":
+        return
+
+    print("[aggressive] trimming QtNetwork/OpenSSL files")
+    qt_dir = exe_dir / "lib" / "PySide6"
+    plugins_dir = qt_dir / "plugins"
+
+    for name in AGGRESSIVE_QT_BIN_EXCLUDES + AGGRESSIVE_QT_PYD_EXCLUDES:
+        _delete(qt_dir / name)
+
+    for rel in AGGRESSIVE_QT_PLUGIN_EXCLUDES:
+        _delete(plugins_dir / rel)
+
+    lib_dir = exe_dir / "lib"
+    for name in AGGRESSIVE_LIB_EXCLUDES:
+        _delete(lib_dir / name)
 
 
 def delete_lib_excludes(exe_dir: Path):
@@ -203,6 +252,7 @@ def main():
     delete_qt_translations(exe_dir)
     delete_qt_quick_dlls(exe_dir)
     delete_unused_qt_plugins(exe_dir)
+    delete_aggressive_qt_network(exe_dir)
     delete_lib_excludes(exe_dir)
     trim_cmsis_packs(exe_dir)
     compress_with_upx(exe_dir)

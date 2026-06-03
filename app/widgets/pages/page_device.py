@@ -19,9 +19,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
-from PyQt5.QtCore import QCoreApplication, QIODevice, QObject, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QCoreApplication, QIODevice, QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
+from PySide6.QtWidgets import (
     QGridLayout,
     QHeaderView,
     QHBoxLayout,
@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (
 )
 
 try:
-    from PyQt5.QtBluetooth import (
+    from PySide6.QtBluetooth import (
         QBluetoothAddress,
         QBluetoothDeviceDiscoveryAgent,
         QBluetoothLocalDevice,
@@ -265,9 +265,9 @@ class BluetoothSession(QObject):
 
 
 class DevicePage(ScrollArea):
-    rxEventSignal = pyqtSignal(str)
-    stateSignal = pyqtSignal(bool)
-    errSignal = pyqtSignal(str)
+    rxEventSignal = Signal(str)
+    stateSignal = Signal(bool)
+    errSignal = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)

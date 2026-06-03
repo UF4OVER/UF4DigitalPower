@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QWidget, QGridLayout
+from PySide6.QtWidgets import QWidget, QGridLayout
 
 from app.core.data_hub import DataHub
 from app.widgets.chart.chart_model import ChartModel

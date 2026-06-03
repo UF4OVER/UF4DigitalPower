@@ -14,12 +14,12 @@
 import sys
 import time
 
-from PyQt5.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent
 
 time_ = time.time()
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QApplication
 
 from app.manager import loadSavedFont, logger
 from ui import Window
@@ -49,8 +49,6 @@ if __name__ == "__main__":
     if cfg.highDpiScaling.value:
         logger.info("highDpiScaling is running")
         QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
-        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     logger.info("Application started")
     try:
@@ -60,7 +58,7 @@ if __name__ == "__main__":
         # w.show()
         logger.info(f"start time: {time.time() - time_}")
 
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
     except Exception as e:
         logger.error(e)
         sys.exit(-1)

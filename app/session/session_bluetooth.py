@@ -13,8 +13,8 @@
 
 from types import SimpleNamespace
 
-from PyQt5.QtBluetooth import QBluetoothSocket, QBluetoothAddress, QBluetoothServiceInfo, QBluetoothUuid
-from PyQt5.QtCore import QObject, QIODevice, QCoreApplication
+from PySide6.QtBluetooth import QBluetoothSocket, QBluetoothAddress, QBluetoothServiceInfo, QBluetoothUuid
+from PySide6.QtCore import QObject, QIODevice, QCoreApplication
 
 from config import logger
 from .session_serial import SerialState, StateEvent,TxEvent, SerialEventType, ErrorEvent, RxEvent

@@ -14,9 +14,9 @@
 import math
 from dataclasses import dataclass
 
-from PyQt5.QtCore import QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QBrush, QFont, QLinearGradient, QPainter, QPainterPath, QPen
-from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtCore import QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QBrush, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
@@ -384,10 +384,10 @@ class MetricTile(BatteryCardWidget):
 
 
 class BatteryPage(ScrollArea):
-    readBatteryRequested = pyqtSignal()
-    connectionRequested = pyqtSignal(str)
-    startPollingRequested = pyqtSignal(int)
-    stopPollingRequested = pyqtSignal()
+    readBatteryRequested = Signal()
+    connectionRequested = Signal(str)
+    startPollingRequested = Signal(int)
+    stopPollingRequested = Signal()
 
     POLL_INTERVAL_MS = 400
 

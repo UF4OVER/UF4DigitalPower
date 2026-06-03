@@ -16,9 +16,9 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PyQt5.QtCore import QMarginsF, QRectF
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QPainter, QPageLayout, QPageSize, QPdfWriter, QTextOption
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtCore import QMarginsF, QRectF
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPageLayout, QPageSize, QPdfWriter, QTextOption
+from PySide6.QtWidgets import QApplication
 
 
 ROOT = Path(__file__).resolve().parents[1]

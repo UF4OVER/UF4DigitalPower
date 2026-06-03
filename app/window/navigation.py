@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QWidget
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QWidget
 from qfluentwidgets import FluentIconBase, NavigationItemPosition
 
 from app.widgets.icon import UF4Icon

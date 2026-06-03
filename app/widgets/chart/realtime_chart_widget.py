@@ -16,8 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 import time
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
 from qfluentwidgets import isDarkTheme
 
 from app.widgets.chart.chart_value_panel import ChartValuePanel

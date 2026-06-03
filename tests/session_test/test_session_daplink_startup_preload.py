@@ -13,7 +13,7 @@
 
 import unittest
 
-from PyQt5.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication
 
 from app.session.session_daplink import (
     DaplinkProgrammerEventType,

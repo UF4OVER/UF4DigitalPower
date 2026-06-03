@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.5.4.rc1"
+version = "0.6.0.dev1"
 # dev1    开发快照，最早期，不稳定
 # a1       alpha 内测版，功能可能还没完整
 # b1       beta 测试版，功能基本有了，但可能有 bug
@@ -8,7 +8,7 @@ version = "0.5.4.rc1"
 # 无后缀   正式版
 description = "power management system"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [
@@ -16,15 +16,18 @@ authors = [
 ]
 
 dependencies = [
-    "cx-freeze>=8.5.3",
-    "PyQt5>=5.15.2",
-    "pyocd>=0.44.0",
-    "pyqt-fluent-widgets>=1.11.2",
+    "cx-freeze>=8.6.4",
+    "pyocd>=0.44.1",
     "pyqtgraph>=0.14.0",
+    "pyside6>=6.11.1",
+    "pyside6-fluent-widgets>=1.11.2",
 ]
 
 [tool.uv]
-constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
+constraint-dependencies = ["pyside6 <= 6.11.1"]
+required-environments = [
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+]
 
 
 [tool.cxfreeze]
@@ -38,9 +41,15 @@ executables = [
 build_exe = "build/exe"
 
 includes = [
-    "PyQt5.QtCore",
-    "PyQt5.QtGui",
-    "PyQt5.QtWidgets",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtSerialPort",
+    "PySide6.QtBluetooth",
+    "PySide6.QtOpenGL",
+    "PySide6.QtOpenGLWidgets",
+    "PySide6.QtSvg",
+    "PySide6.QtSvgWidgets",
     "pyocd",
     "qfluentwidgets",
     "numpy",
@@ -78,7 +87,7 @@ include_files = [
 zip_include_packages = ["*"]
 
 zip_exclude_packages = [
-   "PyQt5",
+   "PySide6",
    "lark",
    "pyocd",
    "cmsis_pack_manager",
@@ -99,20 +108,19 @@ excludes = [
     "capstone",
     "capstone.lib",
     # --- QtQuick / QML (not used) ---
-    "PyQt5.QtQuick",
-    "PyQt5.QtQml",
-    "PyQt5.QtQuickWidgets",
+    "PySide6.QtQuick",
+    "PySide6.QtQml",
+    "PySide6.QtQuickWidgets",
     # --- Other unused Qt modules ---
-    "PyQt5.QtPrintSupport",
-    "PyQt5.QtSql",
-    "PyQt5.QtTest",
-    "PyQt5.QtHelp",
-    "PyQt5.QtMultimedia",
-    "PyQt5.QtMultimediaWidgets",
-    "PyQt5.QtPositioning",
-    "PyQt5.QtSensors",
-    "PyQt5.QtTextToSpeech",
-    "PyQt5.QtWinExtras",
+    "PySide6.QtPrintSupport",
+    "PySide6.QtSql",
+    "PySide6.QtTest",
+    "PySide6.QtHelp",
+    "PySide6.QtMultimedia",
+    "PySide6.QtMultimediaWidgets",
+    "PySide6.QtPositioning",
+    "PySide6.QtSensors",
+    "PySide6.QtTextToSpeech",
 ]
 
 optimize = 2

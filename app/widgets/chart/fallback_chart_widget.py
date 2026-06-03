@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import bisect
 
-from PyQt5.QtCore import QEvent, QPoint, Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
-from PyQt5.QtWidgets import QWidget
+from PySide6.QtCore import QEvent, QPoint, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ToolTip, isDarkTheme
 
 from app.widgets.chart.chart_model import ChartModel, ChartSnapshot
@@ -36,7 +36,7 @@ class ChartHoverToolTip(ToolTip):
 class FallbackChartWidget(QWidget):
     """Pure Qt realtime chart with capped repaint and cached draw paths."""
 
-    snapshotUpdated = pyqtSignal(object)
+    snapshotUpdated = Signal(object)
 
     def __init__(self, chart_model: ChartModel, parent=None):
         super().__init__(parent)
@@ -67,7 +67,7 @@ class FallbackChartWidget(QWidget):
         self._initInteractionTimer()
 
     def _initInteractionTimer(self) -> None:
-        from PyQt5.QtCore import QTimer
+        from PySide6.QtCore import QTimer
 
         self._interaction_timer = QTimer(self)
         self._interaction_timer.setSingleShot(True)

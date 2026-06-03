@@ -16,9 +16,9 @@ import math
 import time
 from dataclasses import dataclass
 
-from PyQt5.QtCore import QMetaObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import QMetaObject, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel, CardWidget, CaptionLabel, ComboBox, DoubleSpinBox,
     FluentIcon as FIF, PillPushButton, PrimaryPushButton, PushButton,
@@ -413,15 +413,15 @@ class TelemetryChartCard(CardWidget):
 
 
 class PowerPage(ScrollArea):
-    attachSessionRequested = pyqtSignal(object)
-    detachSessionRequested = pyqtSignal()
-    readStatusRequested = pyqtSignal()
-    debugSnapshotRequested = pyqtSignal()
-    outputLimitsRequested = pyqtSignal(int, int, bool)
-    protectionValuesRequested = pyqtSignal(int, int, int, int)
-    powerStateRequested = pyqtSignal(bool)
-    startPollingRequested = pyqtSignal(int)
-    stopPollingRequested = pyqtSignal()
+    attachSessionRequested = Signal(object)
+    detachSessionRequested = Signal()
+    readStatusRequested = Signal()
+    debugSnapshotRequested = Signal()
+    outputLimitsRequested = Signal(int, int, bool)
+    protectionValuesRequested = Signal(int, int, int, int)
+    powerStateRequested = Signal(bool)
+    startPollingRequested = Signal(int)
+    stopPollingRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)

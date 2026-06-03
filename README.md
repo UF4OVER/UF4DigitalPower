@@ -1,6 +1,6 @@
 # F4CP
 
-F4CP 是 `UF4DigitalPower` 项目的 Windows 上位机，面向数字电源调试、监控、参数配置和固件烧录。应用基于 Python、PyQt5、qfluentwidgets、pyqtgraph 和 pyOCD 构建，入口为 `start.py`。
+F4CP 是 `UF4DigitalPower` 项目的 Windows 上位机，面向数字电源调试、监控、参数配置和固件烧录。应用基于 Python、PySide6、qfluentwidgets、pyqtgraph 和 pyOCD 构建，入口为 `start.py`。
 
 当前主窗口类为 `Window(MSFluentWindow)`，默认导航包含：
 

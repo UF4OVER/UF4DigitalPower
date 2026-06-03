@@ -16,9 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 import textwrap
 
-from PyQt5.QtCore import QMarginsF, QRectF
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QPageLayout, QPageSize, QPainter, QPdfWriter
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtCore import QMarginsF, QRectF
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPageLayout, QPageSize, QPainter, QPdfWriter
+from PySide6.QtWidgets import QApplication
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +64,7 @@ FEATURES = [
 
 ENV_LINES = [
     "开发语言为 Python，主要使用面向对象方式组织页面、会话和管理模块。",
-    "图形界面采用 PyQt5 构建，控件风格采用 qfluentwidgets。",
+    "图形界面采用 PySide6 构建，控件风格采用 qfluentwidgets。",
     "固件烧录能力依赖 pyOCD 与本地 CMSIS Pack 设备支持包。",
     "实时曲线显示使用自定义数据模型和 Qt 绘图控件实现。",
     "Windows 打包采用 cx_Freeze，输出桌面可执行程序及配套资源目录。",
@@ -149,7 +149,7 @@ def build_pages() -> list[list[str]]:
         "软件用途：用于 UF4DigitalPower 数字电源设备的监控、调试、参数配置和固件维护。",
         "运行平台：Windows 10 或 Windows 11 桌面操作系统。",
         "开发语言：Python。",
-        "主要技术：PyQt5、qfluentwidgets、pyOCD、PyOpenGL、cx_Freeze。",
+        "主要技术：PySide6、qfluentwidgets、pyOCD、PyOpenGL、cx_Freeze。",
         "软件界面：采用多页面导航结构，包含引导、串口、设备、烧录和设置页面。",
         "适用对象：数字电源研发人员、测试人员、嵌入式工程师和设备维护人员。",
         "开发目标：降低数字电源调试复杂度，提高状态观测、参数调整和固件维护效率。",
@@ -312,7 +312,7 @@ def build_pages() -> list[list[str]]:
     pages.append(make_page("第十五章 文档结论", [
         "F4CP 软件围绕数字电源设备的上位机控制需求进行设计和实现。",
         "软件提供设备连接、协议调试、状态监测、参数配置、实时曲线和固件烧录功能。",
-        "软件采用 Python 和 PyQt5 技术栈，适用于 Windows 桌面环境。",
+        "软件采用 Python 和 PySide6 技术栈，适用于 Windows 桌面环境。",
         "软件通过模块化结构组织源码，便于功能维护和后续扩展。",
         "软件通过专用电源协议实现结构化数据读取和参数写入。",
         "软件通过 DAPLink 烧录模块提升固件维护效率。",

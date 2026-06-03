@@ -16,9 +16,9 @@ from __future__ import annotations
 import bisect
 
 import pyqtgraph as pg
-from PyQt5.QtCore import QPoint, Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QFont
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QColor, QFont
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 from qfluentwidgets import isDarkTheme
 
 from app.widgets.chart.chart_model import ChartModel, ChartSnapshot
@@ -69,7 +69,7 @@ class _InteractivePlotWidget(pg.PlotWidget):
 class PyQtGraphChartWidget(QWidget):
     """PyQtGraph realtime chart with the same interaction contract as the old chart."""
 
-    snapshotUpdated = pyqtSignal(object)
+    snapshotUpdated = Signal(object)
 
     def __init__(self, chart_model: ChartModel, parent=None):
         super().__init__(parent)

@@ -25,7 +25,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, Signal
 from qfluentwidgets import qconfig
 
 from config import (
@@ -87,7 +87,7 @@ class FirmwareCheckFinishedEvent(QEvent):
 
 
 class FirmwareCheckThread(QThread):
-    resultReady = pyqtSignal(object)
+    resultReady = Signal(object)
 
     def run(self) -> None:
         try:
@@ -111,7 +111,7 @@ class FirmwareCheckThread(QThread):
 
 
 class FirmwareDownloadThread(QThread):
-    resultReady = pyqtSignal(object)
+    resultReady = Signal(object)
 
     def __init__(self, kind: str, parent: QObject | None = None):
         super().__init__(parent)

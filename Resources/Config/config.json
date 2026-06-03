@@ -7,7 +7,7 @@
         "HelpUrl": "https://update.hepi.ng/docs/help",
         "ReleaseUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases/latest",
         "RepoUrl": "https://github.com/UF4OVER/UF4DigitalPower",
-        "Version": "0.5.4.rc1",
+        "Version": "0.6.0.dev1",
         "Year": 2026,
         "ZhSupportUrl": "https://github.com/UF4OVER/UF4DigitalPower"
     },
@@ -22,7 +22,6 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
-            "Bender",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
@@ -44,7 +43,7 @@
         "NewUpperVersion": ""
     },
     "OldVersion": {
-        "OldLocalVersion": "0.5.4.rc1",
+        "OldLocalVersion": "0.6.0.dev1",
         "OldLowerVersion": "",
         "OldUpperVersion": ""
     }

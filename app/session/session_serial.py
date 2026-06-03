@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Callable, Optional
 
-from PyQt5.QtCore import QIODevice, QEvent, QCoreApplication, QObject, QMutex, QMutexLocker
-from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
+from PySide6.QtCore import QIODevice, QEvent, QCoreApplication, QObject, QMutex, QMutexLocker
+from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 
 from config import logger
 

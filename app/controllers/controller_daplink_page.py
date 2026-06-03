@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt5.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, QTimer
 
 from config import cfg
 

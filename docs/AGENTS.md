@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-- `F4CP` 是 Windows 优先的 PyQt5 桌面应用，基于 `qfluentwidgets` 构建。
+- `F4CP` 是 Windows 优先的 PySide6 桌面应用，基于 `qfluentwidgets` 构建。
 - 真实入口是 `start.py`，主窗口类是 `Window(MSFluentWindow)`。
 - 页面位于 `App/Pages/`，核心会话、协议和管理器位于 `App/Core/`。
 - 运行时路径的事实来源是 `Config/config.py`，它会根据 `sys.frozen` 在源码目录和冻结后的 exe 目录之间切换。

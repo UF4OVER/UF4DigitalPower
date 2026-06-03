@@ -16,7 +16,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 from qfluentwidgets import CardWidget
 
 from app.widgets.pages.page_device import DevicePage

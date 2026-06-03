@@ -18,8 +18,8 @@ from dataclasses import dataclass, replace
 from enum import IntEnum
 from typing import Callable, Iterable
 
-from PyQt5.QtCore import QCoreApplication, QEventLoop, QIODevice, QObject, QTimer, pyqtSignal, pyqtSlot
-from PyQt5.QtSerialPort import QSerialPort
+from PySide6.QtCore import QCoreApplication, QEventLoop, QIODevice, QObject, QTimer, Signal, Slot
+from PySide6.QtSerialPort import QSerialPort
 
 from app.session import (
     ErrorEvent,
@@ -604,16 +604,16 @@ class _PendingRequest:
 
 
 class F4CPPowerClient(QObject):
-    log = pyqtSignal(str)
-    error = pyqtSignal(str)
-    connectionChanged = pyqtSignal(bool)
-    statusUpdated = pyqtSignal(object)
-    debugSnapshotReady = pyqtSignal(object)
-    outputLimitsWritten = pyqtSignal()
-    protectionValuesWritten = pyqtSignal()
-    powerStateWritten = pyqtSignal(bool)
-    writeFailureLimitReached = pyqtSignal()
-    communicationFailureLimitReached = pyqtSignal(str)
+    log = Signal(str)
+    error = Signal(str)
+    connectionChanged = Signal(bool)
+    statusUpdated = Signal(object)
+    debugSnapshotReady = Signal(object)
+    outputLimitsWritten = Signal()
+    protectionValuesWritten = Signal()
+    powerStateWritten = Signal(bool)
+    writeFailureLimitReached = Signal()
+    communicationFailureLimitReached = Signal(str)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -650,7 +650,7 @@ class F4CPPowerClient(QObject):
     def is_busy(self) -> bool:
         return self._pending is not None
 
-    @pyqtSlot(object)
+    @Slot(object)
     def attach_session(self, session: SerialSession) -> None:
         """接管一个已经打开的串口会话，并把后续串口事件转发到本客户端。"""
         self._shutting_down = False
@@ -666,7 +666,7 @@ class F4CPPowerClient(QObject):
         self.connectionChanged.emit(session.is_open)
         self.log.emit(f"Attached to serial session on {session.cfg.port}")
 
-    @pyqtSlot()
+    @Slot()
     def detach_session(self) -> None:
         """解除串口绑定，同时清理轮询、挂起请求和上一帧缓存。"""
         self.stop_polling()
@@ -686,13 +686,13 @@ class F4CPPowerClient(QObject):
         self._stop_raw_stream_state()
         self.connectionChanged.emit(False)
 
-    @pyqtSlot()
+    @Slot()
     def shutdown(self) -> None:
         self._shutting_down = True
         self.stop_polling()
         self.detach_session()
 
-    @pyqtSlot(int)
+    @Slot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
         """启动状态刷新。
 
@@ -717,7 +717,7 @@ class F4CPPowerClient(QObject):
         if self.is_connected and not self.is_busy:
             QTimer.singleShot(0, self._poll_once)
 
-    @pyqtSlot()
+    @Slot()
     def stop_polling(self) -> None:
         """停止自动刷新，并取消等待恢复轮询的延迟任务。"""
         if self._stream_enabled:
@@ -730,7 +730,7 @@ class F4CPPowerClient(QObject):
         self._poll_requested_interval_ms = None
         self._poll_resume_interval_ms = None
 
-    @pyqtSlot()
+    @Slot()
     def request_read_status(self) -> None:
         if not self.is_connected or self.is_busy:
             return
@@ -739,7 +739,7 @@ class F4CPPowerClient(QObject):
         except Exception as exc:
             self.error.emit(str(exc))
 
-    @pyqtSlot()
+    @Slot()
     def request_debug_snapshot(self) -> None:
         if not self.is_connected or self.is_busy:
             return
@@ -749,7 +749,7 @@ class F4CPPowerClient(QObject):
         except Exception as exc:
             self.error.emit(str(exc))
 
-    @pyqtSlot(int, int, bool)
+    @Slot(int, int, bool)
     def request_set_output_limits(self, voltage_mv: int, current_ma: int, enabled: bool) -> None:
         """写入输出电压/电流限制，并按界面开关同步输出状态。"""
         def _write() -> None:
@@ -766,7 +766,7 @@ class F4CPPowerClient(QObject):
 
         self._run_write_transaction("output write", _write)
 
-    @pyqtSlot(int, int, int, int)
+    @Slot(int, int, int, int)
     def request_set_protection_values(self, ovp_mv: int, ocp_ma: int, otp_mc: int, fan_value: int) -> None:
         """写入 OVP/OCP/OTP 和风扇目标值，这些保护参数一起提交更不容易状态撕裂。"""
         def _write() -> None:
@@ -784,7 +784,7 @@ class F4CPPowerClient(QObject):
 
         self._run_write_transaction("protection write", _write)
 
-    @pyqtSlot(bool)
+    @Slot(bool)
     def request_set_power_state(self, enabled: bool) -> None:
         def _write() -> None:
             self.set_power_state(enabled, timeout_ms=2000)
@@ -1193,7 +1193,7 @@ class F4CPPowerClient(QObject):
 
         QCoreApplication.postEvent(self._session, SendEvent(frame))
         self.log.emit(f"REQ cmd=0x{int(cmd):02X} seq={seq} len={len(payload)}")
-        pending.loop.exec_()
+        pending.loop.exec()
 
         timer.stop()
         timer.deleteLater()

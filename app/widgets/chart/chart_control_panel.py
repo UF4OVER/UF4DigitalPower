@@ -13,8 +13,8 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QWidget, QHBoxLayout
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QWidget, QHBoxLayout
 from qfluentwidgets import PillPushButton, PrimaryPushButton
 
 
@@ -25,8 +25,8 @@ class ChartControlPanel(QWidget):
     所有按钮使用 qfluentwidgets 控件，不再手写按钮 QSS。
     """
 
-    groupChanged = pyqtSignal(object)
-    exportRequested = pyqtSignal()
+    groupChanged = Signal(object)
+    exportRequested = Signal()
 
     _GROUPS = (
         ("all", "全部", None),

@@ -17,15 +17,15 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import QApplication
 
 from app.widgets.pages import PowerPage
 
 
 class _FakeScanner(QObject):
-    device_connected = pyqtSignal(object)
-    device_disconnected = pyqtSignal()
+    device_connected = Signal(object)
+    device_disconnected = Signal()
 
     def __init__(self, vid: int, pid: int, parent=None):
         super().__init__(parent)

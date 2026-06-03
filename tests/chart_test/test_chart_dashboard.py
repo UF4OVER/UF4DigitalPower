@@ -15,8 +15,8 @@
 
 import sys
 
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout
 
 from app.core.data_hub import DataHub
 from app.devices.dummy_power_device import DummyPowerDevice
@@ -55,7 +55,7 @@ def main():
     window = DemoWindow()
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

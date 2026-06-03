@@ -16,7 +16,7 @@ import unittest
 from types import SimpleNamespace
 from typing import cast
 
-from PyQt5.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication
 
 from app.session import (
     F4CPPowerClient,

@@ -24,9 +24,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from PyQt5.QtCore import QPointF, QRectF, Qt
-from PyQt5.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
-from PyQt5.QtWidgets import QFrame
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QFrame
 
 
 def mkPen(color=None, width: int = 1, style=Qt.SolidLine):

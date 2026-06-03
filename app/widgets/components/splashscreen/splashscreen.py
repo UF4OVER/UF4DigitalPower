@@ -11,9 +11,9 @@
 #  @Python  : 3.10
 # -------------------------------
 
-from PyQt5.QtCore import QEventLoop, QSize, QTimer
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QEventLoop, QSize, QTimer
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication, QWidget
 
 from qfluentwidgets import SplashScreen
 from qframelesswindow import StandardTitleBar

@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtGui import QGuiApplication, QIcon
 
 from config import AppIconPath
 
@@ -17,8 +16,12 @@ class WindowShellMixin:
         self.centerOnScreen()
 
     def centerOnScreen(self) -> None:
-        desktop = QApplication.desktop().availableGeometry()
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+
+        desktop = screen.availableGeometry()
         self.move(
-            desktop.width() // 2 - self.width() // 2,
-            desktop.height() // 2 - self.height() // 2,
+            desktop.x() + desktop.width() // 2 - self.width() // 2,
+            desktop.y() + desktop.height() // 2 - self.height() // 2,
         )

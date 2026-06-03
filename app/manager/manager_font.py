@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt5.QtGui import QFontDatabase
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtGui import QFontDatabase
+from PySide6.QtWidgets import QApplication
 from qfluentwidgets import qconfig
 
 from config import CTX, cfg, logger

@@ -18,7 +18,7 @@ import sys
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
-from PyQt5.QtCore import pyqtSignal
+from PySide6.QtCore import Signal
 from qfluentwidgets import (
     BoolValidator,
     ConfigItem,
@@ -261,7 +261,7 @@ class F4CPConfig(QConfig):
     fontFile = ConfigItem("Appearance", "FontFile", "__system__")
     fontFamily = ConfigItem("Appearance", "FontFamily", "")
 
-    appRestartSig = pyqtSignal()
+    appRestartSig = Signal()
 
 
 # ============================================================================

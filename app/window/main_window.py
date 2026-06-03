@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtWidgets import QApplication
 from qfluentwidgets import MSFluentWindow
 
 from app.widgets.components import DynamicIsland, createSplashScreen
