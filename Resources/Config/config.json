@@ -16,7 +16,6 @@
         "UpdateUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases"
     },
     "MainWindow": {
-        "EnableAcrylicBackground": false,
         "HighDpiScaling": true,
         "MicaEnabled": true
     },
@@ -27,7 +26,7 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
-            "Blender Pro Book",
+            "Bender",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
@@ -36,8 +35,8 @@
         "ThemeMode": "Dark"
     },
     "Appearance": {
-        "FontFamily": "Blender Pro Book",
-        "FontFile": "Blender.otf"
+        "FontFamily": "Bender",
+        "FontFile": "Bender.otf"
     },
     "NewVersion": {
         "NewLocalVersion": "v0.5.3.rc2",

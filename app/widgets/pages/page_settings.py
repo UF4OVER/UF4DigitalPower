@@ -96,6 +96,7 @@ class SettingsPage(ScrollArea):
         self.themeColorCard = CustomColorSettingCard(cfg.themeColor, FIF.PALETTE, '主题色', '调整应用的主色调', self.appearanceGroup)
         self.fontCard = ComboSettingCard(FIF.FONT, '全局字体', '选择 Resources/Font 中的字体，当前会话立即应用。', self.appearanceGroup)
 
+
         self.behaviorGroup = SettingCardGroup('启动', self.scrollWidget)
         self.updateOnStartUpCard = SwitchSettingCard(
             FIF.UPDATE,

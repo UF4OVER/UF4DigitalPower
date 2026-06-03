@@ -231,7 +231,6 @@ def _is_win11() -> bool:
 
 class F4CPConfig(QConfig):
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", _is_win11(), BoolValidator())
-    enableAcrylicBackground = ConfigItem("MainWindow", "EnableAcrylicBackground", False, BoolValidator())
     highDpiScaling = ConfigItem("MainWindow", "HighDpiScaling", True, BoolValidator(), restart=True)
 
     checkUpdateAtStartUp = ConfigItem("Update", "CheckUpdateAtStartUp", True, BoolValidator())

@@ -107,10 +107,15 @@ class AppInfoCard(SimpleCardWidget):
         self.descriptionLabel = BodyLabel(self)
         self.descriptionLabel.setWordWrap(True)
 
-        self.tagButton = PillPushButton(self)
-        self.tagButton.setCheckable(False)
-        setFont(self.tagButton, 12)
-        self.tagButton.setFixedSize(80, 32)
+        self.tagButton1 = PillPushButton(self)
+        self.tagButton1.setCheckable(False)
+        setFont(self.tagButton1, 12)
+        self.tagButton1.setFixedSize(80, 32)
+
+        self.tagButton2 = PillPushButton(self)
+        self.tagButton2.setCheckable(False)
+        setFont(self.tagButton2, 12)
+        self.tagButton2.setFixedSize(80, 32)
 
         self.shareButton = TransparentToolButton(FluentIcon.SHARE, self)
         self.shareButton.setFixedSize(32, 32)
@@ -156,8 +161,10 @@ class AppInfoCard(SimpleCardWidget):
         self.vBoxLayout.addSpacing(12)
         self.buttonLayout.setContentsMargins(0, 0, 0, 0)
         self.vBoxLayout.addLayout(self.buttonLayout)
-        self.buttonLayout.addWidget(self.tagButton, 0, Qt.AlignLeft)
-        self.buttonLayout.addWidget(self.shareButton, 0, Qt.AlignRight)
+        self.buttonLayout.addWidget(self.tagButton1, 0, Qt.AlignLeft)
+        self.buttonLayout.addWidget(self.tagButton2, 0, Qt.AlignLeft)
+
+        self.buttonLayout.addWidget(self.shareButton, 1, Qt.AlignRight)
 
     def applyTexts(self):
         if not self.installButton.isEnabled():
@@ -169,8 +176,8 @@ class AppInfoCard(SimpleCardWidget):
         self.descriptionLabel.setText(
             "Fluor4CellPower 是一个多功能上位机工具，提供串口通信、数据可视化和设备管理能力，用于电子设备调试和监控。"
         )
-        self.tagButton.setText('功能板')
-
+        self.tagButton1.setText('稳定版')
+        self.tagButton2.setText('上位机')
     def setCheckInProgress(self, checking: bool) -> None:
         self.installButton.setEnabled(not checking)
         self.applyTexts()
