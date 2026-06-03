@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.5.3.rc2"
+version = "0.5.4.rc1"
 # dev1    开发快照，最早期，不稳定
 # a1       alpha 内测版，功能可能还没完整
 # b1       beta 测试版，功能基本有了，但可能有 bug
@@ -52,11 +52,13 @@ packages = [
     "app",
 
     "app.core",
+    "app.controllers",
     "app.devices",
     "app.manager",
     "app.protocol",
     "app.session",
     "app.widgets",
+    "app.window",
 
     "app.widgets.chart",
     "app.widgets.icon",
@@ -64,12 +66,12 @@ packages = [
 
     "config"
 ]
-
 include_files = [
     ["Resources/assets", "Resources/assets"],
     ["Resources/font", "Resources/font"],
     ["Resources/theme", "Resources/theme"],
     ["Resources/tools", "Resources/tools"],
+    ["Resources/Config", "Resources/Config"],
 ]
 
 # Qt/GUI 相关建议不要进 zip（减少插件/资源加载问题；也便于排查缺文件）

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/24
-#  @FileName: channel.py.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: channel.py
+#  @FileType: 核心基础设施文件，提供设备、数据和通用工具能力
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 数据通道
-#  @Python  : 
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
 
 from dataclasses import dataclass

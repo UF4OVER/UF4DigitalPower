@@ -1,3 +1,16 @@
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: test_page_power_connection_modes.py
+#  @FileType: 自动化测试文件，用来守住关键功能行为
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 import os
 import unittest
 from unittest.mock import patch
@@ -7,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
-from widgets.pages import PowerPage
+from app.widgets.pages import PowerPage
 
 
 class _FakeScanner(QObject):

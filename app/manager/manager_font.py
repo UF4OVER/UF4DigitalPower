@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: manager_font.py
+#  @FileType: 字体管理文件，负责字体发现、保存和应用
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from __future__ import annotations
 
 from dataclasses import dataclass

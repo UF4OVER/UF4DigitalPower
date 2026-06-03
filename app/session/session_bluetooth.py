@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/14
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: session_bluetooth.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @FileType: 蓝牙会话文件，负责蓝牙通道的占位和扩展
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 
-#  @Python  : 
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
+
 from types import SimpleNamespace
 
 from PyQt5.QtBluetooth import QBluetoothSocket, QBluetoothAddress, QBluetoothServiceInfo, QBluetoothUuid

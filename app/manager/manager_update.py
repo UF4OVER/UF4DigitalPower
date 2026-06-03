@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: manager_update.py
+#  @FileType: 软件更新管理文件，负责应用和固件版本检查
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
 
 from __future__ import annotations
 
 import configparser
 import json
+import re
 import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -11,6 +23,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
+from qfluentwidgets import qconfig
 
 from config import (
 	CTX,
@@ -20,7 +33,7 @@ from config import (
 	VERSION_REMOTE_SECTION,
 	logger,
 )
-from .manage_firmware import firmware_manager
+from .manager_firmware import firmware_manager
 
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 
@@ -28,6 +41,38 @@ UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 def _normalize_version(value: object, fallback: str = "--") -> str:
 	text = str(value or "").strip()
 	return text or fallback
+
+
+def _canonical_version(value: object) -> str:
+	"""把 v0.5.3.rc2 / 0.5.3-rc2 这类写法统一成可比较的字符串。"""
+	text = str(value or "").strip().lower()
+	if not text or text == "--":
+		return ""
+	text = text.lstrip("v").replace("-", ".").replace("_", ".")
+	text = re.sub(r"\.?(rc|beta|b|alpha|a|dev)\.?", r".\1", text)
+	return ".".join(part for part in text.split(".") if part)
+
+
+def _version_is_newer(remote: object, local: object) -> bool:
+	"""判断远程版本是否比本地新；版本解析失败时退回到标准化字符串比较。"""
+	remote_text = _canonical_version(remote)
+	local_text = _canonical_version(local)
+	if not remote_text:
+		return False
+	if not local_text:
+		return True
+	if remote_text == local_text:
+		return False
+
+	try:
+		from packaging.version import InvalidVersion, Version
+
+		try:
+			return Version(remote_text) > Version(local_text)
+		except InvalidVersion:
+			return remote_text != local_text
+	except Exception:
+		return remote_text != local_text
 
 
 @dataclass(frozen=True)
@@ -69,10 +114,11 @@ class UpdateCheckThread(QThread):
 		self.manual = manual
 
 	def run(self) -> None:
+		"""后台执行更新检查，失败时也返回一个可显示的结果对象。"""
 		try:
-			result = self.manager._perform_check(self.manual)
-		except Exception:
-			logger.exception("Unexpected error during app update check")
+			result = self.manager._perform_check(self.manual)  # NOQA
+		except Exception as e:
+			logger.exception(f"{self.__class__.__name__}: Unexpected error during app update check :{e}")
 			result = UpdateCheckResult(
 				success=False,
 				manual=self.manual,
@@ -91,31 +137,59 @@ class UpdateManager:
 		return bool(self._worker and self._worker.isRunning())
 
 	def get_cached_versions(self) -> FirmwareVersionSnapshot:
+		"""读取当前缓存版本。
+
+		本地固件版本优先从实际固件目录推断，配置项只作为兜底显示。
+		"""
 		cfg = CTX.cfg
 		local_upper = firmware_manager.get_latest_local_release("Upper")
 		local_lower = firmware_manager.get_latest_local_release("Power")
+		local_app_version = _normalize_version(cfg.appVersion.value)
+		local_upper_version = _normalize_version(
+			local_upper.version if local_upper else cfg.localUpperVersion.value
+		)
+		local_lower_version = _normalize_version(
+			local_lower.version if local_lower else cfg.localLowerVersion.value
+		)
+		self._sync_local_versions_to_config(
+			local_app_version,
+			local_upper_version,
+			local_lower_version,
+		)
+		latest_app_version = _normalize_version(cfg.latestAppVersion.value)
+		latest_upper_version = _normalize_version(cfg.latestUpperVersion.value, local_upper_version)
+		if latest_upper_version == "--":
+			latest_upper_version = local_upper_version
+		latest_lower_version = _normalize_version(cfg.latestLowerVersion.value, local_lower_version)
+		if latest_lower_version == "--":
+			latest_lower_version = local_lower_version
 		return FirmwareVersionSnapshot(
-			local_app_version=_normalize_version(
-				cfg.localAppVersion.value
-			),
-			latest_app_version=_normalize_version(
-				cfg.latestAppVersion.value
-			),
-			local_upper_version=_normalize_version(
-				local_upper.version if local_upper else cfg.localUpperVersion.value
-			),
-			latest_upper_version=_normalize_version(
-				cfg.latestUpperVersion.value
-			),
-			local_lower_version=_normalize_version(
-				local_lower.version if local_lower else cfg.localLowerVersion.value
-			),
-			latest_lower_version=_normalize_version(
-				cfg.latestLowerVersion.value
-			),
+			local_app_version=local_app_version,
+			latest_app_version=latest_app_version,
+			local_upper_version=local_upper_version,
+			latest_upper_version=latest_upper_version,
+			local_lower_version=local_lower_version,
+			latest_lower_version=latest_lower_version,
 		)
 
+	def _sync_local_versions_to_config(
+		self,
+		local_app_version: str,
+		local_upper_version: str,
+		local_lower_version: str,
+	) -> None:
+		"""把“当前真实版本”写回 JSON，避免配置里的旧值影响下一次检查。"""
+		cfg = CTX.cfg
+		for item, value in (
+			(cfg.localAppVersion, local_app_version),
+			(cfg.localUpperVersion, local_upper_version),
+			(cfg.localLowerVersion, local_lower_version),
+		):
+			if value != "--" and getattr(item, "value", None) != value:
+				qconfig.set(item, value)
+
 	def check_for_updates(self, receiver: QObject, manual: bool = False) -> bool:
+		"""启动一次更新检查；如果已有检查在跑，就直接跳过本次请求。"""
 		if self.is_checking:
 			logger.info("UpdateManager skipped app update check because another check is running")
 			return False
@@ -135,6 +209,7 @@ class UpdateManager:
 			self._worker = None
 
 	def _perform_check(self, manual: bool) -> UpdateCheckResult:
+		"""拉取远程版本信息，并和本地应用版本做一次轻量对比。"""
 		snapshot_before = self.get_cached_versions()
 		update_url = str(CTX.cfg.updateUrl.value or "").strip()
 
@@ -177,7 +252,11 @@ class UpdateManager:
 			local_lower_version=snapshot_before.local_lower_version,
 			latest_lower_version=_normalize_version(latest_versions["lower"]),
 		)
-		has_changes = snapshot_after.latest_app_version != snapshot_after.local_app_version
+		self._sync_latest_versions_to_config(snapshot_after)
+		has_changes = _version_is_newer(
+			snapshot_after.latest_app_version,
+			snapshot_after.local_app_version,
+		)
 		logger.info(
 			"UpdateManager refreshed latest app version: "
 			f"app={snapshot_after.latest_app_version}"
@@ -193,7 +272,19 @@ class UpdateManager:
 			release_notes=str(remote_result.get("release_notes") or ""),
 		)
 
+	def _sync_latest_versions_to_config(self, snapshot: FirmwareVersionSnapshot) -> None:
+		"""把远程最新版本写回 JSON，首页和设置页下次启动能直接读到。"""
+		cfg = CTX.cfg
+		for item, value in (
+			(cfg.latestAppVersion, snapshot.latest_app_version),
+			(cfg.latestUpperVersion, snapshot.latest_upper_version),
+			(cfg.latestLowerVersion, snapshot.latest_lower_version),
+		):
+			if value != "--" and getattr(item, "value", None) != value:
+				qconfig.set(item, value)
+
 	def _fetch_remote_update(self, update_url: str) -> dict[str, object]:
+		"""根据配置的 URL 自动选择 GitHub latest release 或普通版本文件。"""
 		github_api_url = self._github_release_api_url(update_url)
 		if github_api_url:
 			return self._fetch_github_latest_release(github_api_url)
@@ -204,6 +295,7 @@ class UpdateManager:
 		return {"versions": self._parse_remote_versions(payload)}
 
 	def _fetch_github_latest_release(self, api_url: str) -> dict[str, object]:
+		"""读取 GitHub latest release，并把 tag 当作应用最新版本。"""
 		request = Request(
 			api_url,
 			headers={
@@ -244,6 +336,7 @@ class UpdateManager:
 		return f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
 	def _parse_remote_versions(self, payload: str) -> dict[str, str] | None:
+		"""兼容 JSON 和 INI 两种远程版本文件格式。"""
 		text = payload.strip()
 		if not text:
 			return None
@@ -254,6 +347,7 @@ class UpdateManager:
 		return self._parse_ini_versions(text)
 
 	def _parse_json_versions(self, payload: str) -> dict[str, str] | None:
+		"""解析 JSON 格式版本文件，支持顶层字段或 latest_version 分区。"""
 		try:
 			data = json.loads(payload)
 		except json.JSONDecodeError as exc:
@@ -270,6 +364,7 @@ class UpdateManager:
 		return self._build_remote_version_map(latest_section)
 
 	def _parse_ini_versions(self, payload: str) -> dict[str, str] | None:
+		"""解析 INI 格式版本文件，兼容新版 latest_version 和旧版 version。"""
 		parser = configparser.ConfigParser()
 		try:
 			parser.read_string(payload)

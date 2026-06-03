@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/4/25
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: utility.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @FileType: 核心基础设施文件，提供设备、数据和通用工具能力
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
 #  @Contact :
-#  @Python  :
+#  @Python  : 3.10
 # -------------------------------
+
 from PyQt5.QtWidgets import QApplication
 from qfluentwidgets import InfoBar, InfoBarManager, InfoBarPosition
 

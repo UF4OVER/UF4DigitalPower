@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_home.py
+#  @FileType: 首页页面文件，负责应用概览、版本和入口卡片
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QColor, QDesktopServices, QFont, QImage
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
@@ -95,10 +107,15 @@ class AppInfoCard(SimpleCardWidget):
         self.descriptionLabel = BodyLabel(self)
         self.descriptionLabel.setWordWrap(True)
 
-        self.tagButton = PillPushButton(self)
-        self.tagButton.setCheckable(False)
-        setFont(self.tagButton, 12)
-        self.tagButton.setFixedSize(80, 32)
+        self.tagButton1 = PillPushButton(self)
+        self.tagButton1.setCheckable(False)
+        setFont(self.tagButton1, 12)
+        self.tagButton1.setFixedSize(80, 32)
+
+        self.tagButton2 = PillPushButton(self)
+        self.tagButton2.setCheckable(False)
+        setFont(self.tagButton2, 12)
+        self.tagButton2.setFixedSize(80, 32)
 
         self.shareButton = TransparentToolButton(FluentIcon.SHARE, self)
         self.shareButton.setFixedSize(32, 32)
@@ -144,8 +161,10 @@ class AppInfoCard(SimpleCardWidget):
         self.vBoxLayout.addSpacing(12)
         self.buttonLayout.setContentsMargins(0, 0, 0, 0)
         self.vBoxLayout.addLayout(self.buttonLayout)
-        self.buttonLayout.addWidget(self.tagButton, 0, Qt.AlignLeft)
-        self.buttonLayout.addWidget(self.shareButton, 0, Qt.AlignRight)
+        self.buttonLayout.addWidget(self.tagButton1, 0, Qt.AlignLeft)
+        self.buttonLayout.addWidget(self.tagButton2, 0, Qt.AlignLeft)
+
+        self.buttonLayout.addWidget(self.shareButton, 1, Qt.AlignRight)
 
     def applyTexts(self):
         if not self.installButton.isEnabled():
@@ -157,8 +176,8 @@ class AppInfoCard(SimpleCardWidget):
         self.descriptionLabel.setText(
             "Fluor4CellPower 是一个多功能上位机工具，提供串口通信、数据可视化和设备管理能力，用于电子设备调试和监控。"
         )
-        self.tagButton.setText('功能板')
-
+        self.tagButton1.setText('稳定版')
+        self.tagButton2.setText('上位机')
     def setCheckInProgress(self, checking: bool) -> None:
         self.installButton.setEnabled(not checking)
         self.applyTexts()

@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026/5/24
-#  @FileName: dummy_power_device.py.py
-#  @Software: PyCharm
-#  @System  : Windows 11 25H2
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: dummy_power_device.py
+#  @FileType: 设备模型文件，封装具体设备的数据和操作入口
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : 假设备模拟数据
-#  @Python  : 
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
+
 import math
 import random
 import time

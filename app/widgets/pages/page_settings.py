@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_settings.py
+#  @FileType: 设置页面文件，负责应用偏好和运行信息展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt, QUrl
@@ -83,6 +95,7 @@ class SettingsPage(ScrollArea):
         self.themeCard = ComboSettingCard(FIF.BRUSH, '应用主题', '切换浅色、深色或跟随系统', self.appearanceGroup)
         self.themeColorCard = CustomColorSettingCard(cfg.themeColor, FIF.PALETTE, '主题色', '调整应用的主色调', self.appearanceGroup)
         self.fontCard = ComboSettingCard(FIF.FONT, '全局字体', '选择 Resources/Font 中的字体，当前会话立即应用。', self.appearanceGroup)
+
 
         self.behaviorGroup = SettingCardGroup('启动', self.scrollWidget)
         self.updateOnStartUpCard = SwitchSettingCard(

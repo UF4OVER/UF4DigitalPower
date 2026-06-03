@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: session_power.py
+#  @FileType: 电源协议会话文件，负责 F4CP 电源设备读写和轮询
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from __future__ import annotations
 
 import time
@@ -307,6 +319,10 @@ DEFAULT_STATUS_VALUES: dict[PowerDataType, int] = {
 
 
 def crc16_modbus(data: bytes) -> int:
+    """计算电源协议帧使用的 Modbus CRC16。
+
+    这里保持纯 bytes 输入，方便协议层、模拟器和测试共用同一套校验逻辑。
+    """
     crc = 0xFFFF
     for byte in data:
         crc ^= byte
@@ -327,12 +343,14 @@ def _u8(value: int) -> bytes:
 
 
 def encode_tlv(type_id: PowerDataType | int, value: bytes = b"") -> bytes:
+    """把一个数据项打包成 TLV：类型 1 字节，长度 2 字节，小端值。"""
     raw_type = int(type_id) & 0xFF
     raw_value = bytes(value)
     return bytes([raw_type]) + len(raw_value).to_bytes(2, "little") + raw_value
 
 
 def decode_tlvs(payload: bytes, *, strict: bool = True) -> dict[PowerDataType, int]:
+    """解析设备返回的 TLV 数据，并按元数据转换成有符号/无符号整数。"""
     offset = 0
     items: dict[PowerDataType, int] = {}
 
@@ -391,6 +409,7 @@ def _ensure_writable(type_id: PowerDataType, value: bytes) -> None:
 
 
 def build_frame(cmd: PowerCommand | int, seq: int, payload: bytes) -> bytes:
+    """组装完整协议帧，统一处理帧头、长度、命令序号和 CRC。"""
     body = bytes([int(cmd) & 0xFF, seq & 0xFF]) + payload
     frame = bytearray(SOF)
     frame.extend(len(body).to_bytes(2, "little"))
@@ -400,6 +419,7 @@ def build_frame(cmd: PowerCommand | int, seq: int, payload: bytes) -> bytes:
 
 
 def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
+    """把一组协议字段整理成 UI 更好使用的 PowerStatus 快照。"""
     normalized = _normalize_status_values(values)
     missing = [type_id.name for type_id in STATUS_TYPES if type_id not in normalized]
     if missing:
@@ -433,6 +453,7 @@ def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
 
 
 def _normalize_status_values(values: dict[PowerDataType, int]) -> dict[PowerDataType, int]:
+    """兼容旧固件缺字段的情况，用相近实时值补齐状态模型需要的数据。"""
     normalized = dict(values)
     if PowerDataType.OTP_VALUE not in normalized and PowerDataType.BOARD_TEMPERATURE in normalized:
         normalized[PowerDataType.OTP_VALUE] = normalized[PowerDataType.BOARD_TEMPERATURE]
@@ -631,6 +652,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(object)
     def attach_session(self, session: SerialSession) -> None:
+        """接管一个已经打开的串口会话，并把后续串口事件转发到本客户端。"""
         self._shutting_down = False
         self._session = session
         self._buffer.clear()
@@ -646,6 +668,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot()
     def detach_session(self) -> None:
+        """解除串口绑定，同时清理轮询、挂起请求和上一帧缓存。"""
         self.stop_polling()
         self._fail_pending(PowerClientError("Serial session detached"))
         if self._session is not None:
@@ -671,6 +694,10 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(int)
     def start_polling(self, interval_ms: int = 800) -> None:
+        """启动状态刷新。
+
+        新固件优先走原始流模式，失败时再回落到普通 READ/REPORT 轮询。
+        """
         interval = max(200, int(interval_ms))
         if self.is_connected and not self.is_busy:
             try:
@@ -692,6 +719,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot()
     def stop_polling(self) -> None:
+        """停止自动刷新，并取消等待恢复轮询的延迟任务。"""
         if self._stream_enabled:
             try:
                 self.stop_streaming()
@@ -723,6 +751,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(int, int, bool)
     def request_set_output_limits(self, voltage_mv: int, current_ma: int, enabled: bool) -> None:
+        """写入输出电压/电流限制，并按界面开关同步输出状态。"""
         def _write() -> None:
             self.write_values(
                 {
@@ -739,6 +768,7 @@ class F4CPPowerClient(QObject):
 
     @pyqtSlot(int, int, int, int)
     def request_set_protection_values(self, ovp_mv: int, ocp_ma: int, otp_mc: int, fan_value: int) -> None:
+        """写入 OVP/OCP/OTP 和风扇目标值，这些保护参数一起提交更不容易状态撕裂。"""
         def _write() -> None:
             self.write_values(
                 {
@@ -785,6 +815,7 @@ class F4CPPowerClient(QObject):
         return super().event(event)
 
     def read_values(self, *types: PowerDataType, timeout_ms: int = 1000) -> dict[PowerDataType, int]:
+        """同步读取指定字段，适合按钮触发或测试代码的一次性请求。"""
         for type_id in types:
             _ensure_readable(type_id)
         payload = b"".join(encode_tlv(type_id) for type_id in types)
@@ -813,6 +844,7 @@ class F4CPPowerClient(QObject):
         return response
 
     def write_values(self, values: dict[PowerDataType, bytes], timeout_ms: int = 1000) -> None:
+        """同步写入一组字段；调用前会根据元数据检查字段是否允许写入。"""
         for type_id, raw_value in values.items():
             _ensure_writable(type_id, raw_value)
         payload = b"".join(encode_tlv(type_id, raw_value) for type_id, raw_value in values.items())
@@ -825,6 +857,7 @@ class F4CPPowerClient(QObject):
         )
 
     def read_status(self, timeout_ms: int = 1000) -> PowerStatus:
+        """读取一帧完整状态，并把结果广播给页面和图表。"""
         result = self.read_report_values(timeout_ms=timeout_ms)
         status = build_status(result)
         self._last_status = status
@@ -995,6 +1028,7 @@ class F4CPPowerClient(QObject):
         return CC_CV_NAMES.get(value, f"UNKNOWN({value})")
 
     def _run_write_transaction(self, description: str, write_action: Callable[[], None]) -> None:
+        """把一次写操作包进安全流程：先让轮询停下来，再等待当前请求结束。"""
         if not self.is_connected:
             self.error.emit("Serial session is not connected")
             return
@@ -1008,6 +1042,7 @@ class F4CPPowerClient(QObject):
         write_action: Callable[[], None],
         started_at: float,
     ) -> None:
+        """等客户端空闲后再真正写入，避免写请求和自动轮询抢同一个 ACK。"""
         if self._shutting_down or not self.is_connected:
             self._schedule_polling_resume()
             return
@@ -1064,6 +1099,7 @@ class F4CPPowerClient(QObject):
             self.communicationFailureLimitReached.emit(message)
 
     def _pause_polling_for_write(self) -> None:
+        """写参数前暂停自动刷新，给设备留出一段安静的命令窗口。"""
         self._poll_resume_timer.stop()
         if self._stream_enabled:
             interval = self._poll_requested_interval_ms
@@ -1082,6 +1118,7 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer.start(WRITE_POLL_RESUME_DELAY_MS)
 
     def _resume_polling_if_ready(self) -> None:
+        """写入完成后恢复刷新；如果设备还忙，就稍等一小段时间再试。"""
         interval = self._poll_resume_interval_ms
         if interval is None:
             return
@@ -1127,6 +1164,10 @@ class F4CPPowerClient(QObject):
         timeout_ms: int = 1000,
         expected_cmd: PowerCommand = PowerCommand.ACK,
     ) -> dict[PowerDataType, int]:
+        """发送一条命令并等待对应响应。
+
+        Qt 串口对象在线程内收发，所以这里用本地 QEventLoop 等待 RX 事件来唤醒。
+        """
         if not self.is_connected or self._session is None:
             raise PowerClientError("Serial session is not connected")
         if self._pending is not None:
@@ -1165,6 +1206,7 @@ class F4CPPowerClient(QObject):
         return pending.response or {}
 
     def _handle_rx(self, event: RxEvent) -> None:
+        """消费串口收到的字节流，按当前模式解析为原始流样本或完整协议帧。"""
         data = event.payload.data
         if not data:
             return
@@ -1223,6 +1265,7 @@ class F4CPPowerClient(QObject):
             self._pending.loop.quit()
 
     def _complete_pending_report(self, frame: dict[str, int | bytes]) -> bool:
+        """处理由主动 REPORT 请求返回的帧，和设备自动上报的 REPORT 区分开。"""
         if self._pending is None or self._pending.expected_cmd != PowerCommand.REPORT:
             return False
         if int(frame["seq"]) != self._pending.seq:
@@ -1244,6 +1287,7 @@ class F4CPPowerClient(QObject):
         return True
 
     def _handle_report(self, frame: dict[str, int | bytes]) -> None:
+        """处理设备主动上报的状态帧，刷新缓存并通知 UI。"""
         if int(frame["seq"]) != 0:
             self.error.emit(f"REPORT seq should be 0, got {frame['seq']}")
             return
@@ -1324,6 +1368,7 @@ class F4CPPowerClient(QObject):
         self._stream_slow_every_fast_samples = 0
 
     def _extract_raw_stream_values(self) -> dict[PowerDataType, int] | None:
+        """从裸流里切出一组快/慢通道样本；数据不够时先留在缓存里。"""
         if not self._stream_enabled or not self._stream_fast_types:
             return None
         expected_size = self._stream_fast_sample_size
@@ -1357,6 +1402,7 @@ class F4CPPowerClient(QObject):
         self.statusUpdated.emit(status)
 
     def _extract_frame(self) -> dict[str, int | bytes] | None:
+        """从接收缓存里提取一帧完整协议数据，顺手丢掉帧头前的噪声。"""
         if self._stream_enabled and self._pending is None:
             values = self._extract_raw_stream_values()
             if values is None:

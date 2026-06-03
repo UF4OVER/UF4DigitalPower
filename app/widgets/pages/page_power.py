@@ -1,4 +1,15 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_power.py
+#  @FileType: 电源页面文件，负责电源监控、参数设置和日志展示
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
 
 import html
 import math
@@ -19,6 +30,7 @@ from qfluentwidgets import (
 from app.core.channel import ChannelConfig
 from app.core.data_hub import DataHub
 from app.core.utility import showMessage
+from app.controllers import PowerPageController
 from app.manager import StyleSheet
 
 from app.session import (
@@ -28,7 +40,7 @@ from app.session import (
 )
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
-from config import CTX, cfg
+from config import CTX
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
 POWER_POLL_INTERVAL_MS = 500
@@ -462,6 +474,7 @@ class PowerPage(ScrollArea):
         self.setViewportMargins(0, 0, 0, 0)
         self.verticalScrollBar().valueChanged.connect(self._onScrollValueChanged)
 
+        self._controller = PowerPageController(self)
         self._bindSignals()
         self._applyDisconnectedState()
         StyleSheet.POWER_PAGE.apply(self)
@@ -599,37 +612,8 @@ class PowerPage(ScrollArea):
         self.chartCard.chart.set_live_updates_suspended(False)
 
     def _bindSignals(self) -> None:
-        self._client.log.connect(self._appendLog)
-        self._client.error.connect(self._onClientError)
-        self._client.connectionChanged.connect(self._onConnectionChanged)
-        self._client.statusUpdated.connect(self._updateStatusView)
-        self._client.debugSnapshotReady.connect(self._handleDebugSnapshotReady)
-        self._client.outputLimitsWritten.connect(self._onOutputLimitsWritten)
-        self._client.protectionValuesWritten.connect(self._onProtectionValuesWritten)
-        self._client.powerStateWritten.connect(self._onPowerStateWritten)
-        self._client.writeFailureLimitReached.connect(self._disconnectAfterWriteFailures)
-        self._client.communicationFailureLimitReached.connect(self._disconnectAfterCommunicationFailures)
-
-        self.attachSessionRequested.connect(self._client.attach_session)
-        self.detachSessionRequested.connect(self._client.detach_session)
-        self.readStatusRequested.connect(self._client.request_read_status)
-        self.debugSnapshotRequested.connect(self._client.request_debug_snapshot)
-        self.outputLimitsRequested.connect(self._client.request_set_output_limits)
-        self.protectionValuesRequested.connect(self._client.request_set_protection_values)
-        self.powerStateRequested.connect(self._client.request_set_power_state)
-        self.startPollingRequested.connect(self._client.start_polling)
-        self.stopPollingRequested.connect(self._client.stop_polling)
-        self.refreshTargetButton.clicked.connect(self.refreshSerialPorts)
-        self.connectButton.clicked.connect(self.toggleConnection)
-        self.refreshButton.clicked.connect(self._readStatusOnce)
-        self.debugButton.clicked.connect(self._runDebugSnapshot)
-        self.autoPollSwitch.checkedChanged.connect(self._onAutoPollChanged)
-        self.parameterEditor.outputSwitch.checkedChanged.connect(self._onOutputSwitchChanged)
-        self.parameterEditor.applyOutputButton.clicked.connect(self._applyOutputLimits)
-        self.parameterEditor.applyProtectButton.clicked.connect(self._applyProtectionValues)
-        self.clearLogButton.clicked.connect(self.logEdit.clear)
-        self.mockButton.toggled.connect(self._setMockEnabled)
-        cfg.themeChanged.connect(self._onThemeChanged)
+        # 复杂信号注册下沉到 Controller，页面保留 UI 创建和状态渲染。
+        self._controller.bind()
 
     def _onThemeChanged(self, *_):
         StyleSheet.POWER_PAGE.apply(self)
@@ -665,12 +649,14 @@ class PowerPage(ScrollArea):
         )
 
     def toggleConnection(self) -> None:
+        """连接按钮入口：根据当前状态在打开串口和断开会话之间切换。"""
         if self._client.is_connected:
             self._disconnectManualSession()
         else:
             self._connectSerialTarget()
 
     def _connectSerialTarget(self) -> None:
+        """按页面选择创建串口会话，打开成功后交给电源协议客户端接管。"""
         port = self.portCombo.currentText().strip()
         if not port:
             self._appendLog("错误: 未选择串口。请先刷新并选择串口。")
@@ -686,6 +672,7 @@ class PowerPage(ScrollArea):
         self.onDeviceConnected(session)
 
     def onDeviceConnected(self, session) -> None:
+        """串口建立后同步 UI 状态，并按开关决定读一次还是持续轮询。"""
         self.attachSessionRequested.emit(session)
         self.stateBadge.setOnline(True)
         self.connectButton.setText("断开")
@@ -698,6 +685,7 @@ class PowerPage(ScrollArea):
             self.readStatusRequested.emit()
 
     def _disconnectManualSession(self) -> None:
+        """主动断开页面自己创建的串口会话，并让协议客户端清空状态。"""
         self.stopPollingRequested.emit()
         self.detachSessionRequested.emit()
         try:
@@ -738,6 +726,7 @@ class PowerPage(ScrollArea):
         update_chart: bool,
         log_changes: bool,
     ) -> None:
+        """把一帧 PowerStatus 映射到指标卡、状态栏、参数编辑器和曲线图。"""
         previous = self._lastStatus
         if log_changes:
             self._lastStatus = status
@@ -795,6 +784,7 @@ class PowerPage(ScrollArea):
         self.debugSnapshotRequested.emit()
 
     def _onAutoPollChanged(self, checked: bool) -> None:
+        """自动轮询开关变化时，直接通知协议客户端启动或停止刷新。"""
         if checked:
             self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
         else:
@@ -802,6 +792,7 @@ class PowerPage(ScrollArea):
             self._appendLog("主机轮询已关闭")
 
     def _onOutputSwitchChanged(self, checked: bool) -> None:
+        """输出开关先暂存用户意图，再交给协议层写入，避免界面被旧状态立刻覆盖。"""
         self._stagedOutputEnabled = checked
         if not self._client.is_connected:
             return
@@ -814,6 +805,7 @@ class PowerPage(ScrollArea):
         self.powerStateRequested.emit(checked)
 
     def _applyOutputLimits(self) -> None:
+        """提交输出限制值；界面用 V/A，协议层用 mV/mA。"""
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
@@ -828,6 +820,7 @@ class PowerPage(ScrollArea):
         self.outputLimitsRequested.emit(voltage_mv, current_ma, enabled)
 
     def _applyProtectionValues(self) -> None:
+        """提交保护参数；温度在界面是摄氏度，协议层按毫摄氏度传输。"""
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
@@ -864,6 +857,7 @@ class PowerPage(ScrollArea):
         self._scheduleAutoPollingRestartAfterWrite()
 
     def _onClientError(self, message: str) -> None:
+        """协议层错误统一落到这里，恢复按钮状态并给用户一个明确提示。"""
         self._appendLog(f"错误: {message}")
         self._setWriteControlsEnabled(True)
         showMessage(self, "通信错误", message, level="error")
@@ -885,6 +879,7 @@ class PowerPage(ScrollArea):
         self._disconnectManualSession()
 
     def _scheduleAutoPollingRestartAfterWrite(self) -> None:
+        """写操作结束后延迟恢复轮询，给设备一点时间完成内部状态更新。"""
         self._writePollingRestartPending = False
         self._writePollRestartTimer.stop()
         self._writePollRestartTimer.start(WRITE_POLL_RESTART_DELAY_MS)
@@ -896,6 +891,7 @@ class PowerPage(ScrollArea):
         self._appendLog("写入后已请求重启主机轮询")
 
     def _handleDebugSnapshotReady(self, snapshot: DebugSnapshot) -> None:
+        """显示调试快照，并附带一段面向硬件排查的判断提示。"""
         self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
         self._appendLog(self._diagnoseDebugSnapshot(snapshot))
 
@@ -909,6 +905,7 @@ class PowerPage(ScrollArea):
         return "调试判断: type27 数值合理；如果界面仍异常，请检查主机解析和绑定。"
 
     def _applyDisconnectedState(self) -> None:
+        """回到离线 UI 状态，清掉暂存开关和正在写入的标记。"""
         self._stagedOutputEnabled = None
         self._writePollingRestartPending = False
         self._setWriteControlsEnabled(False)
@@ -990,4 +987,3 @@ class PowerPage(ScrollArea):
             self._clientThread.quit()
             if not self._clientThread.wait(3000):
                 self._writePageLogFile("PowerPage client thread did not exit within 3000 ms")
-

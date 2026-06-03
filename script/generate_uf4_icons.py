@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: generate_uf4_icons.py
+#  @FileType: 生成脚本，用于产出图标、文档或版权材料
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 """Generate UF4 icon resources from Resources/Icons/assets."""
 
 from __future__ import annotations

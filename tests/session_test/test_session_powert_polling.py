@@ -1,3 +1,16 @@
+# -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: test_session_powert_polling.py
+#  @FileType: 自动化测试文件，用来守住关键功能行为
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 import time
 import unittest
 from types import SimpleNamespace
@@ -5,12 +18,12 @@ from typing import cast
 
 from PyQt5.QtCore import QCoreApplication
 
-from session import (
+from app.session import (
     F4CPPowerClient,
     PowerDataType,
     PowerStatus,
 )
-from session.session_power import (
+from app.session.session_power import (
     DEFAULT_STATUS_VALUES,
     STREAM_CHANNEL_SEPARATOR,
     STREAM_FAST_PERIOD_MS,
@@ -22,7 +35,7 @@ from session.session_power import (
     pack_stream_start_request,
     stream_sample_size,
 )
-from session.session_serial import SerialSession
+from app.session.session_serial import SerialSession
 
 
 DEFAULT_TEST_STATUS_VALUES = dict(DEFAULT_STATUS_VALUES)
@@ -298,4 +311,3 @@ class PowerClientPollingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

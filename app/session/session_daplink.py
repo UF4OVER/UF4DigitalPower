@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # -------------------------------
 #  @Project : F4CP
-#  @Time    : 2026 - 04-25 13:15
+#  @Time    : 2026 - 01-08 12:30
 #  @FileName: session_daplink.py
+#  @FileType: DAPLink 烧录会话文件，负责 pyOCD 探测、连接和下载
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
-#  @Contact : Powered By GPT-5.4
-#  @Python  :
+#  @Contact :
+#  @Python  : 3.10
 # -------------------------------
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ PYOCD_PROGRESS_FRAGMENT_RE = re.compile(r"^[\[\]\-=|\s]+$")
 
 
 def _install_pyocd_probe_filter() -> None:
+    """给 pyOCD 探针入口加过滤，只加载 F4CP 需要的 CMSIS-DAP 支持。"""
     import importlib_metadata
 
     if getattr(importlib_metadata, "_f4cp_pyocd_probe_filter_installed", False):
@@ -68,6 +70,7 @@ def _install_pyocd_probe_filter() -> None:
 
 @lru_cache(maxsize=1)
 def _pyocd_api() -> SimpleNamespace:
+    """延迟导入 pyOCD，避免主界面启动时就加载整套烧录库。"""
     _install_pyocd_probe_filter()
 
     from pyocd.core.helpers import ConnectHelper
@@ -285,6 +288,7 @@ class DaplinkActionThread(QThread):
         self.worker = worker
 
     def run(self) -> None:
+        """在线程里执行探测/连接等阻塞动作，避免卡住 Qt 主界面。"""
         success = False
         exit_code = 1
         try:
@@ -355,6 +359,7 @@ class DaplinkPyocdSession(QObject):
         return super().event(e)
 
     def _handle_request(self, payload: DaplinkRequestPayload) -> None:
+        """把页面发来的动作名分发到具体工作流程。"""
         action = (payload.action or "").strip().lower()
 
         if action == "scan_probes":
@@ -380,6 +385,7 @@ class DaplinkPyocdSession(QObject):
         self._post_event(MessageEvent("不支持的操作", f"未知操作: {payload.action}", "error"))
 
     def _start_action(self, action: str, worker, silent: bool = False) -> None:
+        """启动一个普通后台动作，并用 busy 状态防止重复操作。"""
         if self._busy:
             self._post_event(MessageEvent("忙碌中", "当前已有操作在执行，请稍候。", "warning"))
             return
@@ -416,6 +422,7 @@ class DaplinkPyocdSession(QObject):
             self._worker = None
 
     def _start_download_process(self, payload: DaplinkRequestPayload) -> None:
+        """启动 pyOCD flash 子进程，并把输出流实时转成日志和进度。"""
         if self._busy:
             self._post_event(MessageEvent("忙碌中", "当前已有操作在执行，请稍候。", "warning"))
             return
@@ -474,6 +481,7 @@ class DaplinkPyocdSession(QObject):
         self._finish_process_action(False, 1, f"pyOCD 启动失败: {error_text}")
 
     def _build_pyocd_flash_args(self, payload: DaplinkRequestPayload, target_info: DaplinkTargetInfo) -> list[str]:
+        """根据页面选项拼出 pyOCD flash 参数，路径、地址和连接模式都在这里统一收口。"""
         file_path = str(Path(payload.file_path or "").resolve())
         file_ext = Path(file_path).suffix.lower().lstrip(".")
         base_address = self._resolve_download_address(payload.base_address, f".{file_ext}", target_info)
@@ -516,6 +524,7 @@ class DaplinkPyocdSession(QObject):
         self._consume_process_output_chunk(data)
 
     def _consume_process_output_chunk(self, data: str) -> None:
+        """消化 pyOCD 输出片段；进度条常用回车刷新，所以不能只按换行处理。"""
         if not data:
             return
 
@@ -541,6 +550,7 @@ class DaplinkPyocdSession(QObject):
         self._post_event(LogEvent(line))
 
     def _consume_process_output_line(self, line: str) -> bool:
+        """处理一整行 pyOCD 输出；识别为进度的内容就不重复写入普通日志。"""
         text = self._strip_ansi(line).strip()
         if not text:
             return True
@@ -580,6 +590,7 @@ class DaplinkPyocdSession(QObject):
         return True
 
     def _update_progress_from_fragment(self, text: str) -> bool:
+        """把类似 [====----] 的进度碎片换算成页面上的百分比。"""
         if not self._looks_like_progress_fragment(text):
             return False
         if self._process_progress_phase not in PYOCD_PROGRESS_PHASE_RANGES:
@@ -635,6 +646,7 @@ class DaplinkPyocdSession(QObject):
         self._process.kill()
 
     def _finish_process_action(self, success: bool, exit_code: int, message: str) -> None:
+        """收束烧录子进程：停计时器、释放 QProcess，并通知页面动作结束。"""
         action = self._process_action or "download"
         self._process_started = False
         self._process_start_timeout_timer.stop()
@@ -671,6 +683,7 @@ class DaplinkPyocdSession(QObject):
         return "pyocd", []
 
     def _scan_probes_worker(self) -> None:
+        """扫描当前连接的 DAPLink/CMSIS-DAP 探针，并把结果发回页面。"""
         probes = self.scan_daplink_probes()
         self._post_event(ProbesEvent(probes))
         if probes:
@@ -679,6 +692,7 @@ class DaplinkPyocdSession(QObject):
             self._post_event(LogEvent("未扫描到 DAPLink/CMSIS-DAP 调试器。", "error"))
 
     def _load_targets_worker(self, silent: bool = False) -> None:
+        """扫描本地 CMSIS-Pack，整理出页面可选择的芯片 target。"""
         pack_paths, targets = self.discover_pack_targets()
         self._pack_paths = pack_paths
         self._target_items = targets
@@ -694,6 +708,7 @@ class DaplinkPyocdSession(QObject):
         self._post_event(LogEvent(f"已从 {len(pack_paths)} 个 Pack 中加载 {len(targets)} 个可用 target。"))
 
     def _connect_worker(self, connect: DaplinkConnectConfig) -> None:
+        """打开一次 pyOCD 会话，用来验证探针、target、频率和连接模式是否可用。"""
         target_info = self._target_by_name(connect.target_name)
         self._post_event(LogEvent(f"连接调试器: uid={connect.probe_uid or 'auto'} target={connect.target_name} freq={connect.frequency or '--'} mode={connect.connect_mode}"))
 
@@ -703,6 +718,7 @@ class DaplinkPyocdSession(QObject):
             self._post_event(LogEvent(f"已连接 {info.part_number}，Pack={info.pack_name} {info.pack_version}"))
 
     def _download_worker(self, payload: DaplinkRequestPayload) -> None:
+        """线程式下载的保留入口；当前页面主要使用 QProcess 路径来展示实时进度。"""
         pyocd_api = _pyocd_api()
 
         if not payload.file_path or not os.path.isfile(payload.file_path):
@@ -742,6 +758,7 @@ class DaplinkPyocdSession(QObject):
             self._post_event(LogEvent("固件下载完成。"))
 
     def _open_session(self, connect: DaplinkConnectConfig):
+        """创建 pyOCD Session，并注入 Pack、探针、target 和连接参数。"""
         pyocd_api = _pyocd_api()
         target_info = self._target_by_name(connect.target_name)
         options = {
@@ -810,6 +827,7 @@ class DaplinkPyocdSession(QObject):
         )
 
     def _resolve_download_address(self, base_address_text: str, file_ext: str, target_info: DaplinkTargetInfo) -> int | None:
+        """解析固件下载地址；HEX/ELF 自带地址，BIN 才需要外部基地址。"""
         if file_ext != ".bin":
             return None
 
@@ -832,6 +850,7 @@ class DaplinkPyocdSession(QObject):
         self._post_event(ProgressEvent(action, value))
 
     def _post_event(self, evt: DaplinkProgrammerEvent) -> None:
+        """把烧录事件投递给页面，接收者被清空时静默丢弃。"""
         if self._event_receiver is not None:
             QCoreApplication.postEvent(self._event_receiver, evt)
 
@@ -852,6 +871,7 @@ class DaplinkPyocdSession(QObject):
 
     @classmethod
     def discover_pack_targets(cls) -> tuple[list[Path], list[DaplinkTargetInfo]]:
+        """从 Pack 目录读取芯片元数据，并筛出 F4CP 支持的目标列表。"""
         pyocd_api = _pyocd_api()
         pack_dir = cls.pack_dir()
         pack_paths = cls._candidate_pack_paths(pack_dir)
@@ -897,6 +917,7 @@ class DaplinkPyocdSession(QObject):
 
     @staticmethod
     def scan_daplink_probes() -> list[DaplinkProbeInfo]:
+        """扫描 pyOCD 能看到的探针，并转换成页面展示用的数据对象。"""
         probes = _pyocd_api().ConnectHelper.get_all_connected_probes(blocking=False)
         items: list[DaplinkProbeInfo] = []
 

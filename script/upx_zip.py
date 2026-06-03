@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: upx_zip.py
+#  @FileType: 打包裁剪脚本，用于清理发布目录并压缩体积
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 """Post-build cleanup and UPX compression for cx_Freeze output.
 
 Run after ``script/package_exe.ps1``::

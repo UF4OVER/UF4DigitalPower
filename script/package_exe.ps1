@@ -5,7 +5,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 
 try {
-    & .\.venv\Scripts\cxfreeze.exe build
+    uv run python -m cx_Freeze build
     if ($LASTEXITCODE -ne 0) {
         throw "cx_Freeze build failed with exit code $LASTEXITCODE"
     }

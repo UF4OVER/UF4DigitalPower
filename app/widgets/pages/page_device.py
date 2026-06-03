@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# -------------------------------
+#  @Project : F4CP
+#  @Time    : 2026 - 01-08 12:30
+#  @FileName: page_device.py
+#  @FileType: 串口调试页面文件，负责串口/蓝牙收发和 TLV 调试
+#  @Software: PyCharm 2024.1.6 (Professional Edition)
+#  @System  : Windows 11 23H2
+#  @Author  : UF4
+#  @Contact :
+#  @Python  : 3.10
+# -------------------------------
+
 from __future__ import annotations
 
 import binascii
@@ -54,7 +66,7 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
-from config import cfg
+from app.controllers import DevicePageController
 from app.manager import StyleSheet
 from app.session import (
     ErrorEvent,
@@ -293,20 +305,9 @@ class DevicePage(ScrollArea):
         StyleSheet.DEVICE_PAGE.apply(self)
         self._applyLocalStyle()
 
-        cfg.themeChanged.connect(self._onThemeChanged)
-        self.refreshButton.clicked.connect(self.refreshCurrentConnectionTargets)
-        self.connectButton.clicked.connect(self.toggleConnection)
-        self.connectionTypeCombo.currentTextChanged.connect(self._onConnectionTypeChanged)
-        self.sendButton.clicked.connect(self.onSend)
-        self.clearButton.clicked.connect(lambda: self.logEdit.setPlainText(""))
-        self.modeCombo.currentIndexChanged.connect(self._applyMode)
-        self.addTlvBtn.clicked.connect(self._addDefaultTlvRow)
-        self.delTlvBtn.clicked.connect(self._deleteSelectedTlvRows)
-        self.exportTlvBtn.clicked.connect(self._exportTlvJsonToTx)
-        self.importTlvBtn.clicked.connect(self._importTlvJsonFromTx)
-        self.rxEventSignal.connect(self._appendLog)
-        self.stateSignal.connect(self._onState)
-        self.errSignal.connect(self._onError)
+        # 控制器集中处理页面事件绑定，避免初始化函数继续膨胀。
+        self._controller = DevicePageController(self)
+        self._controller.bind()
 
         self._applyTexts()
         self.refreshPorts()
@@ -736,6 +737,7 @@ class DevicePage(ScrollArea):
                     self._configureKindCombo(kindCombo, typeSpin)
 
     def _buildV2PayloadFromTable(self) -> bytes:
+        """把 TLV 表格的每一行转换成 TVLCOMV2 payload。"""
         payload = V2Payload()
         for row in self._iterTlvRows():
             typeObj = TYPE_REGISTRY.get(int(row.typeId) & 0xFF)
@@ -750,6 +752,7 @@ class DevicePage(ScrollArea):
             typeSpin.setValue(suggested)
 
     def _coerceV2Value(self, row: _TlvRow, typeObj: TypeBase):
+        """按类型注册表把表格里的字符串值转成协议真正需要的 Python 值。"""
         rawValue = row.value.strip()
         if isinstance(typeObj, DataString):
             return row.value
@@ -765,6 +768,7 @@ class DevicePage(ScrollArea):
         self._v2Seq = 0
 
     def _initV2Protocol(self):
+        """初始化 V2 帧解析器和 ACK/NACK 分发器。"""
         self._v2Parser = V2FrameParser()
         self._v2Dispatcher = V2Dispatcher()
         self._v2Dispatcher.setAckHandler(lambda cmd, seq, payloadData: self.rxEventSignal.emit(f"V2 ACK cmd={cmd:02X} seq={seq} [{self._formatV2PayloadItems(payloadData)}]"))
@@ -790,6 +794,7 @@ class DevicePage(ScrollArea):
         return ", ".join(parts)
 
     def _handleV2RxFrames(self, data: bytes):
+        """把收到的字节喂给 V2 解析器，并把解析结果写到接收日志。"""
         if self._v2Parser is None:
             return
         for frame in self._v2Parser.inputBytes(data):
@@ -799,6 +804,7 @@ class DevicePage(ScrollArea):
             self.rxEventSignal.emit(f'V2 RX cmd={frame["cmd"]:02X} seq={frame["seq"]} [{self._formatV2PayloadItems(parsed)}]')
 
     def _parseRawInput(self, text: str, fmt: str) -> bytes:
+        """解析原始发送框，支持 ASCII 和宽松一点的 HEX 输入。"""
         if (fmt or "").upper() == "ASCII":
             return text.encode("utf-8")
         normalized = text.replace("0x", "").replace(",", " ").replace("\n", " ").replace("\r", " ").replace("\t", " ")
@@ -844,6 +850,7 @@ class DevicePage(ScrollArea):
         self._startBluetoothDiscovery()
 
     def refreshCurrentConnectionTargets(self):
+        """根据当前连接类型刷新串口或蓝牙目标列表。"""
         if self._isBluetoothMode():
             self.refreshBluetoothDevices()
         else:
@@ -893,6 +900,7 @@ class DevicePage(ScrollArea):
         self.refreshButton.setText("扫描蓝牙" if isBluetooth else "刷新串口")
 
     def toggleConnection(self):
+        """连接按钮入口：已连接则断开，未连接则按当前模式发起连接。"""
         if self._session and self._session.is_open:
             self._disconnect()
         else:
@@ -905,6 +913,7 @@ class DevicePage(ScrollArea):
             self._connectSerial()
 
     def _connectSerial(self):
+        """打开串口调试连接，并准备 V2 协议解析上下文。"""
         port = self.portCombo.currentText().strip()
         if not port or port == "未发现串口":
             self._appendLog("错误: 未找到串口。请先刷新并检查驱动。")
@@ -930,6 +939,7 @@ class DevicePage(ScrollArea):
             self._resetV2Protocol()
 
     def _connectBluetooth(self):
+        """打开蓝牙调试连接，接口保持和串口会话一致，便于复用收发逻辑。"""
         target = self.bluetoothCombo.currentText().strip()
         address = self._bluetoothDevices.get(target, "")
         if not target or not address:
@@ -953,6 +963,7 @@ class DevicePage(ScrollArea):
             self._resetV2Protocol()
 
     def _disconnect(self):
+        """关闭当前连接并清掉 V2 解析器，避免下一次连接沿用旧缓存。"""
         try:
             if self._session:
                 self._session.close()
@@ -964,10 +975,14 @@ class DevicePage(ScrollArea):
             self._onState(False)
 
     def _safeWrite(self, data: bytes):
+        """发送数据。
+
+        串口会话通过 Qt 事件投递写入，蓝牙会话则直接调用 write。
+        """
         if not self._session or not self._session.is_open:
             return
         try:
-            from session.session_serial import SendEvent
+            from app.session.session_serial import SendEvent
             if isinstance(self._session, SerialSession):
                 QCoreApplication.postEvent(self._session, SendEvent(data))
             else:
@@ -988,6 +1003,7 @@ class DevicePage(ScrollArea):
         logger.error(msg)
 
     def _onRxRaw(self, data: bytes):
+        """收到原始数据后更新统计；如果启用解析，则同时尝试拆 V2 帧。"""
         self._rxBytes += len(data)
         self._updateStats()
         self._rxBuf.extend(data)
@@ -998,6 +1014,7 @@ class DevicePage(ScrollArea):
                 self.errSignal.emit(f"TVLCOMV2_FULL feed failed: {exc}")
 
     def onSend(self):
+        """发送按钮入口：Raw 模式直接发字节，V2 模式先组帧再发送。"""
         if not self._session or not self._session.is_open:
             self._appendLog("错误: 设备未连接")
             return
