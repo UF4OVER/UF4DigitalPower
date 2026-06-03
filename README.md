@@ -51,53 +51,12 @@ cx_Freeze 配置位于 `pyproject.toml`，打包产物输出到 `build/exe/`。�
 uv run python script\upx_zip.py
 ```
 
-### 打包为 Windows MSIX 安装包
-
-MSIX 打包依赖 Windows 10/11 SDK 中的 `makeappx.exe` 和 `signtool.exe`。仓库提供的脚本会先复用 cx_Freeze 生成 `build/exe/`，再生成带开始菜单/磁贴声明的 MSIX 包：
-
-```powershell
-.\script\package_msix.ps1
-```
-
-产物输出到 `build/msix/out/`。默认会读取 `pyproject.toml` 的版本号，并把 `0.5.3.rc2` 转换成 MSIX 需要的四段数字版本 `0.5.3.2`。
-
-MSIX 安装包必须签名后才能正常安装。开发自测可以先创建自签名证书，再把证书加入本机“受信任的人员/Trusted People”证书存储：
-
-```powershell
-$cert = New-SelfSignedCertificate `
-  -Type Custom `
-  -Subject "CN=UF4OVER" `
-  -KeyUsage DigitalSignature `
-  -FriendlyName "F4CP MSIX Test Certificate" `
-  -CertStoreLocation "Cert:\CurrentUser\My" `
-  -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
-
-Export-PfxCertificate `
-  -cert $cert `
-  -FilePath .\build\msix\F4CP-TestCert.pfx `
-  -Password (ConvertTo-SecureString -String "123456" -Force -AsPlainText)
-
-Export-Certificate `
-  -Cert $cert `
-  -FilePath .\build\msix\F4CP-TestCert.cer
-```
-
-然后用同一个 Publisher 重新打包并签名：
-
-```powershell
-.\script\package_msix.ps1 `
-  -Publisher "CN=UF4OVER" `
-  -CertificatePath .\build\msix\F4CP-TestCert.pfx `
-  -CertificatePassword "123456"
-```
-
-在 Windows 10 上安装后，F4CP 会出现在开始菜单。右键应用选择“固定到开始屏幕”即可生成磁贴，磁贴图标来自 `Resources/Assets/Square44x44Logo.png`、`Square70x70Logo.png`、`Square150x150Logo.png`、`Wide310x150Logo.png` 和 `Square310x310Logo.png`。
-
 ## 项目结构
 
 ```text
 F4CP/
 ├─ app/
+│  ├─ controllers/           # 页面控制器，集中注册复杂页面的信号和操作入口
 │  ├─ core/                  # 数据中心、通道、设备基类、通用 UI 工具
 │  ├─ devices/               # 电源/BMS/虚拟设备适配层
 │  ├─ manager/               # 字体、样式、固件、更新管理
@@ -128,6 +87,7 @@ F4CP/
 | 模块 | 说明 |
 | --- | --- |
 | `start.py` | 应用入口、主窗口导航、启动画面和标题栏 DynamicIsland 通知 |
+| `app/controllers/` | 复杂页面控制器，负责把控件事件、页面信号和后台 client/session 事件集中绑定 |
 | `config/config.py` | `AppContext`、路径解析、日志和 JSON 配置 |
 | `app/widgets/pages/page_home.py` | 首页、软件更新检查、固件版本检查与下载 |
 | `app/widgets/pages/page_device.py` | 串口/蓝牙调试页，支持 Raw 和 TVLCOM V2 模式 |
@@ -171,6 +131,12 @@ Power 页面使用 `app/session/session_power.py` 中的专用协议，不与 `a
 
 ## 开发约定
 
+- 分层文件命名采用“层名在前、对象在后”的形式，便于文件列表中按职责聚合：页面用 `page_power.py`，控制器用 `controller_power_page.py`，会话用 `session_power.py`，管理器用 `manager_firmware.py`。
+- 类名使用 `PascalCase`，并保留清晰的分层后缀，例如 `PowerPage`、`PowerPageController`、`DaplinkPyocdSession`。
+- 普通函数和局部工具函数优先使用 `snake_case`；已有 PyQt 页面方法可以继续沿用项目现有的 `camelCase` 风格，避免为了统一命名做无意义的大范围改动。
+- 私有方法按用途分组命名：`_init_xxx` 创建界面，`_bind_xxx` 注册事件，`_apply_xxx` 应用配置或状态，`_update_xxx` 刷新显示，`_on_xxx` 响应控件或事件。
+- 页面和业务之间的信号按事件语义命名：请求类用 `xxxRequested`，状态类用 `xxxChanged` / `xxxUpdated`，结果类用 `xxxReady` / `xxxFinished`，错误类用 `xxxFailed` / `errorOccurred`。
+- 复杂页面优先加 Controller 层。Page 负责控件创建和状态展示，Controller 负责信号绑定和操作入口编排，Session/Client 负责通信细节。
 - 页面提示统一调用 `app/core/utility.py` 的 `showMessage(...)`；主窗口会同时显示右上角 InfoBar 和标题栏 DynamicIsland。
 - 跨线程通信使用 Qt 信号或自定义 Qt 事件，不要从 worker 线程直接操作控件。
 - 新增持久化设置统一走 `config.CTX.cfg` / qfluentwidgets `QConfig`。

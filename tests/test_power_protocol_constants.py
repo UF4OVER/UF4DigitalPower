@@ -23,6 +23,8 @@ USER_TVLCOM_H = ROOT / "UF4DigitalPower" / "USER" / "Inc" / "user_tvlcom.h"
 
 
 def _parse_enum(prefix: str) -> dict[str, int]:
+    if not USER_TVLCOM_H.exists():
+        raise unittest.SkipTest(f"Firmware protocol header not found: {USER_TVLCOM_H}")
     text = USER_TVLCOM_H.read_text(encoding="utf-8")
     result: dict[str, int] = {}
     for name, value in re.findall(rf"\b({prefix}[A-Z0-9_]+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)U?", text):
