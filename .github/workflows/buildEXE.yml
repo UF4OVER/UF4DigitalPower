@@ -42,7 +42,7 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          $version = python -c 'import pathlib, re; text = pathlib.Path("pyproject.toml").read_text(encoding="utf-8"); match = re.search(r"(?ms)^\[project\].*?^version\s*=\s*\"([^\"]+)\"", text); print(match.group(1) if match else "")'
+          $version = python -c "import tomllib, pathlib; data = tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8')); print(data['project']['version'])"
           if (-not $version) {
             throw 'Failed to resolve project.version from pyproject.toml'
           }
