@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.5.4.rc1"
+version = "0.5.5.dev1"
 # dev1    开发快照，最早期，不稳定
 # a1       alpha 内测版，功能可能还没完整
 # b1       beta 测试版，功能基本有了，但可能有 bug
@@ -16,15 +16,18 @@ authors = [
 ]
 
 dependencies = [
-    "cx-freeze>=8.5.3",
+    "cx-freeze>=8.6.4",
     "PyQt5>=5.15.2",
-    "pyocd>=0.44.0",
+    "pyocd>=0.44.1",
     "pyqt-fluent-widgets>=1.11.2",
     "pyqtgraph>=0.14.0",
 ]
 
 [tool.uv]
-constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
+constraint-dependencies = [
+    "pyqt5-qt5 <=5.15.2",
+    "capstone <=5.0.2",
+]
 
 
 [tool.cxfreeze]
