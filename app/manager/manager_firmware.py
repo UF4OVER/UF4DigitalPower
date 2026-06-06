@@ -30,9 +30,11 @@ from qfluentwidgets import qconfig
 
 from config import (
     CTX,
-    logger,
+    get_logger,
 )
 from app.core.update_request import build_request
+
+logger = get_logger("FirmwareManager")
 
 FIRMWARE_EXTENSIONS = {".hex", ".bin", ".elf", ".axf"}
 DEFAULT_FIRMWARE_BASE_URL = "https://update.hepi.ng"
@@ -329,7 +331,7 @@ class FirmwareManager:
         if base_url:
             return self._fetch_from_api(base_url)
         # Fall back to the legacy GitHub Releases API
-        logger.info("FirmwareManager: BaseUrl not configured, falling back to GitHub Releases")
+        logger.info("BaseUrl not configured, falling back to GitHub Releases")
         return self._fetch_from_github()
 
     def get_remote_release_history(self, force_refresh: bool = False) -> dict[str, list[FirmwareRelease]]:
@@ -452,12 +454,12 @@ class FirmwareManager:
                 else:
                     errors.append(f"{kind}: could not parse manifest for {version}")
             except Exception as exc:
-                logger.error(f"{self.__class__.__name__}: FirmwareManager failed to fetch {kind} firmware info: {exc}")
+                logger.error(f"Failed to fetch {kind} firmware info: {exc}")
                 errors.append(f"{kind}: {exc}")
 
         if not latest and errors:
             message = f"Failed to fetch firmware info from update server: {'; '.join(errors)}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
 
         return latest
@@ -474,7 +476,7 @@ class FirmwareManager:
                 releases.sort(key=self._release_sort_key, reverse=True)
                 history[kind] = releases
             except Exception as exc:
-                logger.error(f"{self.__class__.__name__}: failed to fetch {kind} history: {exc}")
+                logger.error(f"failed to fetch {kind} history: {exc}")
                 errors.append(f"{kind}: {exc}")
                 history[kind] = []
 
@@ -519,7 +521,7 @@ class FirmwareManager:
         return releases
 
     def _cache_file_path(self) -> Path:
-        cache_dir = CTX.dirs.UserResourcesDir / "Cache"
+        cache_dir = CTX.dirs.ResourcesDir / "Cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / FIRMWARE_CACHE_FILE_NAME
 
@@ -530,7 +532,7 @@ class FirmwareManager:
         try:
             data = json.loads(cache_file.read_text(encoding="utf-8"))
         except Exception as exc:
-            logger.warning(f"{self.__class__.__name__}: failed to read firmware cache: {exc}")
+            logger.warning(f"failed to read firmware cache: {exc}")
             return {}
         return data if isinstance(data, dict) else {}
 
@@ -542,7 +544,7 @@ class FirmwareManager:
                 encoding="utf-8",
             )
         except Exception as exc:
-            logger.warning(f"{self.__class__.__name__}: failed to write firmware cache: {exc}")
+            logger.warning(f"failed to write firmware cache: {exc}")
 
     def _save_remote_history_cache(self, history: dict[str, list[FirmwareRelease]]) -> None:
         self._historyCache = self._clone_history(history)
@@ -730,7 +732,7 @@ class FirmwareManager:
         repo = str(CTX.cfg.firmwareGithubRepo.value or "").strip()
         if not owner or not repo:
             message = "Firmware remote BaseUrl and GitHub owner/repo are both not configured."
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         return f"https://api.github.com/repos/{owner}/{repo}"
 
@@ -771,7 +773,7 @@ class FirmwareManager:
         latest = self.get_latest_remote_releases().get(self._normalize_kind(kind))
         if latest is None:
             message = f"No remote {kind} firmware release was found."
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         return self.download_release(latest)
 
@@ -782,7 +784,7 @@ class FirmwareManager:
         """
         if not release.download_url:
             message = f"Release {release.tag} does not contain a downloadable firmware asset."
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
 
         target_dir = self._kind_dir(release.kind) / self._version_dir_name(release)
@@ -815,7 +817,7 @@ class FirmwareManager:
                         f"SHA-256 mismatch for {asset_name}: "
                         f"expected {release.sha256}, got {actual_digest}"
                     )
-                    logger.error(f"{self.__class__.__name__}: {message}")
+                    logger.error(message)
                     raise RuntimeError(message)
 
             tmp_path.replace(target_path)
@@ -1076,15 +1078,15 @@ class FirmwareManager:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             message = f"HTTP {exc.code} from update server ({url}): {exc.reason}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message) from exc
         except URLError as exc:
             message = f"Cannot connect to update server ({url}): {exc}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message) from exc
         except json.JSONDecodeError as exc:
             message = f"Update server returned invalid JSON ({url}): {exc}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message) from exc
 
     def _api_get_text(self, url: str) -> str:
@@ -1094,11 +1096,11 @@ class FirmwareManager:
                 return response.read().decode("utf-8-sig")
         except HTTPError as exc:
             message = f"HTTP {exc.code} from update server ({url}): {exc.reason}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message) from exc
         except URLError as exc:
             message = f"Cannot connect to update server ({url}): {exc}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message) from exc
 
     def _github_get_json(self, url: str) -> object:

@@ -40,7 +40,9 @@ from app.session import (
 )
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
-from config import CTX
+from config import CTX, get_logger
+
+logger = get_logger("PowerPage")
 
 
 DEFAULT_OVP_SET_VALUE_MV = 44000
@@ -437,8 +439,6 @@ class PowerPage(ScrollArea):
         self._lastVerboseLogTs = 0.0
         self._appendLogBusy = False
 
-        self._pageLogPath = CTX.dirs.LogDir / f"power_page_{time.strftime('%Y-%m-%d')}.log"
-
         self._client = F4CPPowerClient()
         self._clientThread = QThread(self)
         self._client.moveToThread(self._clientThread)
@@ -640,7 +640,7 @@ class PowerPage(ScrollArea):
             if current in ports:
                 self.portCombo.setCurrentText(current)
         self.portCombo.blockSignals(False)
-        self._writePageLogFile(f"串口列表: {ports}")
+        logger.info(f"Serial ports: {ports}")
 
     def _initEmptyStatusView(self) -> None:
         self._renderStatusView(
@@ -660,7 +660,9 @@ class PowerPage(ScrollArea):
         """按页面选择创建串口会话，打开成功后交给电源协议客户端接管。"""
         port = self.portCombo.currentText().strip()
         if not port:
-            self._appendLog("错误: 未选择串口。请先刷新并选择串口。")
+            message = "未选择串口。请先刷新并选择串口。"
+            self._appendLog(f"错误: {message}")
+            logger.warning(message)
             return
         session = SerialSession(SerialConfig(port=port, baudrate=POWER_SERIAL_BAUD_RATE))
         try:
@@ -668,17 +670,20 @@ class PowerPage(ScrollArea):
         except Exception as exc:
             self.parameterEditor.setWriteEnabled(False)
             self._appendLog(f"错误: {exc}")
+            logger.error(f"Failed to open serial port {port}: {exc}")
             return
         self._manualSession = session
         self.onDeviceConnected(session)
 
     def onDeviceConnected(self, session) -> None:
         """串口建立后同步 UI 状态，并按开关决定读一次还是持续轮询。"""
+        port = getattr(getattr(session, 'cfg', None), 'port', '未知')
         self.attachSessionRequested.emit(session)
         self.stateBadge.setOnline(True)
         self.connectButton.setText("断开")
         self.parameterEditor.setWriteEnabled(True)
-        self._appendLog(f"已连接: {getattr(getattr(session, 'cfg', None), 'port', '未知')}")
+        self._appendLog(f"已连接: {port}")
+        logger.info(f"Device session attached on {port}")
         showMessage(self, "设备已连接", "电源设备会话已连接。", level="success")
         if self.autoPollSwitch.isChecked():
             self.startPollingRequested.emit(POWER_POLL_INTERVAL_MS)
@@ -693,7 +698,7 @@ class PowerPage(ScrollArea):
             if self._manualSession:
                 self._manualSession.close()
         except Exception as exc:
-            self._writePageLogFile(f"PowerPage manual session close failed: {exc}")
+            logger.error(f"PowerPage manual session close failed: {exc}")
         self._manualSession = None
         self._applyDisconnectedState()
         self._appendLog("设备已断开")
@@ -707,7 +712,7 @@ class PowerPage(ScrollArea):
             session.set_event_receiver(None)
             session.close()
         except Exception as exc:
-            self._writePageLogFile(f"PowerPage serial cleanup failed: {exc}")
+            logger.error(f"PowerPage serial cleanup failed: {exc}")
 
     def _onConnectionChanged(self, connected: bool) -> None:
         self.stateBadge.setOnline(connected)
@@ -860,6 +865,7 @@ class PowerPage(ScrollArea):
     def _onClientError(self, message: str) -> None:
         """协议层错误统一落到这里，恢复按钮状态并给用户一个明确提示。"""
         self._appendLog(f"错误: {message}")
+        logger.error(f"Power client error: {message}")
         self._setWriteControlsEnabled(True)
         showMessage(self, "通信错误", message, level="error")
         if self._writePollingRestartPending:
@@ -919,21 +925,17 @@ class PowerPage(ScrollArea):
         if self.parameterEditor.ovp.value() <= 0:
             self.parameterEditor.ovp.setValue(DEFAULT_OVP_SET_VALUE_MV / 1000.0)
 
-    def _writePageLogFile(self, text: str) -> None:
-        try:
-            self._pageLogPath.parent.mkdir(parents=True, exist_ok=True)
-            with self._pageLogPath.open("a", encoding="utf-8") as f:
-                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
-        except Exception:
-            pass
 
     def _appendLog(self, text: str) -> None:
         if self._appendLogBusy:
             return
         self._appendLogBusy = True
         try:
+            # 只有非频繁的原始数据包才记录到文件日志，避免日志爆炸。
+            if not (text.startswith("RX ") or text.startswith("TX ")):
+                logger.info(text)
+
             ts = time.strftime("%H:%M:%S")
-            self._writePageLogFile(text)
             if getattr(self, "logEdit", None) is not None:
                 self.logEdit.append(f"[{ts}] {text}")
         finally:
@@ -977,14 +979,14 @@ class PowerPage(ScrollArea):
             if self._manualSession:
                 self._manualSession.close()
         except Exception as exc:
-            self._writePageLogFile(f"PowerPage manual session shutdown failed: {exc}")
+            logger.error(f"PowerPage manual session shutdown failed: {exc}")
         self._manualSession = None
         try:
             if self._clientThread.isRunning():
                 QMetaObject.invokeMethod(self._client, "shutdown", Qt.ConnectionType.BlockingQueuedConnection)
         except Exception as exc:
-            self._writePageLogFile(f"PowerPage client shutdown failed: {exc}")
+            logger.error(f"PowerPage client shutdown failed: {exc}")
         if self._clientThread.isRunning():
             self._clientThread.quit()
             if not self._clientThread.wait(3000):
-                self._writePageLogFile("PowerPage client thread did not exit within 3000 ms")
+                logger.error("PowerPage client thread did not exit within 3000 ms")

@@ -12,7 +12,7 @@
         "ZhSupportUrl": "https://github.com/UF4OVER/UF4DigitalPower"
     },
     "Update": {
-        "CheckUpdateAtStartUp": false,
+        "CheckUpdateAtStartUp": true,
         "UpdateUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases"
     },
     "FirmwareRemote": {
@@ -22,29 +22,30 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
+            "SAIBA-45",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
         ],
-        "ThemeColor": "#ffff0000",
-        "ThemeMode": "Dark"
+        "ThemeColor": "#ff34ff29",
+        "ThemeMode": "Light"
     },
     "Appearance": {
-        "FontFamily": "",
-        "FontFile": "__system__"
+        "FontFamily": "SAIBA-45",
+        "FontFile": "SAIBA-45-Regular.otf"
     },
     "MainWindow": {
         "HighDpiScaling": true,
         "MicaEnabled": true
     },
     "NewVersion": {
-        "NewLocalVersion": "0.5.5.dev2",
-        "NewLowerVersion": "",
-        "NewUpperVersion": ""
+        "NewLocalVersion": "v0.5.4.rc1",
+        "NewLowerVersion": "v0.0.2",
+        "NewUpperVersion": "v0.0.3"
     },
     "OldVersion": {
         "OldLocalVersion": "0.5.5.dev2",
-        "OldLowerVersion": "",
-        "OldUpperVersion": ""
+        "OldLowerVersion": "v0.0.2",
+        "OldUpperVersion": "v0.0.3"
     }
 }

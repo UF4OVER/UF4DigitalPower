@@ -36,7 +36,9 @@ from qfluentwidgets import (
 )
 
 from app.controllers import DaplinkPageController
-from config import CTX, logger
+from config import CTX, get_logger
+
+logger = get_logger("DaplinkPage")
 
 from app.manager import StyleSheet, firmware_manager
 from app.core.utility import showMessage
@@ -421,7 +423,7 @@ class DaplinkPage(ScrollArea):
         cursor.insertText(plainText)
         scrollbar = self.logEdit.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
-        logger.info(f"{self.__class__.__name__}: {text}", extra={"color": color})
+        logger.info(text, extra={"color": color})
 
     def showMessage(self, title: str, content: str, level: str = "info"):
         showMessage(self, title, content, level)

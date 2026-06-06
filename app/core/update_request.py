@@ -12,7 +12,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request
 
-from config import CTX, logger
+from config import CTX, get_logger
+
+logger = get_logger("UpdateRequest")
 
 TRUSTED_HOST = "update.hepi.ng"
 TRUSTED_CLIENT_ID = "f4cp-desktop"

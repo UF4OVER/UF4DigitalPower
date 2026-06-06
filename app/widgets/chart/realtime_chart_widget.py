@@ -24,7 +24,9 @@ from app.widgets.chart.chart_value_panel import ChartValuePanel
 from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.chart_control_panel import ChartControlPanel
 from app.widgets.chart.pyqtgraph_chart_widget import PyQtGraphChartWidget
-from config import cfg, logger
+from config import cfg, get_logger
+
+logger = get_logger("RealtimeChart")
 
 
 class RealtimeChartWidget(QWidget):

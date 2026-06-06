@@ -20,6 +20,7 @@ from .config import (
     cfg,
     AppIconPath,
     logger,
+    get_logger,
 
     # ---- 应用常量 ----
     VERSION,

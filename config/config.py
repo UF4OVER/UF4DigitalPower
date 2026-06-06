@@ -15,7 +15,7 @@ import logging
 import os
 import shutil
 import sys
-from datetime import datetime
+import time
 from functools import cached_property
 from pathlib import Path
 from PyQt5.QtCore import pyqtSignal
@@ -32,7 +32,7 @@ from qfluentwidgets import (
 # ============================================================================
 
 def _detect_base_dir() -> Path:
-    """Return the project root, respecting frozen (cx_Freeze) layouts."""
+    """Return the project root, respecting frozen (cx_Freeze) layouts返回项目根，但要遵守冻结（cx_Freeze）布局."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
@@ -60,10 +60,8 @@ class DirPaths:
     Uses *cached_property* so each directory is created on first access.
     """
 
-    def __init__(self, base_dir: Path | None = None, data_dir: Path | None = None):
-        explicit_base_dir = base_dir is not None
+    def __init__(self, base_dir: Path | None = None):
         self._base = base_dir if base_dir is not None else _detect_base_dir()
-        self._data = data_dir if data_dir is not None else _detect_data_dir(self._base, explicit_base_dir)
 
     @property
     def base_dir(self) -> Path:
@@ -74,17 +72,8 @@ class DirPaths:
         """Backward-compatible alias for base_dir."""
         return self._base
 
-    @property
-    def data_dir(self) -> Path:
-        return self._data
-
     def _ensure_dir(self, *parts: str) -> Path:
         directory = self._base.joinpath(*parts)
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory
-
-    def _ensure_data_dir(self, *parts: str) -> Path:
-        directory = self._data.joinpath(*parts)
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
@@ -93,34 +82,11 @@ class DirPaths:
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
-    def _copy_seed_dir(self, source: Path, target: Path) -> None:
-        if not source.exists():
-            return
-        for item in source.rglob("*"):
-            relative = item.relative_to(source)
-            destination = target / relative
-            if item.is_dir():
-                destination.mkdir(parents=True, exist_ok=True)
-            elif not destination.exists():
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(item, destination)
-
-    def _copy_seed_dir_when_empty(self, source: Path, target: Path) -> None:
-        if target.exists() and any(target.iterdir()):
-            return
-        self._copy_seed_dir(source, target)
-
     # ---- public cached properties ----
 
     @cached_property
     def ResourcesDir(self) -> Path:
-        directory = self._base / "Resources"
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory
-
-    @cached_property
-    def UserResourcesDir(self) -> Path:
-        return self._ensure_data_dir("Resources")
+        return self._ensure_dir("Resources")
 
     @cached_property
     def AssetsDir(self) -> Path:
@@ -128,10 +94,7 @@ class DirPaths:
 
     @cached_property
     def ConfigDir(self) -> Path:
-        config_dir = self._ensure_sub_dir(self.UserResourcesDir, "config")
-        bundled_config_dir = self.ResourcesDir / "config"
-        self._copy_seed_dir(bundled_config_dir, config_dir)
-        return config_dir
+        return self._ensure_sub_dir(self.ResourcesDir, "config")
 
     @cached_property
     def ThemeDir(self) -> Path:
@@ -143,7 +106,7 @@ class DirPaths:
 
     @cached_property
     def LogDir(self) -> Path:
-        return self._ensure_data_dir("Logs")
+        return self._ensure_dir("Logs")
 
     @cached_property
     def ToolsDir(self) -> Path:
@@ -155,10 +118,7 @@ class DirPaths:
 
     @cached_property
     def FirmwareDir(self) -> Path:
-        firmware_dir = self._ensure_sub_dir(self.UserResourcesDir, "Firmware")
-        bundled_firmware_dir = self.ResourcesDir / "Firmware"
-        self._copy_seed_dir_when_empty(bundled_firmware_dir, firmware_dir)
-        return firmware_dir
+        return self._ensure_sub_dir(self.ResourcesDir, "Firmware")
 
     @cached_property
     def McuPackDir(self) -> Path:
@@ -179,6 +139,7 @@ class DirPaths:
     @cached_property
     def FirmwareUpper(self) -> Path:
         return self.FirmwareUpperDir
+
 
     @cached_property
     def AppIconPath(self) -> str:
@@ -206,21 +167,30 @@ logger = logging.getLogger("F4CP")
 logger.setLevel(logging.DEBUG)
 
 
+def get_logger(name: str) -> logging.Logger:
+    """Return a child logger of the main F4CP logger."""
+    return logging.getLogger(f"F4CP.{name}")
+
+
 def _init_logger_once(log_dir: Path):
     global _logger_initialized
     if _logger_initialized:
         return
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    log_path = log_dir / f"{timestamp}.log"
+
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    log_path = log_dir / f"f4cp_{timestamp}.log"
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
 
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    # Minecraft-style: append mode ('a') to keep a single persistent log file
+    file_handler = logging.FileHandler(log_path, mode='a', encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
 
+    # Simplified format with better traceability [Thread/Level] [Name]: Message
     formatter = logging.Formatter(
-        "[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        "[%(asctime)s] [%(threadName)s/%(levelname)s] [%(name)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
     )
     console_handler.setFormatter(formatter)
     file_handler.setFormatter(formatter)
@@ -296,8 +266,8 @@ class AppContext:
         ctx.cfg.themeMode.value
     """
 
-    def __init__(self, *, base_dir: Path | None = None, data_dir: Path | None = None):
-        self._dirs = DirPaths(base_dir, data_dir)
+    def __init__(self, *, base_dir: Path | None = None):
+        self._dirs = DirPaths(base_dir)
         _init_logger_once(self._dirs.LogDir)
 
         self._qconfig = F4CPConfig()

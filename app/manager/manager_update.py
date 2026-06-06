@@ -31,10 +31,12 @@ from config import (
 	LATEST_LOWER_VERSION_OPTION,
 	LATEST_UPPER_VERSION_OPTION,
 	VERSION_REMOTE_SECTION,
-	logger,
+	get_logger,
 )
 from app.core.update_request import build_request
 from .manager_firmware import firmware_manager
+
+logger = get_logger("UpdateManager")
 
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 
@@ -120,7 +122,7 @@ class UpdateCheckThread(QThread):
 		try:
 			result = self.manager._perform_check(self.manual)  # NOQA
 		except Exception as e:
-			logger.exception(f"{self.__class__.__name__}: Unexpected error during app update check :{e}")
+			logger.exception(f"Unexpected error during app update check :{e}")
 			result = UpdateCheckResult(
 				success=False,
 				manual=self.manual,

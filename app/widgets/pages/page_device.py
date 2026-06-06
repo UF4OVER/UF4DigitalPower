@@ -78,8 +78,10 @@ from app.session import (
     StateEvent,
     TxEvent,
     listSerialPorts,
-    logger,
 )
+from config import get_logger
+
+logger = get_logger("DevicePage")
 
 from app.protocol import Dispatcher as V2Dispatcher
 from app.protocol import FrameBuilder as V2FrameBuilder
@@ -198,6 +200,7 @@ class BluetoothSession(QObject):
         self.address = address
         self._event_receiver = _event_receiver
         self._socket = None
+        self._logger = get_logger("BluetoothSession(Internal)")
 
     def set_event_receiver(self, receiver: Optional[QObject]) -> None:
         self._event_receiver = receiver
@@ -216,7 +219,7 @@ class BluetoothSession(QObject):
             or QBluetoothServiceInfo is None
         ):
             message = "当前环境不支持 Qt Bluetooth"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            self._logger.error(message)
             raise RuntimeError(message)
 
         self._post_event(StateEvent(SerialState.OPENING))
@@ -241,7 +244,7 @@ class BluetoothSession(QObject):
     def write(self, data: bytes) -> int:
         if not self.is_open:
             message = "蓝牙设备未连接"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            self._logger.error(message)
             raise RuntimeError(message)
         written = int(self._socket.write(data))
         self._post_event(TxEvent(data))
@@ -520,7 +523,7 @@ class DevicePage(ScrollArea):
                 try:
                     self._onRxRaw(data)
                 except Exception as exc:
-                    logger.error(exc)
+                    logger.error(f"Rx error: {exc}")
             return True
         if e.type() == SerialEventType.TX:
             data = e.payload.data

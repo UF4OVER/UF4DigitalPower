@@ -67,7 +67,9 @@ from app.core.const import (
 )
 
 
-from config import logger
+from config import get_logger
+
+logger = get_logger("PowerClient")
 
 def crc16_modbus(data: bytes) -> int:
     """计算电源协议帧使用的 Modbus CRC16。
@@ -293,7 +295,9 @@ class PowerStatus:
         return self.ovp_value_mv / 1000.0
 
     @property
-    def ovp_set_value_v(self) -> float:
+    def ovp_set_value_v(self) -> float | None:
+        if self.ovp_set_value_mv is None:
+            return None
         return self.ovp_set_value_mv / 1000.0
 
     @property
@@ -426,7 +430,7 @@ class F4CPPowerClient(QObject):
             try:
                 self._session.set_event_receiver(None)
             except Exception:
-                logger.error(f"{self.__class__.__name__}: Failed to detach serial session on {self._session.cfg.port}")
+                logger.error(f"Failed to detach serial session on {self._session.cfg.port}")
         self._session = None
         self._buffer.clear()
         self._pending = None

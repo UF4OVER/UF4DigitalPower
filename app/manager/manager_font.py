@@ -19,9 +19,12 @@ from typing import TYPE_CHECKING
 
 from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication
-from qfluentwidgets import qconfig
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import qconfig, QConfig, ConfigItem, OptionsConfigItem, OptionsValidator, BoolValidator
 
-from config import CTX, cfg, logger
+from config import CTX, cfg, get_logger
+
+logger = get_logger("FontManager")
 
 if TYPE_CHECKING:
     from config import AppContext
