@@ -20,7 +20,7 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -34,6 +34,8 @@ from config import (
 )
 
 FIRMWARE_EXTENSIONS = {".hex", ".bin", ".elf", ".axf"}
+DEFAULT_FIRMWARE_BASE_URL = "https://update.hepi.ng"
+FIRMWARE_CACHE_FILE_NAME = "firmware_remote_cache.json"
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,23 @@ class FirmwareCheckResult:
     has_updates: dict[str, bool]
 
 
+@dataclass(frozen=True)
+class FirmwareHistoryResult:
+    success: bool
+    message: str
+    releases: dict[str, list[FirmwareRelease]]
+
+
+@dataclass(frozen=True)
+class FirmwareDetailResult:
+    success: bool
+    kind: str
+    version: str
+    message: str
+    release: FirmwareRelease | None = None
+    changelog: str = ""
+
+
 class FirmwareDownloadFinishedEvent(QEvent):
     EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
 
@@ -82,6 +101,22 @@ class FirmwareCheckFinishedEvent(QEvent):
     EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
 
     def __init__(self, result: FirmwareCheckResult):
+        super().__init__(self.EVENT_TYPE)
+        self.result = result
+
+
+class FirmwareHistoryFinishedEvent(QEvent):
+    EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
+
+    def __init__(self, result: FirmwareHistoryResult):
+        super().__init__(self.EVENT_TYPE)
+        self.result = result
+
+
+class FirmwareDetailFinishedEvent(QEvent):
+    EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
+
+    def __init__(self, result: FirmwareDetailResult):
         super().__init__(self.EVENT_TYPE)
         self.result = result
 
@@ -113,13 +148,18 @@ class FirmwareCheckThread(QThread):
 class FirmwareDownloadThread(QThread):
     resultReady = pyqtSignal(object)
 
-    def __init__(self, kind: str, parent: QObject | None = None):
+    def __init__(self, kind: str, release: FirmwareRelease | None = None, parent: QObject | None = None):
         super().__init__(parent)
         self.kind = kind
+        self.release = release
 
     def run(self) -> None:
         try:
-            release = firmware_manager.download_latest(self.kind)
+            release = (
+                firmware_manager.download_release(self.release)
+                if self.release is not None
+                else firmware_manager.download_latest(self.kind)
+            )
             firmware_manager.write_local_version(release)
             result = FirmwareDownloadResult(
                 success=True,
@@ -133,6 +173,66 @@ class FirmwareDownloadThread(QThread):
                 success=False,
                 kind=self.kind,
                 message=str(exc) or "Failed to download firmware.",
+            )
+        self.resultReady.emit(result)
+
+
+class FirmwareHistoryThread(QThread):
+    resultReady = pyqtSignal(object)
+
+    def __init__(self, force_refresh: bool = False, parent: QObject | None = None):
+        super().__init__(parent)
+        self.force_refresh = force_refresh
+
+    def run(self) -> None:
+        try:
+            releases = firmware_manager.get_remote_release_history(force_refresh=self.force_refresh)
+            result = FirmwareHistoryResult(
+                success=True,
+                message="Firmware history has been refreshed.",
+                releases=releases,
+            )
+        except Exception as exc:
+            logger.exception("Failed to fetch firmware history")
+            result = FirmwareHistoryResult(
+                success=False,
+                message=str(exc) or "Failed to fetch firmware history.",
+                releases={},
+            )
+        self.resultReady.emit(result)
+
+
+class FirmwareDetailThread(QThread):
+    resultReady = pyqtSignal(object)
+
+    def __init__(self, kind: str, version: str, force_refresh: bool = False, parent: QObject | None = None):
+        super().__init__(parent)
+        self.kind = kind
+        self.version = version
+        self.force_refresh = force_refresh
+
+    def run(self) -> None:
+        try:
+            release, changelog = firmware_manager.get_remote_release_detail(
+                self.kind,
+                self.version,
+                force_refresh=self.force_refresh,
+            )
+            result = FirmwareDetailResult(
+                success=True,
+                kind=release.kind,
+                version=release.version,
+                message="Firmware detail has been refreshed.",
+                release=release,
+                changelog=changelog,
+            )
+        except Exception as exc:
+            logger.exception(f"Failed to fetch {self.kind} {self.version} firmware detail")
+            result = FirmwareDetailResult(
+                success=False,
+                kind=self.kind,
+                version=self.version,
+                message=str(exc) or "Failed to fetch firmware detail.",
             )
         self.resultReady.emit(result)
 
@@ -152,6 +252,8 @@ class FirmwareManager:
 
     def __init__(self, api_root: str = ""):
         self._apiRoot = api_root.rstrip("/")
+        self._historyCache: dict[str, list[FirmwareRelease]] | None = None
+        self._detailCache: dict[str, tuple[FirmwareRelease, str]] = {}
 
     # ------------------------------------------------------------------
     # Directory helpers
@@ -229,8 +331,94 @@ class FirmwareManager:
         logger.info("FirmwareManager: BaseUrl not configured, falling back to GitHub Releases")
         return self._fetch_from_github()
 
+    def get_remote_release_history(self, force_refresh: bool = False) -> dict[str, list[FirmwareRelease]]:
+        """读取远程固件历史列表，供版本管理页面展示。"""
+        if not force_refresh:
+            cached = self.get_cached_remote_release_history()
+            if any(cached.values()):
+                return cached
+
+        base_url = self._get_base_url()
+        if base_url:
+            history = self._fetch_history_from_api(base_url)
+            self._save_remote_history_cache(history)
+            return history
+
+        releases = self.fetch_releases()
+        grouped: dict[str, list[FirmwareRelease]] = {"Power": [], "Upper": []}
+        for release in releases:
+            grouped.setdefault(release.kind, []).append(release)
+        for kind in grouped:
+            grouped[kind].sort(key=self._release_sort_key, reverse=True)
+        self._save_remote_history_cache(grouped)
+        return grouped
+
+    def get_cached_remote_release_history(self) -> dict[str, list[FirmwareRelease]]:
+        """返回已有固件历史缓存；内存没有时从磁盘 JSON 读取。"""
+        if self._historyCache is not None:
+            return self._clone_history(self._historyCache)
+
+        cache_data = self._read_remote_cache_file()
+        history = self._history_from_cache_data(cache_data.get("history"))
+        self._historyCache = history
+        self._detailCache.update(self._details_from_cache_data(cache_data.get("details")))
+        return self._clone_history(history)
+
+    def get_cached_remote_release_detail(self, kind: str, version: str) -> tuple[FirmwareRelease, str] | None:
+        normalized = self._normalize_kind(kind)
+        key = self._detail_cache_key(normalized, version)
+        cached = self._detailCache.get(key)
+        if cached is not None:
+            return cached
+
+        # Loading history also hydrates details from disk cache.
+        self.get_cached_remote_release_history()
+        return self._detailCache.get(key)
+
+    def get_remote_release_detail(
+        self,
+        kind: str,
+        version: str,
+        force_refresh: bool = False,
+    ) -> tuple[FirmwareRelease, str]:
+        """读取指定固件版本 manifest 和 changelog。"""
+        normalized = self._normalize_kind(kind)
+        if not force_refresh:
+            cached = self.get_cached_remote_release_detail(normalized, version)
+            if cached is not None:
+                return cached
+
+        base_url = self._get_base_url()
+        if base_url:
+            manifest_data = self._api_get_json(
+                f"{base_url}/api/v1/firmware/{normalized.lower()}/versions/{version}"
+            )
+            if not isinstance(manifest_data, dict):
+                raise RuntimeError(f"Invalid manifest response for {normalized} {version}")
+            release = self._release_from_manifest(normalized, base_url, manifest_data)
+            if release is None:
+                raise RuntimeError(f"Could not parse manifest for {normalized} {version}")
+            changelog = self._api_get_text(
+                f"{base_url}/api/v1/firmware/{normalized.lower()}/versions/{version}/changelog"
+            )
+            self._save_remote_detail_cache(release, changelog)
+            return release, changelog
+
+        release = next(
+            (
+                item
+                for item in self.fetch_releases()
+                if item.kind == normalized and item.version == version
+            ),
+            None,
+        )
+        if release is None:
+            raise RuntimeError(f"No remote {normalized} firmware release {version} was found.")
+        self._save_remote_detail_cache(release, "")
+        return release, ""
+
     def _get_base_url(self) -> str:
-        url = str(CTX.cfg.firmwareBaseUrl.value or "").strip().rstrip("/")
+        url = str(CTX.cfg.firmwareBaseUrl.value or DEFAULT_FIRMWARE_BASE_URL).strip().rstrip("/")
         return url
 
     # --- FastAPI server path ---
@@ -272,6 +460,208 @@ class FirmwareManager:
             raise RuntimeError(message)
 
         return latest
+
+    def _fetch_history_from_api(self, base_url: str) -> dict[str, list[FirmwareRelease]]:
+        """从 F4CP 更新服务读取 Power/Upper 固件历史索引。"""
+        history: dict[str, list[FirmwareRelease]] = {}
+        errors: list[str] = []
+
+        for kind in ("Power", "Upper"):
+            try:
+                index_data = self._api_get_json(f"{base_url}/api/v1/firmware/{kind.lower()}/index")
+                releases = self._releases_from_index(kind, base_url, index_data)
+                releases.sort(key=self._release_sort_key, reverse=True)
+                history[kind] = releases
+            except Exception as exc:
+                logger.error(f"{self.__class__.__name__}: failed to fetch {kind} history: {exc}")
+                errors.append(f"{kind}: {exc}")
+                history[kind] = []
+
+        if not any(history.values()) and errors:
+            raise RuntimeError(f"Failed to fetch firmware history: {'; '.join(errors)}")
+
+        return history
+
+    def _releases_from_index(
+        self,
+        kind: str,
+        base_url: str,
+        index_data: object,
+    ) -> list[FirmwareRelease]:
+        if not isinstance(index_data, dict):
+            return []
+        versions = index_data.get("versions")
+        if not isinstance(versions, list):
+            return []
+
+        releases: list[FirmwareRelease] = []
+        for item in versions:
+            if not isinstance(item, dict):
+                continue
+            version = str(item.get("version") or "").strip()
+            if not version:
+                continue
+            rel_manifest = str(item.get("manifest_url") or "").strip()
+            rel_changelog = str(item.get("changelog_url") or "").strip()
+            releases.append(
+                FirmwareRelease(
+                    kind=kind,
+                    tag=version,
+                    version=version,
+                    date=str(item.get("date") or ""),
+                    suffix=0,
+                    channel=str(item.get("channel") or ""),
+                    changelog_url=(base_url + rel_changelog) if rel_changelog.startswith("/") else rel_changelog,
+                    download_url=(base_url + rel_manifest) if rel_manifest.startswith("/") else rel_manifest,
+                )
+            )
+        return releases
+
+    def _cache_file_path(self) -> Path:
+        cache_dir = CTX.dirs.UserResourcesDir / "Cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / FIRMWARE_CACHE_FILE_NAME
+
+    def _read_remote_cache_file(self) -> dict[str, object]:
+        cache_file = self._cache_file_path()
+        if not cache_file.exists():
+            return {}
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning(f"{self.__class__.__name__}: failed to read firmware cache: {exc}")
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _write_remote_cache_file(self, data: dict[str, object]) -> None:
+        cache_file = self._cache_file_path()
+        try:
+            cache_file.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning(f"{self.__class__.__name__}: failed to write firmware cache: {exc}")
+
+    def _save_remote_history_cache(self, history: dict[str, list[FirmwareRelease]]) -> None:
+        self._historyCache = self._clone_history(history)
+        data = self._read_remote_cache_file()
+        data["history"] = {
+            kind: [self._release_to_cache_data(release) for release in releases]
+            for kind, releases in history.items()
+        }
+        data["updated_at"] = self._utc_now_text()
+        self._write_remote_cache_file(data)
+
+    def _save_remote_detail_cache(self, release: FirmwareRelease, changelog: str) -> None:
+        key = self._detail_cache_key(release.kind, release.version)
+        self._detailCache[key] = (release, changelog)
+        data = self._read_remote_cache_file()
+        details = data.get("details")
+        if not isinstance(details, dict):
+            details = {}
+        details[key] = {
+            "release": self._release_to_cache_data(release),
+            "changelog": changelog,
+            "updated_at": self._utc_now_text(),
+        }
+        data["details"] = details
+        data["updated_at"] = self._utc_now_text()
+        self._write_remote_cache_file(data)
+
+    @classmethod
+    def _history_from_cache_data(cls, data: object) -> dict[str, list[FirmwareRelease]]:
+        history: dict[str, list[FirmwareRelease]] = {"Power": [], "Upper": []}
+        if not isinstance(data, dict):
+            return history
+        for kind in ("Power", "Upper"):
+            items = data.get(kind)
+            if not isinstance(items, list):
+                continue
+            releases = [
+                release
+                for release in (cls._release_from_cache_data(item) for item in items)
+                if release is not None
+            ]
+            history[kind] = releases
+        return history
+
+    @classmethod
+    def _details_from_cache_data(cls, data: object) -> dict[str, tuple[FirmwareRelease, str]]:
+        details: dict[str, tuple[FirmwareRelease, str]] = {}
+        if not isinstance(data, dict):
+            return details
+        for key, item in data.items():
+            if not isinstance(item, dict):
+                continue
+            release = cls._release_from_cache_data(item.get("release"))
+            if release is None:
+                continue
+            details[str(key)] = (release, str(item.get("changelog") or ""))
+        return details
+
+    @staticmethod
+    def _release_to_cache_data(release: FirmwareRelease) -> dict[str, object]:
+        return {
+            "kind": release.kind,
+            "tag": release.tag,
+            "version": release.version,
+            "date": release.date,
+            "suffix": release.suffix,
+            "asset_name": release.asset_name,
+            "download_url": release.download_url,
+            "sha256": release.sha256,
+            "size": release.size,
+            "channel": release.channel,
+            "device": release.device,
+            "hardware": release.hardware,
+            "changelog_url": release.changelog_url,
+            "path": str(release.path) if release.path is not None else "",
+        }
+
+    @staticmethod
+    def _release_from_cache_data(data: object) -> FirmwareRelease | None:
+        if not isinstance(data, dict):
+            return None
+        version = str(data.get("version") or "").strip()
+        kind = str(data.get("kind") or "").strip()
+        if not kind or not version:
+            return None
+        path_text = str(data.get("path") or "").strip()
+        try:
+            suffix = int(data.get("suffix") or 0)
+            size = int(data.get("size") or 0)
+        except (TypeError, ValueError):
+            suffix = 0
+            size = 0
+        return FirmwareRelease(
+            kind=kind,
+            tag=str(data.get("tag") or version),
+            version=version,
+            date=str(data.get("date") or ""),
+            suffix=suffix,
+            asset_name=str(data.get("asset_name") or ""),
+            download_url=str(data.get("download_url") or ""),
+            sha256=str(data.get("sha256") or ""),
+            size=size,
+            channel=str(data.get("channel") or ""),
+            device=str(data.get("device") or ""),
+            hardware=str(data.get("hardware") or ""),
+            changelog_url=str(data.get("changelog_url") or ""),
+            path=Path(path_text) if path_text else None,
+        )
+
+    @staticmethod
+    def _clone_history(history: dict[str, list[FirmwareRelease]]) -> dict[str, list[FirmwareRelease]]:
+        return {kind: list(releases) for kind, releases in history.items()}
+
+    @staticmethod
+    def _detail_cache_key(kind: str, version: str) -> str:
+        return f"{kind}:{version}"
+
+    @staticmethod
+    def _utc_now_text() -> str:
+        return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def _release_from_manifest(
         self,
@@ -696,6 +1086,20 @@ class FirmwareManager:
             logger.error(f"{self.__class__.__name__}: {message}")
             raise RuntimeError(message) from exc
 
+    def _api_get_text(self, url: str) -> str:
+        request = self._build_request(url)
+        try:
+            with urlopen(request, timeout=15) as response:
+                return response.read().decode("utf-8-sig")
+        except HTTPError as exc:
+            message = f"HTTP {exc.code} from update server ({url}): {exc.reason}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message) from exc
+        except URLError as exc:
+            message = f"Cannot connect to update server ({url}): {exc}"
+            logger.error(f"{self.__class__.__name__}: {message}")
+            raise RuntimeError(message) from exc
+
     def _github_get_json(self, url: str) -> object:
         request = self._build_request(url)
         try:
@@ -813,6 +1217,18 @@ class FirmwareDownloadManager:
             return False
 
         worker = FirmwareDownloadThread(normalized)
+        return self._start_worker(normalized, worker, receiver)
+
+    def download_release(self, release: FirmwareRelease, receiver: QObject) -> bool:
+        normalized = firmware_manager._normalize_kind(release.kind)
+        if self.is_downloading(normalized):
+            logger.info(f"FirmwareDownloadManager skipped {normalized} because it is already running")
+            return False
+
+        worker = FirmwareDownloadThread(normalized, release)
+        return self._start_worker(normalized, worker, receiver)
+
+    def _start_worker(self, normalized: str, worker: FirmwareDownloadThread, receiver: QObject) -> bool:
         worker.resultReady.connect(lambda result, target=receiver: self._publish_result(target, result))
         worker.finished.connect(lambda kind=normalized: self._cleanup(kind))
         self._workers[normalized] = worker
@@ -829,4 +1245,73 @@ class FirmwareDownloadManager:
 
 
 firmware_download_manager = FirmwareDownloadManager()
+
+
+class FirmwareHistoryManager:
+    def __init__(self):
+        self._worker: FirmwareHistoryThread | None = None
+        self._detail_workers: dict[str, FirmwareDetailThread] = {}
+
+    @property
+    def is_refreshing(self) -> bool:
+        return bool(self._worker and self._worker.isRunning())
+
+    def is_loading_detail(self, kind: str | None = None, version: str | None = None) -> bool:
+        if kind is None or version is None:
+            return any(worker.isRunning() for worker in self._detail_workers.values())
+        return self._detail_key(kind, version) in self._detail_workers
+
+    def cached_detail(self, kind: str, version: str) -> tuple[FirmwareRelease, str] | None:
+        return firmware_manager.get_cached_remote_release_detail(kind, version)
+
+    def cached_history(self) -> dict[str, list[FirmwareRelease]]:
+        return firmware_manager.get_cached_remote_release_history()
+
+    def refresh_history(self, receiver: QObject, force_refresh: bool = False) -> bool:
+        if self.is_refreshing:
+            logger.info("FirmwareHistoryManager skipped because another history refresh is running")
+            return False
+
+        self._worker = FirmwareHistoryThread(force_refresh=force_refresh)
+        self._worker.resultReady.connect(lambda result, target=receiver: self._publish_history_result(target, result))
+        self._worker.finished.connect(self._cleanup_history_worker)
+        self._worker.start()
+        return True
+
+    def load_detail(self, kind: str, version: str, receiver: QObject, force_refresh: bool = False) -> bool:
+        normalized = firmware_manager._normalize_kind(kind)
+        key = self._detail_key(normalized, version)
+        if key in self._detail_workers:
+            logger.info(f"FirmwareHistoryManager skipped detail {key} because it is already running")
+            return False
+
+        worker = FirmwareDetailThread(normalized, version, force_refresh=force_refresh)
+        worker.resultReady.connect(lambda result, target=receiver: self._publish_detail_result(target, result))
+        worker.finished.connect(lambda key=key: self._cleanup_detail_worker(key))
+        self._detail_workers[key] = worker
+        worker.start()
+        return True
+
+    def _publish_history_result(self, receiver: QObject, result: FirmwareHistoryResult) -> None:
+        QCoreApplication.postEvent(receiver, FirmwareHistoryFinishedEvent(result))
+
+    def _publish_detail_result(self, receiver: QObject, result: FirmwareDetailResult) -> None:
+        QCoreApplication.postEvent(receiver, FirmwareDetailFinishedEvent(result))
+
+    def _cleanup_history_worker(self) -> None:
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
+
+    def _cleanup_detail_worker(self, key: str) -> None:
+        worker = self._detail_workers.pop(key, None)
+        if worker is not None:
+            worker.deleteLater()
+
+    @staticmethod
+    def _detail_key(kind: str, version: str) -> str:
+        return f"{kind}:{version}"
+
+
+firmware_history_manager = FirmwareHistoryManager()
 firmware_check_manager = FirmwareCheckManager()

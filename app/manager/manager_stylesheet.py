@@ -25,6 +25,7 @@ class StyleSheet(StyleSheetBase, Enum):
     HOME_PAGE = "HomePage"
     POWER_PAGE = "PowerPage"
     SETTINGS_PAGE = "SettingsPage"
+    VERSION_PAGE = "VersionPage"
     BASE_PAGE = "Base"
 
     def path(self, theme=Theme.AUTO):

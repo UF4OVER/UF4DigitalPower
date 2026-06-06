@@ -14,6 +14,7 @@ from app.widgets.pages import (
     HomePage,
     PowerPage,
     SettingsPage,
+    VersionPage,
 )
 
 
@@ -32,6 +33,7 @@ NAVIGATION_ENTRIES = (
     NavigationEntry("deviceNavItem" ,  "deviceInterface" , UF4Icon.SERIAL_PORT, "串口", UF4Icon.SERIAL_PORT_FILL),
     NavigationEntry("powerNavItem"  ,  "powerInterface"  , UF4Icon.DEVELOPER_BOARD, "设备", UF4Icon.DEVELOPER_BOARD_FILL),
     NavigationEntry("daplinkNavItem",  "daplinkInterface", UF4Icon.FLASH_SETTINGS, "烧录", UF4Icon.FLASH_SETTINGS_FILL),
+    NavigationEntry("versionNavItem",  "versionInterface", UF4Icon.CLOUD_ARROW_DOWN, "版本", UF4Icon.CLOUD_ARROW_DOWN_FILL),
     NavigationEntry("settingNavItem",  "settingInterface", UF4Icon.SERVER,"设置", UF4Icon.SERVER_FILL,NavigationItemPosition.BOTTOM),
 )
 
@@ -43,6 +45,7 @@ class NavigationMixin:
     deviceInterface: DevicePage
     powerInterface: PowerPage
     daplinkInterface: DaplinkPage
+    versionInterface: VersionPage
     settingInterface: SettingsPage
 
     def createPages(self) -> None:
@@ -50,6 +53,7 @@ class NavigationMixin:
         self.deviceInterface = DevicePage(self)
         self.powerInterface = PowerPage(self)
         self.daplinkInterface = DaplinkPage(self)
+        self.versionInterface = VersionPage(self)
         self.settingInterface = SettingsPage(self)
 
     def registerNavigation(self) -> None:
