@@ -33,6 +33,7 @@ from config import (
 	VERSION_REMOTE_SECTION,
 	logger,
 )
+from app.core.update_request import build_request
 from .manager_firmware import firmware_manager
 
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
@@ -289,14 +290,14 @@ class UpdateManager:
 		if github_api_url:
 			return self._fetch_github_latest_release(github_api_url)
 
-		request = Request(update_url, headers={"User-Agent": "F4CP-UpdateChecker"})
+		request = build_request(update_url, headers={"User-Agent": "F4CP-UpdateChecker"})
 		with urlopen(request, timeout=8) as response:
 			payload = response.read().decode("utf-8-sig")
 		return {"versions": self._parse_remote_versions(payload)}
 
 	def _fetch_github_latest_release(self, api_url: str) -> dict[str, object]:
 		"""读取 GitHub latest release，并把 tag 当作应用最新版本。"""
-		request = Request(
+		request = build_request(
 			api_url,
 			headers={
 				"Accept": "application/vnd.github+json",

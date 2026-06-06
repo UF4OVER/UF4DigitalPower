@@ -32,6 +32,7 @@ from config import (
     CTX,
     logger,
 )
+from app.core.update_request import build_request
 
 FIRMWARE_EXTENSIONS = {".hex", ".bin", ".elf", ".axf"}
 DEFAULT_FIRMWARE_BASE_URL = "https://update.hepi.ng"
@@ -1122,7 +1123,7 @@ class FirmwareManager:
             token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
-        return Request(url, headers=headers)
+        return build_request(url, headers=headers)
 
     @staticmethod
     def _sha256_file(path: Path) -> str:
