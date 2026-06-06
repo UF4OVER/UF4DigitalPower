@@ -18,9 +18,9 @@ import json
 import re
 import socket
 from dataclasses import dataclass
-from urllib.parse import urlparse
 from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 from qfluentwidgets import qconfig
@@ -37,6 +37,7 @@ from app.core.update_request import build_request
 from .manager_firmware import firmware_manager
 
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
+
 
 
 def _normalize_version(value: object, fallback: str = "--") -> str:

@@ -87,6 +87,7 @@ from app.protocol import FrameParser as V2FrameParser
 from app.protocol import Payload as V2Payload, TYPE_REGISTRY
 from app.protocol.dataType import DataFloat, DataInt, DataString, TypeBase
 
+
 SESSION_PAGE_BAUD_RATES = ("9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600")
 SESSION_PAGE_SEND_MODES = ("Raw(HEX/ASCII)", "TVLCOM_V2")
 SESSION_PAGE_RAW_FORMATS = ("HEX", "ASCII")

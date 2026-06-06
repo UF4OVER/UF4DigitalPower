@@ -42,6 +42,7 @@ from app.widgets.chart.chart_model import ChartModel
 from app.widgets.chart.realtime_chart_widget import RealtimeChartWidget
 from config import CTX
 
+
 DEFAULT_OVP_SET_VALUE_MV = 44000
 POWER_POLL_INTERVAL_MS = 500
 POWER_SERIAL_BAUD_RATE = 921600

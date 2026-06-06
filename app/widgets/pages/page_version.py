@@ -46,6 +46,11 @@ from qfluentwidgets import (
 )
 
 from app.core.utility import showMessage
+
+KIND_TEXT = {
+    "Power": "电源固件",
+    "Upper": "上位固件",
+}
 from app.manager import (
     FirmwareDetailFinishedEvent,
     FirmwareDownloadFinishedEvent,
@@ -58,12 +63,6 @@ from app.manager import (
 )
 from app.widgets.icon import UF4Icon
 from config import CTX, REPO_URL, VERSION
-
-
-KIND_TEXT = {
-    "Power": "电源固件",
-    "Upper": "上位固件",
-}
 
 
 @dataclass(frozen=True)

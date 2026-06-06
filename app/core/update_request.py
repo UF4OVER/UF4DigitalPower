@@ -19,6 +19,7 @@ TRUSTED_CLIENT_ID = "f4cp-desktop"
 SIGNATURE_VERSION = "v1"
 
 
+
 def build_request(url: str, *, headers: dict[str, str] | None = None, data: bytes | None = None) -> Request:
     request = Request(url, data=data, headers=headers or {})
     if _should_sign(url):
