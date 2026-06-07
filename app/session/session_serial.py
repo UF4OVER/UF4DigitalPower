@@ -245,6 +245,12 @@ class SerialSession(QObject):
         self._post_event(TxEvent(data))
         return len(data)
 
+    def clear_input_buffer(self) -> None:
+        """丢弃驱动层已经收到但上层还没消费的输入字节。"""
+        if not self.is_open:
+            return
+        self._ser.clear(QSerialPort.Direction.Input)
+
     def _post_event(self, evt: SerialEvent):
         """优先把事件投递给 Qt 接收者；没有接收者时退回到 Python 回调。"""
         if self._event_receiver is not None:

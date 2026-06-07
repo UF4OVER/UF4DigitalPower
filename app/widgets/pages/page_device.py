@@ -17,7 +17,7 @@ import binascii
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Optional, Protocol
 
 from PyQt5.QtCore import QCoreApplication, QIODevice, QObject, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QTextCharFormat, QTextCursor
@@ -79,32 +79,22 @@ from app.session import (
     TxEvent,
     listSerialPorts,
 )
+from app.core.const import POWER_DATA_META, PowerCommand, PowerDataType
+from app.protocol.tvlcom import (
+    TvlcomFrameParser,
+    build_frame,
+    encode_tlv,
+    iter_tlv_items,
+)
 from config import get_logger
 
 logger = get_logger("DevicePage")
 
-from app.protocol import Dispatcher as V2Dispatcher
-from app.protocol import FrameBuilder as V2FrameBuilder
-from app.protocol import FrameParser as V2FrameParser
-from app.protocol import Payload as V2Payload, TYPE_REGISTRY
-from app.protocol.dataType import DataFloat, DataInt, DataString, TypeBase
-
-
 SESSION_PAGE_BAUD_RATES = ("9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600")
 SESSION_PAGE_SEND_MODES = ("Raw(HEX/ASCII)", "TVLCOM_V2")
 SESSION_PAGE_RAW_FORMATS = ("HEX", "ASCII")
-SESSION_PAGE_V2_DEFAULT_CMD = 0x01
-
-SESSION_PAGE_V2_TYPE_ALIAS_TO_ID = {
-    "u8": 0x01,
-    "uint8": 0x01,
-    "u16": 0x02,
-    "uint16": 0x02,
-    "u32": 0x03,
-    "uint32": 0x03,
-    "float": 0x10,
-    "string": 0x20,
-}
+SESSION_PAGE_V2_DEFAULT_CMD = int(PowerCommand.READ)
+SESSION_PAGE_V2_DEFAULT_TYPE = int(PowerDataType.SET_VOLTAGE_LIMIT)
 
 class DeviceTransport(Protocol):
     @property
@@ -278,8 +268,7 @@ class DevicePage(ScrollArea):
         self._session: Optional[DeviceTransport] = None
         self._bluetoothDevices: dict[str, str] = {}
         self._bluetoothDiscoveryAgent = None
-        self._v2Parser: Optional[V2FrameParser] = None
-        self._v2Dispatcher: Optional[V2Dispatcher] = None
+        self._v2Parser: Optional[TvlcomFrameParser] = None
         self._v2Seq = 0
         self._rxBuf = bytearray()
         self._rxBytes = 0
@@ -625,7 +614,7 @@ class DevicePage(ScrollArea):
 
         typeSpin = SpinBox(self.tlvTable)
         typeSpin.setRange(0, 255)
-        typeSpin.setValue(SESSION_PAGE_V2_TYPE_ALIAS_TO_ID["string"])
+        typeSpin.setValue(SESSION_PAGE_V2_DEFAULT_TYPE)
         self.tlvTable.setCellWidget(row, 0, typeSpin)
 
         kindCombo = ComboBox(self.tlvTable)
@@ -653,7 +642,7 @@ class DevicePage(ScrollArea):
                 continue
 
             kindCombo = self.tlvTable.cellWidget(rowIndex, 1)
-            kind = kindCombo.currentText() if isinstance(kindCombo, ComboBox) else "string"
+            kind = kindCombo.currentText() if isinstance(kindCombo, ComboBox) else self._defaultV2Selector()
             typeId = self._v2TypeIdFromKind(kind)
             if typeId is None:
                 raise ValueError(f"V2 unsupported type: {kind}")
@@ -676,7 +665,7 @@ class DevicePage(ScrollArea):
         self.tlvTable.setRowCount(0)
         for item in data:
             typeId = int(item.get("typeId", item.get("type_id", 0)))
-            kind = str(item.get("kind", "string"))
+            kind = str(item.get("kind", ""))
             value = str(item.get("value", ""))
 
             self._addDefaultTlvRow()
@@ -693,22 +682,39 @@ class DevicePage(ScrollArea):
                 enable.setChecked(True)
 
     def _v2TypeIds(self) -> list[int]:
-        return sorted(TYPE_REGISTRY)
+        return sorted(int(type_id) for type_id in POWER_DATA_META)
 
     def _v2SelectorOptions(self) -> list[str]:
         return [self._v2TypeName(typeId) for typeId in self._v2TypeIds()]
 
     def _defaultV2Selector(self) -> str:
         options = self._v2SelectorOptions()
-        return "string" if "string" in options else (options[0] if options else "")
+        default = self._v2TypeName(SESSION_PAGE_V2_DEFAULT_TYPE)
+        return default if default in options else (options[0] if options else "")
 
     def _v2TypeIdFromKind(self, kind: str) -> Optional[int]:
-        typeId = SESSION_PAGE_V2_TYPE_ALIAS_TO_ID.get((kind or "").strip().lower())
-        return typeId if typeId in TYPE_REGISTRY else None
+        normalized = (kind or "").strip()
+        if not normalized:
+            return None
+        token = normalized.split(" ", 1)[0]
+        try:
+            value = int(token, 0)
+            return value if value in self._v2TypeIds() else None
+        except ValueError:
+            pass
+        lookup = token.upper()
+        try:
+            return int(PowerDataType[lookup])
+        except KeyError:
+            pass
+        for type_id, meta in POWER_DATA_META.items():
+            if lookup == meta.label.upper().replace(" ", "_"):
+                return int(type_id)
+        return None
 
     def _normalizeV2Kind(self, kind: str, typeId: int = 0) -> str:
         resolvedTypeId = self._v2TypeIdFromKind(kind)
-        if resolvedTypeId is None and typeId in TYPE_REGISTRY:
+        if resolvedTypeId is None and typeId in self._v2TypeIds():
             resolvedTypeId = typeId
         if resolvedTypeId is None:
             raise ValueError(f"V2 unsupported type: {kind or typeId}")
@@ -742,70 +748,81 @@ class DevicePage(ScrollArea):
 
     def _buildV2PayloadFromTable(self) -> bytes:
         """把 TLV 表格的每一行转换成 TVLCOMV2 payload。"""
-        payload = V2Payload()
+        payload = bytearray()
         for row in self._iterTlvRows():
-            typeObj = TYPE_REGISTRY.get(int(row.typeId) & 0xFF)
-            if typeObj is None:
+            try:
+                data_type = PowerDataType(int(row.typeId) & 0xFF)
+            except ValueError as exc:
                 raise ValueError(f"V2 unsupported type ID: 0x{row.typeId:02X}")
-            payload.addData(typeObj, self._coerceV2Value(row, typeObj))
-        return payload.toBytes()
+            if data_type not in POWER_DATA_META:
+                raise ValueError(f"V2 unsupported type ID: 0x{row.typeId:02X}")
+            payload.extend(encode_tlv(data_type, self._coerceV2Value(row, data_type)))
+        return bytes(payload)
 
     def _syncV2TypeIdWithKind(self, typeSpin: SpinBox, kind: str):
         suggested = self._v2TypeIdFromKind(kind)
         if suggested is not None:
             typeSpin.setValue(suggested)
 
-    def _coerceV2Value(self, row: _TlvRow, typeObj: TypeBase):
+    def _coerceV2Value(self, row: _TlvRow, data_type: PowerDataType) -> bytes:
         """按类型注册表把表格里的字符串值转成协议真正需要的 Python 值。"""
         rawValue = row.value.strip()
-        if isinstance(typeObj, DataString):
-            return row.value
-        if isinstance(typeObj, DataFloat):
-            return float(rawValue or "0")
-        if isinstance(typeObj, DataInt):
-            return int(rawValue or "0", 0)
-        raise ValueError(f"V2 unsupported value type: {row.kind}")
+        if not rawValue:
+            return b""
+        if rawValue.lower().startswith("hex:"):
+            return self._parseRawInput(rawValue[4:], "HEX")
+        meta = POWER_DATA_META.get(data_type)
+        if meta is None:
+            raise ValueError(f"V2 unsupported value type: {row.kind}")
+        value = int(rawValue, 0)
+        return value.to_bytes(meta.length, "little", signed=meta.signed)
 
     def _resetV2Protocol(self):
         self._v2Parser = None
-        self._v2Dispatcher = None
         self._v2Seq = 0
 
     def _initV2Protocol(self):
         """初始化 V2 帧解析器和 ACK/NACK 分发器。"""
-        self._v2Parser = V2FrameParser()
-        self._v2Dispatcher = V2Dispatcher()
-        self._v2Dispatcher.setAckHandler(lambda cmd, seq, payloadData: self.rxEventSignal.emit(f"V2 ACK cmd={cmd:02X} seq={seq} [{self._formatV2PayloadItems(payloadData)}]"))
-        self._v2Dispatcher.setNackHandler(lambda cmd, seq, payloadData: self.rxEventSignal.emit(f"V2 NACK cmd={cmd:02X} seq={seq} [{self._formatV2PayloadItems(payloadData)}]"))
+        self._v2Parser = TvlcomFrameParser()
 
     def _v2TypeName(self, typeId: int) -> str:
-        typeObj = TYPE_REGISTRY.get(typeId)
-        if typeObj is None:
-            return "bytes"
-        if isinstance(typeObj, DataString):
-            return "string"
-        if isinstance(typeObj, DataFloat):
-            return "float"
-        return getattr(typeObj, "name", typeObj.__class__.__name__)
+        try:
+            data_type = PowerDataType(typeId)
+        except ValueError:
+            return f"0x{typeId:02X}"
+        meta = POWER_DATA_META.get(data_type)
+        suffix = f" {meta.unit}" if meta and meta.unit else ""
+        return f"{data_type.name}{suffix}"
 
-    def _formatV2PayloadItems(self, payloadData: dict[int, Any]) -> str:
-        if not payloadData:
+    def _formatV2PayloadItems(self, payload: bytes) -> str:
+        if not payload:
             return ""
         parts = []
-        for typeId, value in payloadData.items():
-            rendered = value.hex(" ") if isinstance(value, bytes) else value
-            parts.append(f"T{typeId:02X}({self._v2TypeName(typeId)}):{rendered}")
+        for item in iter_tlv_items(payload, strict=False):
+            name = self._v2TypeName(item.type_id)
+            if item.value is None:
+                rendered = item.raw.hex(" ") if item.raw else "<read>"
+            else:
+                rendered = str(item.value)
+            parts.append(f"T{item.type_id:02X}({name}):{rendered}")
         return ", ".join(parts)
 
     def _handleV2RxFrames(self, data: bytes):
         """把收到的字节喂给 V2 解析器，并把解析结果写到接收日志。"""
         if self._v2Parser is None:
             return
-        for frame in self._v2Parser.inputBytes(data):
-            if self._v2Dispatcher is not None and self._v2Dispatcher.dispatch(frame):
-                continue
-            parsed = V2Payload.parse(frame["payload"])
-            self.rxEventSignal.emit(f'V2 RX cmd={frame["cmd"]:02X} seq={frame["seq"]} [{self._formatV2PayloadItems(parsed)}]')
+        for frame in self._v2Parser.input_bytes(data):
+            cmd = int(frame["cmd"])
+            if cmd == int(PowerCommand.ACK):
+                prefix = "V2 ACK"
+            elif cmd == int(PowerCommand.NACK):
+                prefix = "V2 NACK"
+            else:
+                prefix = "V2 RX"
+            self.rxEventSignal.emit(
+                f'{prefix} cmd={cmd:02X} seq={frame["seq"]} '
+                f'[{self._formatV2PayloadItems(bytes(frame["payload"]))}]'
+            )
 
     def _parseRawInput(self, text: str, fmt: str) -> bytes:
         """解析原始发送框，支持 ASCII 和宽松一点的 HEX 输入。"""
@@ -1051,7 +1068,7 @@ class DevicePage(ScrollArea):
         total = 0
         for _ in range(repeat):
             self._v2Seq = (self._v2Seq + 1) % 256
-            frame = V2FrameBuilder.buildFrame(cmd, self._v2Seq, payload)
+            frame = build_frame(cmd, self._v2Seq, payload)
             self._safeWrite(frame)
             total += len(frame)
             seqs.append(self._v2Seq)

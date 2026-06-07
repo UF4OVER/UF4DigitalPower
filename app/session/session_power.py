@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, replace
-from enum import IntEnum
 from typing import Callable, Iterable
 
-from PyQt5.QtCore import QCoreApplication, QEventLoop, QIODevice, QObject, QTimer, pyqtSignal, pyqtSlot
-from PyQt5.QtSerialPort import QSerialPort
+from PyQt5.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, pyqtSignal, pyqtSlot
 
 from app.session import (
     ErrorEvent,
@@ -33,14 +31,9 @@ from app.session import (
 )
 
 from app.core.const import (
-    POWER_DATA_META,
-    PowerAccess,
     PowerCommand,
     PowerDataType,
     PowerClientProtocolError,
-    TYPE_LENGTHS,
-    PowerClientAccessError,
-    SOF,
     STATUS_TYPES,
     CC_CV_NAMES,
     STATE_MACHINE_NAMES,
@@ -51,6 +44,7 @@ from app.core.const import (
     STREAM_FAST_TYPES,
     STREAM_FAST_PERIOD_MS,
     STREAM_SLOW_PERIOD_MS,
+    STREAM_CHANNEL_SEPARATOR,
     DEFAULT_STATUS_VALUES,
     FAULT_NAMES,
     WRITE_IDLE_WAIT_TIMEOUT_MS,
@@ -60,10 +54,18 @@ from app.core.const import (
     COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD,
     WRITE_POLL_RESUME_DELAY_MS,
     POWER_STATUS_FIELD_MAP,
-    PowerClientCrcError,
     PowerClientNackError,
-    STREAM_VALUE_LENGTHS,
-    STREAM_CHANNEL_SEPARATOR
+)
+from app.protocol.tvlcom import (
+    build_frame,
+    decode_stream_sample,
+    decode_tlvs,
+    encode_tlv,
+    ensure_readable as _ensure_readable,
+    ensure_writable as _ensure_writable,
+    extract_frame_from_buffer,
+    pack_stream_start_request,
+    stream_sample_size,
 )
 
 
@@ -71,104 +73,12 @@ from config import get_logger
 
 logger = get_logger("PowerClient")
 
-def crc16_modbus(data: bytes) -> int:
-    """计算电源协议帧使用的 Modbus CRC16。
-
-    这里保持纯 bytes 输入，方便协议层、模拟器和测试共用同一套校验逻辑。
-    """
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0xA001
-            else:
-                crc >>= 1
-    return crc & 0xFFFF
-
-
 def _u32(value: int) -> bytes:
     return int(value).to_bytes(4, "little", signed=False)
 
 
 def _u8(value: int) -> bytes:
     return int(value).to_bytes(1, "little", signed=False)
-
-
-def encode_tlv(type_id: PowerDataType | int, value: bytes = b"") -> bytes:
-    """把一个数据项打包成 TLV：类型 1 字节，长度 2 字节，小端值。"""
-    raw_type = int(type_id) & 0xFF
-    raw_value = bytes(value)
-    return bytes([raw_type]) + len(raw_value).to_bytes(2, "little") + raw_value
-
-
-def decode_tlvs(payload: bytes, *, strict: bool = True) -> dict[PowerDataType, int]:
-    """解析设备返回的 TLV 数据，并按元数据转换成有符号/无符号整数。"""
-    offset = 0
-    items: dict[PowerDataType, int] = {}
-
-    while offset < len(payload):
-        if offset + 3 > len(payload):
-            raise PowerClientProtocolError("Incomplete TLV header")
-
-        type_id = payload[offset]
-        offset += 1
-        length = int.from_bytes(payload[offset:offset + 2], "little")
-        offset += 2
-
-        if offset + length > len(payload):
-            raise PowerClientProtocolError(f"Incomplete TLV value for type {type_id}")
-
-        value = payload[offset:offset + length]
-        offset += length
-
-        try:
-            data_type = PowerDataType(type_id)
-        except ValueError as exc:
-            if not strict:
-                continue
-            raise PowerClientProtocolError(f"Unknown data type {type_id}") from exc
-
-        expected_length = TYPE_LENGTHS.get(data_type)
-        if expected_length is not None and length != expected_length:
-            if not strict:
-                continue
-            raise PowerClientProtocolError(
-                f"Unexpected length {length} for {data_type.name}, expected {expected_length}"
-            )
-
-        meta = POWER_DATA_META.get(data_type)
-        items[data_type] = int.from_bytes(value, "little", signed=bool(meta and meta.signed))
-
-    return items
-
-
-def _ensure_readable(type_id: PowerDataType) -> None:
-    meta = POWER_DATA_META.get(type_id)
-    if meta is not None and not (int(meta.access) & int(PowerAccess.READ)):
-        raise PowerClientAccessError(f"{type_id.name} is not readable")
-
-
-def _ensure_writable(type_id: PowerDataType, value: bytes) -> None:
-    meta = POWER_DATA_META.get(type_id)
-    if meta is None:
-        raise PowerClientAccessError(f"{type_id.name} has no writable metadata")
-    if not (int(meta.access) & int(PowerAccess.WRITE)):
-        raise PowerClientAccessError(f"{type_id.name} is not writable")
-    if len(value) != meta.length:
-        raise PowerClientProtocolError(
-            f"Unexpected write length {len(value)} for {type_id.name}, expected {meta.length}"
-        )
-
-
-def build_frame(cmd: PowerCommand | int, seq: int, payload: bytes) -> bytes:
-    """组装完整协议帧，统一处理帧头、长度、命令序号和 CRC。"""
-    body = bytes([int(cmd) & 0xFF, seq & 0xFF]) + payload
-    frame = bytearray(SOF)
-    frame.extend(len(body).to_bytes(2, "little"))
-    frame.extend(body)
-    frame.extend(crc16_modbus(frame).to_bytes(2, "little"))
-    return bytes(frame)
 
 
 def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
@@ -184,6 +94,7 @@ def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
         iout_ma=normalized[PowerDataType.OUTPUT_CURRENT],
         core_temp_mc=normalized[PowerDataType.CORE_TEMPERATURE],
         board_temp_mc=normalized[PowerDataType.BOARD_TEMPERATURE],
+        temp2_temp_mc=normalized[PowerDataType.TEMP2_TEMPERATURE],
         set_voltage_limit_mv=normalized[PowerDataType.SET_VOLTAGE_LIMIT],
         set_current_limit_ma=normalized[PowerDataType.SET_CURRENT_LIMIT],
         cc_cv_mode=normalized[PowerDataType.CC_CV_MODE],
@@ -227,6 +138,7 @@ class PowerStatus:
     iout_ma: int
     core_temp_mc: int
     board_temp_mc: int
+    temp2_temp_mc: int
     set_voltage_limit_mv: int
     set_current_limit_ma: int
     cc_cv_mode: int
@@ -281,6 +193,10 @@ class PowerStatus:
     @property
     def board_temp_c(self) -> float:
         return self.board_temp_mc / 1000.0
+
+    @property
+    def temp2_temp_c(self) -> float:
+        return self.temp2_temp_mc / 1000.0
 
     @property
     def otp_value_c(self) -> float:
@@ -367,6 +283,7 @@ class F4CPPowerClient(QObject):
     outputLimitsWritten = pyqtSignal()
     protectionValuesWritten = pyqtSignal()
     powerStateWritten = pyqtSignal(bool)
+    writeTransactionFinished = pyqtSignal()
     writeFailureLimitReached = pyqtSignal()
     communicationFailureLimitReached = pyqtSignal(str)
 
@@ -396,6 +313,7 @@ class F4CPPowerClient(QObject):
         self._stream_slow_sample_size = 0
         self._stream_fast_samples_until_slow = 0
         self._stream_slow_every_fast_samples = 0
+        self._stream_stop_pending = False
 
     @property
     def is_connected(self) -> bool:
@@ -456,6 +374,7 @@ class F4CPPowerClient(QObject):
         interval = max(200, int(interval_ms))
         if self.is_connected and not self.is_busy:
             try:
+                self.read_status(timeout_ms=1000)
                 self.start_streaming(interval)
                 return
             except Exception as exc:
@@ -638,7 +557,8 @@ class F4CPPowerClient(QObject):
             STREAM_SLOW_PERIOD_MS,
         )
         self._request(PowerCommand.STREAM_START, payload, timeout_ms=timeout_ms)
-        self._last_values.update(DEFAULT_STATUS_VALUES)
+        for type_id, value in DEFAULT_STATUS_VALUES.items():
+            self._last_values.setdefault(type_id, value)
         self._stream_types = fast_types + slow_types
         self._stream_fast_types = fast_types
         self._stream_slow_types = slow_types
@@ -660,9 +580,17 @@ class F4CPPowerClient(QObject):
 
     def stop_streaming(self, timeout_ms: int = 1000) -> None:
         was_enabled = self._stream_enabled
-        self._stop_raw_stream_state()
-        if self.is_connected and not self.is_busy:
-            self._request(PowerCommand.STREAM_STOP, b"", timeout_ms=timeout_ms)
+        if was_enabled and self.is_connected and not self.is_busy:
+            self._stream_stop_pending = True
+            try:
+                self._request(PowerCommand.STREAM_STOP, b"", timeout_ms=timeout_ms)
+            finally:
+                self._stream_stop_pending = False
+                self._stop_raw_stream_state()
+                self._clear_receive_backlog()
+        else:
+            self._stop_raw_stream_state()
+            self._buffer.clear()
         if was_enabled:
             self.log.emit("Raw stream stopped")
 
@@ -788,7 +716,13 @@ class F4CPPowerClient(QObject):
             self.error.emit("Serial session is not connected")
             return
 
-        self._pause_polling_for_write()
+        try:
+            self._pause_polling_for_write()
+        except Exception as exc:
+            self._record_write_failure(exc)
+            self._schedule_polling_resume()
+            self.writeTransactionFinished.emit()
+            return
         self._run_write_when_idle(description, write_action, time.monotonic())
 
     def _run_write_when_idle(
@@ -826,6 +760,7 @@ class F4CPPowerClient(QObject):
             self._record_write_failure(exc)
         finally:
             self._schedule_polling_resume()
+            self.writeTransactionFinished.emit()
 
     def _record_write_failure(self, exc: Exception) -> None:
         self._consecutive_write_failures += 1
@@ -968,7 +903,7 @@ class F4CPPowerClient(QObject):
         self.log.emit(f"RX {data.hex(' ')}")
         self._buffer.extend(data)
 
-        if self._stream_enabled and self._pending is None:
+        if self._stream_enabled and self._pending is None and not self._stream_stop_pending:
             try:
                 while True:
                     values = self._extract_raw_stream_values()
@@ -1009,6 +944,9 @@ class F4CPPowerClient(QObject):
                 continue
 
             if frame["seq"] != self._pending.seq:
+                if self._stream_stop_pending:
+                    self.log.emit(f"Ignored stream-stop noise frame seq={frame['seq']}")
+                    continue
                 self._fail_pending(
                     PowerClientProtocolError(
                         f"Response seq mismatch: expected {self._pending.seq}, got {frame['seq']}"
@@ -1122,6 +1060,18 @@ class F4CPPowerClient(QObject):
         self._stream_fast_samples_until_slow = 0
         self._stream_slow_every_fast_samples = 0
 
+    def _clear_receive_backlog(self) -> None:
+        self._buffer.clear()
+        if self._session is None:
+            return
+        clear_input_buffer = getattr(self._session, "clear_input_buffer", None)
+        if clear_input_buffer is None:
+            return
+        try:
+            clear_input_buffer()
+        except Exception as exc:
+            self.log.emit(f"Input buffer clear failed: {exc}")
+
     def _extract_raw_stream_values(self) -> dict[PowerDataType, int] | None:
         """从裸流里切出一组快/慢通道样本；数据不够时先留在缓存里。"""
         if not self._stream_enabled or not self._stream_fast_types:
@@ -1156,44 +1106,21 @@ class F4CPPowerClient(QObject):
         self._last_status = status
         self.statusUpdated.emit(status)
 
+    def _is_stream_frame_search_active(self) -> bool:
+        return self._stream_stop_pending or (self._stream_enabled and self._pending is not None)
+
     def _extract_frame(self) -> dict[str, int | bytes] | None:
         """从接收缓存里提取一帧完整协议数据，顺手丢掉帧头前的噪声。"""
-        if self._stream_enabled and self._pending is None:
+        if self._stream_enabled and self._pending is None and not self._stream_stop_pending:
             values = self._extract_raw_stream_values()
             if values is None:
                 return None
             self._handle_raw_stream_values(values)
             return None
-
-        while len(self._buffer) >= 2 and self._buffer[:2] != SOF:
-            self._buffer.pop(0)
-
-        if len(self._buffer) < 6:
-            return None
-
-        body_len = int.from_bytes(self._buffer[2:4], "little")
-        total_len = 2 + 2 + body_len + 2
-        if len(self._buffer) < total_len:
-            return None
-
-        raw = bytes(self._buffer[:total_len])
-        del self._buffer[:total_len]
-
-        expected_crc = int.from_bytes(raw[-2:], "little")
-        actual_crc = crc16_modbus(raw[:-2])
-        if expected_crc != actual_crc:
-            raise PowerClientCrcError(
-                f"CRC mismatch: expected 0x{expected_crc:04X}, got 0x{actual_crc:04X}"
-            )
-
-        if body_len < 2:
-            raise PowerClientProtocolError("Body length is too short")
-
-        return {
-            "cmd": raw[4],
-            "seq": raw[5],
-            "payload": raw[6:-2],
-        }
+        return extract_frame_from_buffer(
+            self._buffer,
+            stream_frame_search=self._is_stream_frame_search_active(),
+        )
 
     def _parse_response(self, frame: dict[str, int | bytes]) -> dict[PowerDataType, int]:
         cmd = int(frame["cmd"])
@@ -1216,282 +1143,4 @@ def pretty_faults(mask: int) -> str:
     return ", ".join(F4CPPowerClient.decode_fault_flags(mask)) or "None"
 
 
-def pack_read_request(types: Iterable[PowerDataType]) -> bytes:
-    return b"".join(encode_tlv(item) for item in types)
-
-
-def _stream_value_length(type_id: PowerDataType) -> int:
-    length = STREAM_VALUE_LENGTHS.get(type_id)
-    if length is None or length <= 0:
-        raise PowerClientProtocolError(f"{type_id.name} cannot be used in raw stream mode")
-    return length
-
-
-def pack_stream_start_request(
-    fast_types: Iterable[PowerDataType],
-    fast_period_ms: int,
-    slow_types: Iterable[PowerDataType] = (),
-    slow_period_ms: int = 0,
-) -> bytes:
-    fast = tuple(fast_types)
-    slow = tuple(slow_types)
-    fast_period = max(1, min(0xFFFF, int(fast_period_ms)))
-    slow_period = max(0, min(0xFFFF, int(slow_period_ms)))
-    if not fast:
-        raise PowerClientProtocolError("Raw stream requires at least one fast channel")
-    if slow and slow_period <= 0:
-        raise PowerClientProtocolError("Slow stream period must be positive when slow channels are requested")
-    if slow and slow_period % fast_period != 0:
-        raise PowerClientProtocolError("Slow stream period must be an integer multiple of fast period")
-    return (
-        fast_period.to_bytes(2, "little")
-        + bytes([len(fast) & 0xFF])
-        + pack_read_request(fast)
-        + slow_period.to_bytes(2, "little")
-        + bytes([len(slow) & 0xFF])
-        + pack_read_request(slow)
-    )
-
-
-def stream_sample_size(types: Iterable[PowerDataType]) -> int:
-    selected = tuple(types)
-    if not selected:
-        raise PowerClientProtocolError("Raw stream requires at least one channel")
-    value_size = sum(_stream_value_length(type_id) for type_id in selected)
-    return value_size + (len(selected) - 1) * len(STREAM_CHANNEL_SEPARATOR)
-
-
-def decode_stream_sample(sample: bytes, types: Iterable[PowerDataType]) -> dict[PowerDataType, int]:
-    selected = tuple(types)
-    expected_size = stream_sample_size(selected)
-    if len(sample) != expected_size:
-        raise PowerClientProtocolError(
-            f"Unexpected raw stream sample size {len(sample)}, expected {expected_size}"
-        )
-
-    offset = 0
-    values: dict[PowerDataType, int] = {}
-    for index, type_id in enumerate(selected):
-        length = _stream_value_length(type_id)
-        raw_value = sample[offset:offset + length]
-        offset += length
-
-        values[type_id] = int.from_bytes(raw_value, "little", signed=False)
-
-        if index < len(selected) - 1:
-            separator = sample[offset:offset + len(STREAM_CHANNEL_SEPARATOR)]
-            if separator != STREAM_CHANNEL_SEPARATOR:
-                raise PowerClientProtocolError(
-                    f"Raw stream separator mismatch after {type_id.name}: {separator.hex(' ')}"
-                )
-            offset += len(STREAM_CHANNEL_SEPARATOR)
-
-    return values
-
-
-class TVLHost:
-    """Reusable QSerialPort host for the F4CP power protocol."""
-
-    def __init__(self, port: str, baudrate: int = 921600, timeout: float = 1.0):
-        self._serial = QSerialPort()
-        self._serial.setPortName(port)
-        self._serial.setBaudRate(baudrate)
-        self._serial.setDataBits(QSerialPort.DataBits.Data8)
-        self._serial.setParity(QSerialPort.Parity.NoParity)
-        self._serial.setStopBits(QSerialPort.StopBits.OneStop)
-        if not self._serial.open(QIODevice.OpenModeFlag.ReadWrite):
-            raise PowerClientError(
-                f"Serial port open failed {port}: {self._serial.errorString()}"
-            )
-        self._timeout = float(timeout)
-        self._seq = 0
-        self._buffer = bytearray()
-        self._last_values: dict[PowerDataType, int] = {}
-
-    def close(self) -> None:
-        if self._serial.isOpen():
-            self._serial.close()
-
-    def send_frame(self, cmd: PowerCommand | int, seq: int, payload: bytes) -> None:
-        data = build_frame(cmd, seq, payload)
-        written = self._serial.write(data)
-        if written != len(data):
-            raise PowerClientError(
-                f"Serial write incomplete: expected {len(data)}, wrote {written}"
-            )
-        if not self._serial.waitForBytesWritten(max(1, int(self._timeout * 1000))):
-            raise PowerClientTimeoutError("Serial write timed out")
-
-    def recv_frame(self, timeout: float | None = None) -> dict[str, int | bytes]:
-        deadline = time.monotonic() + (self._timeout if timeout is None else timeout)
-        while time.monotonic() < deadline:
-            frame = self._extract_buffered_frame()
-            if frame is not None:
-                return frame
-
-            wait_ms = max(1, min(50, int((deadline - time.monotonic()) * 1000)))
-            if not self._serial.waitForReadyRead(wait_ms):
-                continue
-
-            raw = self._serial.readAll()
-            chunk = raw.data() if hasattr(raw, "data") else bytes(raw)
-            if chunk:
-                self._buffer.extend(chunk)
-
-        raise PowerClientTimeoutError("Receive timed out")
-
-    def read_values(
-        self,
-        *types: PowerDataType,
-        timeout: float | None = None,
-    ) -> dict[PowerDataType, int]:
-        for type_id in types:
-            _ensure_readable(type_id)
-        payload = b"".join(encode_tlv(type_id) for type_id in types)
-        values = self._request(PowerCommand.READ, payload, timeout=timeout)
-        missing = [type_id.name for type_id in types if type_id not in values]
-        if missing:
-            raise PowerClientProtocolError(f"Missing response types: {', '.join(missing)}")
-        self._last_values.update(values)
-        return values
-
-    def read_report_values(self, timeout: float | None = None) -> dict[PowerDataType, int]:
-        values = self._request(
-            PowerCommand.REPORT,
-            b"",
-            timeout=timeout,
-            expected_cmd=PowerCommand.REPORT,
-        )
-        missing = [type_id.name for type_id in REPORT_STATUS_TYPES if type_id not in values]
-        if missing:
-            raise PowerClientProtocolError(f"Missing report types: {', '.join(missing)}")
-        self._last_values.update(values)
-        return values
-
-    def write_values(
-        self,
-        values: dict[PowerDataType, bytes],
-        timeout: float | None = None,
-    ) -> None:
-        for type_id, raw_value in values.items():
-            _ensure_writable(type_id, raw_value)
-        payload = b"".join(encode_tlv(type_id, raw_value) for type_id, raw_value in values.items())
-        self._request(PowerCommand.WRITE, payload, timeout=timeout)
-        self._last_values.update(
-            {
-                type_id: int.from_bytes(raw_value, "little", signed=False)
-                for type_id, raw_value in values.items()
-            }
-        )
-
-    def read_status(self, timeout: float | None = None) -> PowerStatus:
-        return build_status(self.read_report_values(timeout=timeout))
-
-    def set_voltage_limit_mv(self, value_mv: int) -> None:
-        self.write_values({PowerDataType.SET_VOLTAGE_LIMIT: _u32(value_mv)})
-
-    def set_current_limit_ma(self, value_ma: int) -> None:
-        self.write_values({PowerDataType.SET_CURRENT_LIMIT: _u32(value_ma)})
-
-    def set_ovp_mv(self, value_mv: int) -> None:
-        self.write_values({PowerDataType.OVP_SET_VALUE: _u32(value_mv)})
-
-    def set_ocp_ma(self, value_ma: int) -> None:
-        self.write_values({PowerDataType.OCP_SET_VALUE: _u32(value_ma)})
-
-    def set_otp_mc(self, value_mc: int) -> None:
-        self.write_values({PowerDataType.OTP_SET_VALUE: _u32(value_mc)})
-
-    def set_power_state(self, enabled: bool) -> None:
-        self.write_values({PowerDataType.POWER_STATE: _u8(1 if enabled else 0)})
-
-    def set_output(
-        self,
-        voltage_v: float,
-        current_a: float,
-        enabled: bool = True,
-    ) -> None:
-        self.write_values(
-            {
-                PowerDataType.SET_VOLTAGE_LIMIT: _u32(int(voltage_v * 1000 + 0.5)),
-                PowerDataType.SET_CURRENT_LIMIT: _u32(int(current_a * 1000 + 0.5)),
-                PowerDataType.POWER_STATE: _u8(1 if enabled else 0),
-            }
-        )
-
-    def _request(
-        self,
-        cmd: PowerCommand,
-        payload: bytes,
-        timeout: float | None = None,
-        expected_cmd: PowerCommand = PowerCommand.ACK,
-    ) -> dict[PowerDataType, int]:
-        self._seq = (self._seq + 1) & 0xFF
-        seq = self._seq
-        self.send_frame(cmd, seq, payload)
-
-        deadline = time.monotonic() + (self._timeout if timeout is None else timeout)
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise PowerClientTimeoutError(f"Request timed out for seq={seq}")
-
-            frame = self.recv_frame(timeout=remaining)
-            frame_cmd = int(frame["cmd"])
-
-            if frame_cmd == int(PowerCommand.REPORT):
-                if expected_cmd == PowerCommand.REPORT:
-                    if int(frame["seq"]) != seq:
-                        if int(frame["seq"]) == 0:
-                            self._handle_report(frame)
-                            continue
-                        raise PowerClientProtocolError(
-                            f"REPORT seq mismatch: expected {seq}, got {frame['seq']}"
-                        )
-                    return decode_tlvs(bytes(frame["payload"]), strict=False)
-                self._handle_report(frame)
-                continue
-            if frame_cmd == int(PowerCommand.NACK):
-                raise PowerClientNackError(f"Device returned NACK for seq={frame['seq']}")
-            if frame_cmd != int(expected_cmd):
-                raise PowerClientProtocolError(f"Unexpected response cmd=0x{frame_cmd:02X}")
-            if int(frame["seq"]) != seq:
-                raise PowerClientProtocolError(
-                    f"Response seq mismatch: expected {seq}, got {frame['seq']}"
-                )
-            return decode_tlvs(bytes(frame["payload"]))
-
-    def _handle_report(self, frame: dict[str, int | bytes]) -> None:
-        if int(frame["seq"]) != 0:
-            raise PowerClientProtocolError(f"REPORT seq should be 0, got {frame['seq']}")
-        self._last_values.update(decode_tlvs(bytes(frame["payload"]), strict=False))
-
-    def _extract_buffered_frame(self) -> dict[str, int | bytes] | None:
-        while len(self._buffer) >= 2 and self._buffer[:2] != SOF:
-            self._buffer.pop(0)
-
-        if len(self._buffer) < 6:
-            return None
-
-        body_len = int.from_bytes(self._buffer[2:4], "little")
-        total_len = 2 + 2 + body_len + 2
-        if len(self._buffer) < total_len:
-            return None
-
-        raw = bytes(self._buffer[:total_len])
-        del self._buffer[:total_len]
-
-        expected_crc = int.from_bytes(raw[-2:], "little")
-        actual_crc = crc16_modbus(raw[:-2])
-        if expected_crc != actual_crc:
-            raise PowerClientCrcError(
-                f"CRC mismatch: expected 0x{expected_crc:04X}, got 0x{actual_crc:04X}"
-            )
-        if body_len < 2:
-            raise PowerClientProtocolError("Body length is too short")
-
-        return {
-            "cmd": raw[4],
-            "seq": raw[5],
-            "payload": raw[6:-2],
-        }
+from app.session.session_power_host import TVLHost

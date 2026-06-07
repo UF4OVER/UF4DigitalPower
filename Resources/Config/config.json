@@ -22,20 +22,19 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
-            "Bender",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
         ],
         "ThemeColor": "#ff34ff29",
-        "ThemeMode": "Light"
+        "ThemeMode": "Dark"
     },
     "Appearance": {
         "FontFamily": "",
         "FontFile": "__system__"
     },
     "MainWindow": {
-        "HighDpiScaling": false,
+        "HighDpiScaling": true,
         "MicaEnabled": true
     },
     "NewVersion": {

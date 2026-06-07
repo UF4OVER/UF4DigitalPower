@@ -18,6 +18,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication
 
+from app.core.const import PowerCommand, PowerDataType
+from app.protocol.tvlcom import build_frame, encode_tlv
 from app.widgets.pages import DevicePage
 
 
@@ -54,6 +56,41 @@ class DevicePageConnectionModeTests(unittest.TestCase):
                 page._bluetoothDevices["F4CP-BLE (11:22:33:44:55:66)"],
                 "11:22:33:44:55:66",
             )
+        finally:
+            page.deleteLater()
+
+    def test_tvlcom_payload_uses_power_protocol_empty_read_tlv(self):
+        page = DevicePage()
+        try:
+            page._addDefaultTlvRow()
+
+            self.assertEqual(
+                page._buildV2PayloadFromTable(),
+                encode_tlv(PowerDataType.SET_VOLTAGE_LIMIT),
+            )
+        finally:
+            page.deleteLater()
+
+    def test_tvlcom_payload_and_parser_share_power_frame_codec(self):
+        page = DevicePage()
+        try:
+            page._addDefaultTlvRow()
+            page.tlvTable.item(0, 2).setText("8000")
+            payload = page._buildV2PayloadFromTable()
+            self.assertEqual(
+                payload,
+                encode_tlv(PowerDataType.SET_VOLTAGE_LIMIT, (8000).to_bytes(4, "little")),
+            )
+
+            logs = []
+            page.rxEventSignal.connect(logs.append)
+            page._initV2Protocol()
+            page._handleV2RxFrames(build_frame(PowerCommand.ACK, 3, payload))
+
+            self.assertEqual(len(logs), 1)
+            self.assertIn("V2 ACK cmd=00 seq=3", logs[0])
+            self.assertIn("SET_VOLTAGE_LIMIT", logs[0])
+            self.assertIn("8000", logs[0])
         finally:
             page.deleteLater()
 

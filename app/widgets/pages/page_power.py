@@ -49,6 +49,7 @@ DEFAULT_OVP_SET_VALUE_MV = 44000
 POWER_POLL_INTERVAL_MS = 500
 POWER_SERIAL_BAUD_RATE = 921600
 WRITE_POLL_RESTART_DELAY_MS = 600
+WRITE_WATCHDOG_TIMEOUT_MS = 6500
 MOCK_SAMPLE_INTERVAL_MS = 20
 
 POWER_CHART_CHANNELS = (
@@ -217,6 +218,14 @@ class ParameterEditor(CardWidget):
             self.otp,
             self.fan,
         )
+        self._updatingFromStatus = False
+        self._dirtyEditors: set[QWidget] = set()
+        for editor in self._editors:
+            editor.valueChanged.connect(lambda _value, item=editor: self._markEditorDirty(item))
+            try:
+                editor.lineEdit().textEdited.connect(lambda _text, item=editor: self._markEditorDirty(item))
+            except Exception:
+                pass
 
         self.outputSwitch = SwitchButton(self)
         self.outputSwitch.setOnText("输出开启")
@@ -337,9 +346,31 @@ class ParameterEditor(CardWidget):
             self.otp: status.otp_set_value_c,
             self.fan: status.fan_set_value,
         }
-        for editor, value in values.items():
-            if not self._selectorHasFocus(editor):
+        self._updatingFromStatus = True
+        try:
+            for editor, value in values.items():
+                if editor in self._dirtyEditors or self._selectorHasFocus(editor):
+                    continue
                 editor.setValue(value)
+        finally:
+            self._updatingFromStatus = False
+
+    def _markEditorDirty(self, editor: QWidget) -> None:
+        if not self._updatingFromStatus:
+            self._dirtyEditors.add(editor)
+
+    def clearOutputDirty(self) -> None:
+        self._dirtyEditors.discard(self.outputVoltage)
+        self._dirtyEditors.discard(self.outputCurrent)
+
+    def clearProtectionDirty(self) -> None:
+        self._dirtyEditors.discard(self.ovp)
+        self._dirtyEditors.discard(self.ocp)
+        self._dirtyEditors.discard(self.otp)
+        self._dirtyEditors.discard(self.fan)
+
+    def clearAllDirty(self) -> None:
+        self._dirtyEditors.clear()
 
     @staticmethod
     def _selectorHasFocus(editor) -> bool:
@@ -434,6 +465,8 @@ class PowerPage(ScrollArea):
         self._manualSession = None
         self._lastStatus: PowerStatus | None = None
         self._stagedOutputEnabled: bool | None = None
+        self._pendingOutputSettings: tuple[int, int] | None = None
+        self._pendingProtectionSettings: tuple[int, int, int, int] | None = None
         self._writeInFlight = False
         self._writePollingRestartPending = False
         self._lastVerboseLogTs = 0.0
@@ -448,6 +481,9 @@ class PowerPage(ScrollArea):
         self._writePollRestartTimer = QTimer(self)
         self._writePollRestartTimer.setSingleShot(True)
         self._writePollRestartTimer.timeout.connect(self._restartAutoPollingAfterWrite)
+        self._writeWatchdogTimer = QTimer(self)
+        self._writeWatchdogTimer.setSingleShot(True)
+        self._writeWatchdogTimer.timeout.connect(self._onWriteWatchdogTimeout)
         self._scrollIdleTimer = QTimer(self)
         self._scrollIdleTimer.setSingleShot(True)
         self._scrollIdleTimer.setInterval(180)
@@ -744,6 +780,7 @@ class PowerPage(ScrollArea):
         self.metricCards["vout"].setMetric(_MetricValue("输出电压", f"{status.vout_v:.3f}", "V", f"设定 {status.set_voltage_limit_mv / 1000.0:.3f} V"))
         self.metricCards["iout"].setMetric(_MetricValue("输出电流", f"{status.iout_a:.3f}", "A", f"设定 {status.set_current_limit_ma / 1000.0:.3f} A"))
         self.metricCards["pout"].setMetric(_MetricValue("输出功率", f"{status.pout_w:.3f}", "W", f"效率 {status.efficiency:.2f} %"))
+        self._syncPendingParameterWrites(status)
         self.parameterEditor.setFromStatus(status)
         switch_value = status.power_enabled
         if self._stagedOutputEnabled is not None:
@@ -802,10 +839,12 @@ class PowerPage(ScrollArea):
         self._stagedOutputEnabled = checked
         if not self._client.is_connected:
             return
-        if self._writeInFlight:
-            self._appendLog("写入进行中，请等待当前操作完成")
+        if self._isWriteBlocked():
             return
-        self._setWriteControlsEnabled(False)
+        if self._client.is_busy:
+            self._appendLog("协议请求进行中，请稍后再写入")
+            return
+        self._beginWriteOperation()
         self._writePollingRestartPending = True
         self._appendLog(f"输出开关正在设置为{'开启' if checked else '关闭'}")
         self.powerStateRequested.emit(checked)
@@ -815,13 +854,16 @@ class PowerPage(ScrollArea):
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
-        if self._writeInFlight:
-            self._appendLog("写入进行中，请等待当前操作完成")
+        if self._isWriteBlocked():
+            return
+        if self._client.is_busy:
+            self._appendLog("协议请求进行中，请稍后再写入")
             return
         voltage_mv = int(round(self.parameterEditor.outputVoltage.value() * 1000))
         current_ma = int(round(self.parameterEditor.outputCurrent.value() * 1000))
         enabled = self._stagedOutputEnabled if self._stagedOutputEnabled is not None else self.parameterEditor.outputSwitch.isChecked()
-        self._setWriteControlsEnabled(False)
+        self._pendingOutputSettings = (voltage_mv, current_ma)
+        self._beginWriteOperation()
         self._writePollingRestartPending = True
         self.outputLimitsRequested.emit(voltage_mv, current_ma, enabled)
 
@@ -830,20 +872,85 @@ class PowerPage(ScrollArea):
         if not self._client.is_connected:
             self._appendLog("错误: 串口会话未连接")
             return
-        if self._writeInFlight:
-            self._appendLog("写入进行中，请等待当前操作完成")
+        if self._isWriteBlocked():
+            return
+        if self._client.is_busy:
+            self._appendLog("协议请求进行中，请稍后再写入")
             return
         ovp_mv = int(round(self.parameterEditor.ovp.value() * 1000))
         ocp_ma = int(round(self.parameterEditor.ocp.value() * 1000))
         otp_mc = int(round(self.parameterEditor.otp.value() * 1000))
         fan_value = int(self.parameterEditor.fan.value())
-        self._setWriteControlsEnabled(False)
+        self._pendingProtectionSettings = (ovp_mv, ocp_ma, otp_mc, fan_value)
+        self._beginWriteOperation()
         self._writePollingRestartPending = True
         self.protectionValuesRequested.emit(ovp_mv, ocp_ma, otp_mc, fan_value)
+
+    def _syncPendingParameterWrites(self, status: PowerStatus) -> None:
+        """读回值确认后再允许状态流刷新刚编辑过的设定框。"""
+        if self._pendingOutputSettings is not None:
+            voltage_mv, current_ma = self._pendingOutputSettings
+            editor_voltage_mv = int(round(self.parameterEditor.outputVoltage.value() * 1000))
+            editor_current_ma = int(round(self.parameterEditor.outputCurrent.value() * 1000))
+            if (
+                status.set_voltage_limit_mv == voltage_mv
+                and status.set_current_limit_ma == current_ma
+                and editor_voltage_mv == voltage_mv
+                and editor_current_ma == current_ma
+            ):
+                self.parameterEditor.clearOutputDirty()
+                self._pendingOutputSettings = None
+
+        if self._pendingProtectionSettings is not None:
+            ovp_mv, ocp_ma, otp_mc, fan_value = self._pendingProtectionSettings
+            editor_ovp_mv = int(round(self.parameterEditor.ovp.value() * 1000))
+            editor_ocp_ma = int(round(self.parameterEditor.ocp.value() * 1000))
+            editor_otp_mc = int(round(self.parameterEditor.otp.value() * 1000))
+            editor_fan_value = int(self.parameterEditor.fan.value())
+            if (
+                status.ovp_set_value_mv == ovp_mv
+                and status.ocp_set_value_ma == ocp_ma
+                and status.otp_set_value_mc == otp_mc
+                and status.fan_set_value == fan_value
+                and editor_ovp_mv == ovp_mv
+                and editor_ocp_ma == ocp_ma
+                and editor_otp_mc == otp_mc
+                and editor_fan_value == fan_value
+            ):
+                self.parameterEditor.clearProtectionDirty()
+                self._pendingProtectionSettings = None
 
     def _setWriteControlsEnabled(self, enabled: bool) -> None:
         self._writeInFlight = not enabled
         self.parameterEditor.setWriteEnabled(enabled)
+        if enabled:
+            self._writeWatchdogTimer.stop()
+
+    def _beginWriteOperation(self) -> None:
+        self._setWriteControlsEnabled(False)
+        self._writeWatchdogTimer.start(WRITE_WATCHDOG_TIMEOUT_MS)
+
+    def _isWriteBlocked(self) -> bool:
+        if not self._writeInFlight:
+            return False
+        if not self._client.is_busy:
+            self._appendLog("上次写入已结束，已恢复写入状态")
+            self._setWriteControlsEnabled(True)
+            return False
+        if not self._writeWatchdogTimer.isActive():
+            self._writeWatchdogTimer.start(WRITE_WATCHDOG_TIMEOUT_MS)
+        self._appendLog("写入进行中，请等待当前操作完成")
+        return True
+
+    def _onWriteWatchdogTimeout(self) -> None:
+        if not self._writeInFlight:
+            return
+        self._writeInFlight = False
+        self.parameterEditor.setWriteEnabled(self._client.is_connected)
+        self._appendLog("写入等待超时，已恢复按钮；若设备仍忙，请稍后再写")
+        logger.error("Power write watchdog released UI controls")
+        if self._writePollingRestartPending:
+            self._scheduleAutoPollingRestartAfterWrite()
 
     def _onOutputLimitsWritten(self) -> None:
         self._setWriteControlsEnabled(True)
@@ -861,6 +968,10 @@ class PowerPage(ScrollArea):
             self._stagedOutputEnabled = None
         self._appendLog(f"输出已设置为{'开启' if enabled else '关闭'}")
         self._scheduleAutoPollingRestartAfterWrite()
+
+    def _onWriteTransactionFinished(self) -> None:
+        if self._writeInFlight:
+            self._setWriteControlsEnabled(True)
 
     def _onClientError(self, message: str) -> None:
         """协议层错误统一落到这里，恢复按钮状态并给用户一个明确提示。"""
@@ -915,9 +1026,12 @@ class PowerPage(ScrollArea):
     def _applyDisconnectedState(self) -> None:
         """回到离线 UI 状态，清掉暂存开关和正在写入的标记。"""
         self._stagedOutputEnabled = None
+        self._pendingOutputSettings = None
+        self._pendingProtectionSettings = None
         self._writePollingRestartPending = False
         self._setWriteControlsEnabled(False)
         self._writePollRestartTimer.stop()
+        self.parameterEditor.clearAllDirty()
         self.stateBadge.setOnline(False)
         self.connectButton.setText("连接")
         self.parameterEditor.outputSwitch.blockSignals(True)
