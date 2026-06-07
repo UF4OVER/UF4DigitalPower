@@ -113,10 +113,6 @@ class DirPaths:
         return self._ensure_sub_dir(self.ResourcesDir, "Tools")
 
     @cached_property
-    def AuthDir(self) -> Path:
-        return self._ensure_sub_dir(self.ResourcesDir, "Auth")
-
-    @cached_property
     def FirmwareDir(self) -> Path:
         return self._ensure_sub_dir(self.ResourcesDir, "Firmware")
 
@@ -140,18 +136,10 @@ class DirPaths:
     def FirmwareUpper(self) -> Path:
         return self.FirmwareUpperDir
 
-
     @cached_property
     def AppIconPath(self) -> str:
         return str(self.AssetsDir / "F4CP_ICO_256.ico")
 
-    @cached_property
-    def ClientPrivateKeyPath(self) -> Path:
-        return self.AuthDir / "f4cp-client-ed25519.pem"
-
-    @cached_property
-    def ClientPublicKeyPath(self) -> Path:
-        return self.AuthDir / "f4cp-client-ed25519.pub.pem"
 
     @cached_property
     def ConfigJsonPath(self) -> Path:

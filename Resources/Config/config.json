@@ -22,17 +22,17 @@
     },
     "QFluentWidgets": {
         "FontFamilies": [
-            "SAIBA-45",
+            "Bender",
             "Segoe UI",
             "Microsoft YaHei",
             "PingFang SC"
         ],
         "ThemeColor": "#ff34ff29",
-        "ThemeMode": "Light"
+        "ThemeMode": "Dark"
     },
     "Appearance": {
-        "FontFamily": "SAIBA-45",
-        "FontFile": "SAIBA-45-Regular.otf"
+        "FontFamily": "Bender",
+        "FontFile": "Bender.otf"
     },
     "MainWindow": {
         "HighDpiScaling": true,
