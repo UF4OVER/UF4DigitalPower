@@ -2,7 +2,7 @@ name: Build F4CP (Windows)
 
 on:
   push:
-    branches: [F4CP_debug]
+    branches: [F4CP_release]
   pull_request:
   workflow_dispatch:
 
@@ -48,7 +48,7 @@ jobs:
           }
 
           $tag = "v$version"
-          $asset = "F4CP-$version-windows-x64.zip"
+          $asset = "F4CP-$version-windows-x86.zip"
           $event = Get-Content -Raw -Path $env:GITHUB_EVENT_PATH | ConvertFrom-Json
           $commitLines = @()
 
@@ -91,9 +91,9 @@ jobs:
 
       - name: Download UPX
         run: |
-          curl -L -o upx.zip https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-win64.zip
+          curl -L -o upx.zip https://github.com/upx/upx/releases/download/v5.1.1/upx-5.1.1-win64.zip
           tar -xf upx.zip
-          echo "${{ github.workspace }}\\upx-4.2.4-win64" >> $env:GITHUB_PATH
+          echo "${{ github.workspace }}\\upx-5.1.1-win64" >> $env:GITHUB_PATH
 
       - name: Compress binaries with UPX
         run: |
@@ -111,7 +111,7 @@ jobs:
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: F4CP-${{ steps.meta.outputs.version }}-Windows-x64
+          name: F4CP-${{ steps.meta.outputs.version }}-Windows-x86
           path: release/${{ steps.meta.outputs.asset_name }}
 
       - name: Publish GitHub release

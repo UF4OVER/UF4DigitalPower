@@ -8,7 +8,7 @@
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
 #  @Contact :
-#  @Python  : 3.10
+#  @Python  : 3.11
 # -------------------------------
 
 import sys
