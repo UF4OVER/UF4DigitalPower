@@ -7,7 +7,7 @@
         "HelpUrl": "https://update.hepi.ng/docs/help",
         "ReleaseUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases/latest",
         "RepoUrl": "https://github.com/UF4OVER/UF4DigitalPower",
-        "Version": "0.5.5.rc1",
+        "Version": "0.6.0.rc1",
         "Year": 2026,
         "ZhSupportUrl": "https://github.com/UF4OVER/UF4DigitalPower"
     },
@@ -38,13 +38,13 @@
         "MicaEnabled": true
     },
     "NewVersion": {
-        "NewLocalVersion": "v0.5.5.rc1",
-        "NewLowerVersion": "v0.0.2",
-        "NewUpperVersion": "v0.0.3"
+        "NewLocalVersion": "0.6.0.rc1",
+        "NewLowerVersion": "",
+        "NewUpperVersion": ""
     },
     "OldVersion": {
-        "OldLocalVersion": "0.5.5.rc1",
-        "OldLowerVersion": "v0.0.2",
-        "OldUpperVersion": "v0.0.3"
+        "OldLocalVersion": "0.6.0.rc1",
+        "OldLowerVersion": "",
+        "OldUpperVersion": ""
     }
 }
