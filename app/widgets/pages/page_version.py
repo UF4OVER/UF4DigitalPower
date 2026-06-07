@@ -46,6 +46,9 @@ from qfluentwidgets import (
 )
 
 from app.core.utility import showMessage
+from config import get_logger
+
+logger = get_logger("VersionPage")
 
 KIND_TEXT = {
     "Power": "电源固件",
@@ -155,7 +158,7 @@ class VersionPage(ScrollArea):
         self._loadCachedFirmwareHistory()
 
     def _initHeader(self) -> None:
-        header = QWidget(self.scrollWidget)
+        header = QWidget(self.scrollWidget)  # NOQA
         layout = QHBoxLayout(header)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
@@ -173,8 +176,8 @@ class VersionPage(ScrollArea):
         self.openRepoButton = PushButton(UF4Icon.BOARD, "项目仓库", header)
 
         layout.addWidget(titleBox, 1)
-        layout.addWidget(self.openUpdateSiteButton, 0, Qt.AlignTop)
-        layout.addWidget(self.openRepoButton, 0, Qt.AlignTop)
+        layout.addWidget(self.openUpdateSiteButton, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.openRepoButton, 0, Qt.AlignmentFlag.AlignTop)
         self.mainLayout.addWidget(header)
 
     def _initSummary(self) -> None:
@@ -424,7 +427,7 @@ class VersionPage(ScrollArea):
             ]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, release)
+                item.setData(Qt.ItemDataRole.UserRole, release)
                 self.releaseTable.setItem(row, column, item)
 
         if releases:
@@ -494,8 +497,8 @@ class VersionPage(ScrollArea):
             self.commitTable.setItem(0, 1, QTableWidgetItem("--"))
             self.commitTable.setItem(0, 2, QTableWidgetItem("当前目录没有可读取的 Git 提交历史。"))
             self.commitTable.setItem(0, 3, QTableWidgetItem("--"))
-
-    def _readGitCommits(self, limit: int = 40) -> list[GitCommitItem]:
+    @staticmethod
+    def _readGitCommits(limit: int = 40) -> list[GitCommitItem]:
         command = [
             "git",
             "log",
@@ -514,7 +517,8 @@ class VersionPage(ScrollArea):
                 errors="replace",
                 timeout=6,
             )
-        except Exception:
+        except Exception as e:
+            logger.exception(e)
             return []
 
         commits: list[GitCommitItem] = []
@@ -538,14 +542,14 @@ class VersionPage(ScrollArea):
         item = self.releaseTable.item(row, 0)
         if item is None:
             return None
-        release = item.data(Qt.UserRole)
+        release = item.data(Qt.ItemDataRole.UserRole)
         return release if isinstance(release, FirmwareRelease) else None
 
     def _currentKind(self) -> str:
         data = self.kindCombo.currentData()
         return str(data or "Power")
-
-    def _firmwareBaseUrl(self) -> str:
+    @staticmethod
+    def _firmwareBaseUrl() -> str:
         return str(CTX.cfg.firmwareBaseUrl.value or "https://update.hepi.ng").strip().rstrip("/")
 
     @staticmethod

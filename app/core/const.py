@@ -215,7 +215,7 @@ POWER_STATUS_FIELD_MAP = {
     PowerDataType.FAN_SET_VALUE: "fan_set_value",
 }
 
-STATUS_TYPES = (
+STATUS_TYPES = (  # NOQA sim 里面的不作为源码维护
     PowerDataType.INPUT_VOLTAGE,
     PowerDataType.INPUT_CURRENT,
     PowerDataType.OUTPUT_VOLTAGE,
@@ -259,7 +259,7 @@ STREAM_SLOW_TYPES = (
 )
 
 STREAM_VALUE_LENGTHS: dict[PowerDataType, int] = {
-    type_id: 2 for type_id in STREAM_FAST_TYPES + STREAM_SLOW_TYPES
+    type_id: 2 for type_id in STREAM_FAST_TYPES + STREAM_SLOW_TYPES  # NOQA 意外类型
 }
 
 DEFAULT_STATUS_VALUES: dict[PowerDataType, int] = {

@@ -28,16 +28,14 @@ from urllib.request import Request, urlopen
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 from qfluentwidgets import qconfig
 
-from config import (
-    CTX,
-    get_logger,
-)
+from config import CTX, get_logger
+
 from app.core.update_request import build_request
 
 logger = get_logger("FirmwareManager")
 
 FIRMWARE_EXTENSIONS = {".hex", ".bin", ".elf", ".axf"}
-DEFAULT_FIRMWARE_BASE_URL = "https://update.hepi.ng"
+DEFAULT_FIRMWARE_BASE_URL = "https://update.hepi.ng"  # 这是默认请求网址
 FIRMWARE_CACHE_FILE_NAME = "firmware_remote_cache.json"
 
 
@@ -280,7 +278,7 @@ class FirmwareManager:
         return firmwareDir
 
     def _kind_dir(self, kind: str) -> Path:
-        normalized = self._normalize_kind(kind)
+        normalized = self.normalize_kind(kind)
         return self.power_dir if normalized == "Power" else self.upper_dir
 
     # ------------------------------------------------------------------
@@ -368,7 +366,7 @@ class FirmwareManager:
         return self._clone_history(history)
 
     def get_cached_remote_release_detail(self, kind: str, version: str) -> tuple[FirmwareRelease, str] | None:
-        normalized = self._normalize_kind(kind)
+        normalized = self.normalize_kind(kind)
         key = self._detail_cache_key(normalized, version)
         cached = self._detailCache.get(key)
         if cached is not None:
@@ -385,7 +383,7 @@ class FirmwareManager:
         force_refresh: bool = False,
     ) -> tuple[FirmwareRelease, str]:
         """读取指定固件版本 manifest 和 changelog。"""
-        normalized = self._normalize_kind(kind)
+        normalized = self.normalize_kind(kind)
         if not force_refresh:
             cached = self.get_cached_remote_release_detail(normalized, version)
             if cached is not None:
@@ -770,7 +768,7 @@ class FirmwareManager:
 
     def download_latest(self, kind: str) -> FirmwareRelease:
         """下载指定类型的远程最新固件。"""
-        latest = self.get_latest_remote_releases().get(self._normalize_kind(kind))
+        latest = self.get_latest_remote_releases().get(self.normalize_kind(kind))
         if latest is None:
             message = f"No remote {kind} firmware release was found."
             logger.error(message)
@@ -901,7 +899,10 @@ class FirmwareManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _normalize_kind(kind: str) -> str:
+    def normalize_kind(kind: str) -> str:
+        """
+        返回固件类型
+        """
         text = str(kind or "").strip().lower()
         if text in {"power", "lower", "stm32g474"}:
             return "Power"
@@ -975,7 +976,7 @@ class FirmwareManager:
         # New semver naming: F4CP-Power-v0.1.3.bin
         new_match = self._newAssetPattern.match(path.name)
         if new_match is not None:
-            kind = self._normalize_kind(new_match.group(1))
+            kind = self.normalize_kind(new_match.group(1))
             version = f"v{new_match.group(2)}.{new_match.group(3)}.{new_match.group(4)}"
             # Try to read date from sibling manifest.json
             date_str = self._read_manifest_date(path.parent)
@@ -993,7 +994,7 @@ class FirmwareManager:
         asset_match = self._assetPattern.match(path.name)
         if asset_match is None:
             return None
-        kind = self._normalize_kind(asset_match.group(1))
+        kind = self.normalize_kind(asset_match.group(1))
         date = f"{asset_match.group(2)}_{asset_match.group(3)}"
         suffix = self._suffix_from_parent(path.parent, date)
         tag = f"{kind}_{date}_{suffix:03d}"
@@ -1023,7 +1024,7 @@ class FirmwareManager:
         match = self._tagPattern.match(tag)
         if match is None:
             return None
-        kind = self._normalize_kind(match.group(1))
+        kind = self.normalize_kind(match.group(1))
         date = f"{match.group(2)}_{match.group(3)}"
         suffix = int(match.group(4))
         return FirmwareRelease(kind=kind, tag=tag, version=tag, date=date, suffix=suffix)
@@ -1209,12 +1210,12 @@ class FirmwareDownloadManager:
     def is_downloading(self, kind: str | None = None) -> bool:
         if kind is None:
             return any(worker.isRunning() for worker in self._workers.values())
-        normalized = firmware_manager._normalize_kind(kind)
+        normalized = firmware_manager.normalize_kind(kind)
         worker = self._workers.get(normalized)
         return bool(worker and worker.isRunning())
 
     def download_latest(self, kind: str, receiver: QObject) -> bool:
-        normalized = firmware_manager._normalize_kind(kind)
+        normalized = firmware_manager.normalize_kind(kind)
         if self.is_downloading(normalized):
             logger.info(f"FirmwareDownloadManager skipped {normalized} because it is already running")
             return False
@@ -1223,7 +1224,7 @@ class FirmwareDownloadManager:
         return self._start_worker(normalized, worker, receiver)
 
     def download_release(self, release: FirmwareRelease, receiver: QObject) -> bool:
-        normalized = firmware_manager._normalize_kind(release.kind)
+        normalized = firmware_manager.normalize_kind(release.kind)
         if self.is_downloading(normalized):
             logger.info(f"FirmwareDownloadManager skipped {normalized} because it is already running")
             return False
@@ -1282,7 +1283,7 @@ class FirmwareHistoryManager:
         return True
 
     def load_detail(self, kind: str, version: str, receiver: QObject, force_refresh: bool = False) -> bool:
-        normalized = firmware_manager._normalize_kind(kind)
+        normalized = firmware_manager.normalize_kind(kind)
         key = self._detail_key(normalized, version)
         if key in self._detail_workers:
             logger.info(f"FirmwareHistoryManager skipped detail {key} because it is already running")
@@ -1290,15 +1291,16 @@ class FirmwareHistoryManager:
 
         worker = FirmwareDetailThread(normalized, version, force_refresh=force_refresh)
         worker.resultReady.connect(lambda result, target=receiver: self._publish_detail_result(target, result))
-        worker.finished.connect(lambda key=key: self._cleanup_detail_worker(key))
+        worker.finished.connect(lambda _key=key: self._cleanup_detail_worker(_key))
         self._detail_workers[key] = worker
         worker.start()
         return True
-
-    def _publish_history_result(self, receiver: QObject, result: FirmwareHistoryResult) -> None:
+    @staticmethod
+    def _publish_history_result(receiver: QObject, result: FirmwareHistoryResult) -> None:
         QCoreApplication.postEvent(receiver, FirmwareHistoryFinishedEvent(result))
 
-    def _publish_detail_result(self, receiver: QObject, result: FirmwareDetailResult) -> None:
+    @staticmethod
+    def _publish_detail_result(receiver: QObject, result: FirmwareDetailResult) -> None:
         QCoreApplication.postEvent(receiver, FirmwareDetailFinishedEvent(result))
 
     def _cleanup_history_worker(self) -> None:

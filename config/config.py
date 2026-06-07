@@ -38,18 +38,6 @@ def _detect_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _detect_data_dir(base_dir: Path, explicit_base_dir: bool) -> Path:
-    """Return the writable per-user data directory for installed apps."""
-    if explicit_base_dir:
-        return base_dir
-    if getattr(sys, "frozen", False):
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            return Path(local_app_data) / "F4CP"
-        return Path.home() / "AppData" / "Local" / "F4CP"
-    return base_dir
-
-
 # ============================================================================
 #  DirPaths — path resolver
 # ============================================================================
@@ -298,7 +286,7 @@ class AppContext:
 
 
 # ============================================================================
-#  Default context
+#  测试用例
 # ============================================================================
 
 
@@ -322,7 +310,7 @@ def reset_app_context() -> None:
     _default_context = None
 
 # ============================================================================
-#  CTX — module-level singleton, the one thing you need to import
+#  CTX — 模块级单例，唯一需要导入的东西
 # ============================================================================
 
 CTX: AppContext = AppContext()

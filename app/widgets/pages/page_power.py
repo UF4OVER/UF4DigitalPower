@@ -902,7 +902,8 @@ class PowerPage(ScrollArea):
         self._appendLog(self._client.pretty_print_debug_snapshot(snapshot))
         self._appendLog(self._diagnoseDebugSnapshot(snapshot))
 
-    def _diagnoseDebugSnapshot(self, snapshot: DebugSnapshot) -> str:
+    @  staticmethod
+    def _diagnoseDebugSnapshot(snapshot: DebugSnapshot) -> str:
         if snapshot.output_voltage_raw >= 4090:
             return "调试判断: type27 接近 4095，请优先检查 MCU ADC 或前端电路。"
         if snapshot.ovp_set_value_mv is not None and snapshot.ovp_set_value_mv == DEFAULT_OVP_SET_VALUE_MV and abs(snapshot.output_voltage_mv - snapshot.ovp_set_value_mv) <= 5:
