@@ -13,10 +13,12 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from dataclasses import dataclass
+from urllib.request import urlopen
 
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QUrl, QThread, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QFont
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -46,6 +48,7 @@ from qfluentwidgets import (
 )
 
 from app.core.utility import showMessage
+from app.core.update_request import build_request
 from config import get_logger
 
 logger = get_logger("VersionPage")
@@ -74,6 +77,55 @@ class GitCommitItem:
     date: str
     subject: str
     author: str
+
+
+class GitCommitsThread(QThread):
+    finished_signal = pyqtSignal(list)
+
+    def __init__(self, limit: int = 40, parent=None):
+        super().__init__(parent)
+        self.limit = limit
+
+    def run(self):
+        url = f"https://api.github.com/repos/UF4OVER/UF4DigitalPower/commits?per_page={self.limit}"
+        request = build_request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "F4CP-UpdateChecker",
+            },
+        )
+        try:
+            with urlopen(request, timeout=8) as response:
+                data = json.loads(response.read().decode("utf-8-sig"))
+
+            commits = []
+            if isinstance(data, list):
+                for item in data:
+                    sha = item.get("sha", "")
+                    short_hash = sha[:7] if sha else "--"
+                    commit_info = item.get("commit", {})
+                    author_info = commit_info.get("author", {})
+
+                    raw_date = author_info.get("date", "")
+                    date_str = raw_date[:10] if len(raw_date) >= 10 else "--"
+
+                    full_message = commit_info.get("message", "")
+                    subject = full_message.split("\n")[0].strip() if full_message else "--"
+
+                    author_name = author_info.get("name", "--")
+                    commits.append({
+                        "short_hash": short_hash,
+                        "date": date_str,
+                        "subject": subject,
+                        "author": author_name
+                    })
+                self.finished_signal.emit(commits)
+                return
+        except Exception as e:
+            logger.warning(f"Failed to fetch git commits online: {e}")
+
+        self.finished_signal.emit([])
 
 
 class VersionInfoCard(CardWidget):
@@ -482,8 +534,49 @@ class VersionPage(ScrollArea):
         )
         self.changelogEdit.setPlainText((changelog or "").strip() or "该版本未提供 changelog。")
 
+    def _loadCachedGitCommits(self) -> list[GitCommitItem]:
+        cache_file = CTX.dirs.ResourcesDir / "Cache" / "git_commits_cache.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                commits = []
+                for item in data:
+                    commits.append(GitCommitItem(
+                        short_hash=item.get("short_hash", "--"),
+                        date=item.get("date", "--"),
+                        subject=item.get("subject", "--"),
+                        author=item.get("author", "--"),
+                    ))
+                return commits
+            except Exception as e:
+                logger.warning(f"Failed to load cached git commits: {e}")
+        return []
+
+    def _saveCachedGitCommits(self, commits: list[dict[str, str]]) -> None:
+        cache_file = CTX.dirs.ResourcesDir / "Cache" / "git_commits_cache.json"
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(commits, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save git commits to cache: {e}")
+
     def _reloadGitCommits(self) -> None:
-        commits = self._readGitCommits()
+        # Load cache first to make it instant
+        cached_commits = self._loadCachedGitCommits()
+        if cached_commits:
+            self._updateCommitsTable(cached_commits)
+        else:
+            # If no cache, try loading local git log immediately
+            local_commits = self._readGitCommits()
+            if local_commits:
+                self._updateCommitsTable(local_commits)
+
+        # Trigger async refresh from remote repository in background
+        self._refreshGitCommitsAsync()
+
+    def _updateCommitsTable(self, commits: list[GitCommitItem]) -> None:
         self.commitTable.setRowCount(0)
         for row, commit in enumerate(commits):
             self.commitTable.insertRow(row)
@@ -495,8 +588,49 @@ class VersionPage(ScrollArea):
             self.commitTable.insertRow(0)
             self.commitTable.setItem(0, 0, QTableWidgetItem("--"))
             self.commitTable.setItem(0, 1, QTableWidgetItem("--"))
-            self.commitTable.setItem(0, 2, QTableWidgetItem("当前目录没有可读取的 Git 提交历史。"))
+            self.commitTable.setItem(0, 2, QTableWidgetItem("当前没有可用的 Git 提交历史。"))
             self.commitTable.setItem(0, 3, QTableWidgetItem("--"))
+
+    def _refreshGitCommitsAsync(self) -> None:
+        if hasattr(self, "_gitCommitThread") and self._gitCommitThread and self._gitCommitThread.isRunning():
+            return
+
+        self.refreshCommitsButton.setEnabled(False)
+        self.refreshCommitsButton.setText("刷新中...")
+
+        self._gitCommitThread = GitCommitsThread(limit=40)
+        self._gitCommitThread.finished_signal.connect(self._onGitCommitsFetched)
+        self._gitCommitThread.start()
+
+    def _onGitCommitsFetched(self, commits: list[dict[str, str]]) -> None:
+        self.refreshCommitsButton.setEnabled(True)
+        self.refreshCommitsButton.setText("刷新提交")
+
+        if commits:
+            self._saveCachedGitCommits(commits)
+            items = [
+                GitCommitItem(
+                    short_hash=c["short_hash"],
+                    date=c["date"],
+                    subject=c["subject"],
+                    author=c["author"]
+                )
+                for c in commits
+            ]
+            self._updateCommitsTable(items)
+            showMessage(self, "同步成功", "已同步并缓存最新的提交历史。", "success")
+        else:
+            # Fallback to local git log
+            local_commits = self._readGitCommits()
+            if local_commits:
+                self._updateCommitsTable(local_commits)
+                showMessage(self, "本地模式", "网络同步失败，已载入本地 Git 历史。", "info")
+            else:
+                cached = self._loadCachedGitCommits()
+                if not cached:
+                    self._updateCommitsTable([])
+                showMessage(self, "更新失败", "无法同步远程历史，本地 Git 亦不可用。", "warning")
+
     @staticmethod
     def _readGitCommits(limit: int = 40) -> list[GitCommitItem]:
         command = [
@@ -518,7 +652,7 @@ class VersionPage(ScrollArea):
                 timeout=6,
             )
         except Exception as e:
-            logger.exception(e)
+            logger.debug(f"Local git log check skipped: {e}")
             return []
 
         commits: list[GitCommitItem] = []

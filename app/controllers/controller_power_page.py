@@ -79,5 +79,5 @@ class PowerPageController(QObject):
         page.parameterEditor.applyOutputButton.clicked.connect(page._applyOutputLimits)
         page.parameterEditor.applyProtectButton.clicked.connect(page._applyProtectionValues)
         page.clearLogButton.clicked.connect(page.logEdit.clear)
-        page.mockButton.toggled.connect(page._setMockEnabled)
+        # page.mockButton.toggled.connect(page._setMockEnabled)
         cfg.themeChanged.connect(page._onThemeChanged)

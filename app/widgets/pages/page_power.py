@@ -506,8 +506,8 @@ class PowerPage(ScrollArea):
         self.autoPollSwitch.setChecked(True)
         self.refreshButton = PushButton(FIF.SYNC, "立即刷新", self.headerCard)
         self.debugButton = PushButton(FIF.SEARCH, "调试快照", self.headerCard)
-        self.mockButton = PushButton(FIF.PLAY, "假数据", self.headerCard)
-        self.mockButton.setCheckable(True)
+        # self.mockButton = PushButton(FIF.PLAY, "假数据", self.headerCard)
+        # self.mockButton.setCheckable(True)
 
         layout.addLayout(titleBox, 1)
         layout.addWidget(BodyLabel("串口", self.headerCard))
@@ -519,7 +519,7 @@ class PowerPage(ScrollArea):
         layout.addWidget(self.autoPollSwitch)
         layout.addWidget(self.refreshButton)
         layout.addWidget(self.debugButton)
-        layout.addWidget(self.mockButton)
+        # layout.addWidget(self.mockButton)
         self.rootLayout.addWidget(self.headerCard)
 
     def _initMetricCards(self) -> None:
@@ -945,11 +945,11 @@ class PowerPage(ScrollArea):
     def _setMockEnabled(self, enabled: bool) -> None:
         if enabled:
             self._mockTimer.start()
-            self.mockButton.setText("停止假数据")
+            # self.mockButton.setText("停止假数据")
             self._appendLog("假数据已开启")
         else:
             self._mockTimer.stop()
-            self.mockButton.setText("假数据")
+            # self.mockButton.setText("假数据")
             self._appendLog("假数据已关闭")
 
     def pushMockPowerSample(self) -> None:

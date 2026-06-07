@@ -4,20 +4,21 @@ F4CP 是 `UF4DigitalPower` 项目的 Windows 上位机，面向数字电源调�
 
 当前主窗口类为 `Window(MSFluentWindow)`，默认导航包含：
 
-- 引导：软件信息、软件更新检查、上下位机固件版本检查和固件下载。
-- 串口：串口/蓝牙连接、Raw 收发、TVLCOM V2 组包与解析、收发日志。
-- 设备：数字电源状态监控、输出控制、保护阈值配置、实时曲线。
-- 烧录：通过 pyOCD 和本地 CMSIS Pack 执行 DAPLink 烧录。
-- 设置：主题、字体和应用配置。
+- 引导 (`HomePage`)：软件概览、最新动态、多功能按钮导航与快捷通知展示。
+- 串口 (`DevicePage`)：串口与蓝牙通信调试，支持 Raw 发送与 TVLCOM V2 (TLV 组包与解析)。
+- 设备 (`PowerPage`)：数字电源看板、输出控制、参数设定与多通道图表采样。
+- 烧录 (`DaplinkPage`)：基于 pyOCD 进程的 DAPLink 在线擦除、固件烧录、运行复位及本地包管理。
+- 版本 (`VersionPage`)：查看当前软件/固件版本、配置 GitHub API 密钥、一键检索/下载最新固件与更新升级。
+- 设置 (`SettingsPage`)：软件主题（浅色/深色/跟随系统）、字体大小及高 DPI 缩放。
 
-仓库中还包含 `BatteryPage` 电池组面板实现，用于 4 串电池组状态展示和连接模式预留；当前 `start.py` 尚未把该页面加入主窗口导航。
+仓库中还包含 `BatteryPage` 电池组面板实现，用于 4 串电池组状态展示和连接模式预留；当前 `start.py` 尚未把该页面正式加入主窗口导航。
 
 ## 快速开始
 
 ### 环境要求
 
 - Windows 10/11
-- Python `>=3.10`
+- Python `>=3.11`
 - `uv`
 - DAPLink/pyOCD 烧录功能需要 `Resources/Tools/Pack/` 下存在可用 CMSIS Pack
 
