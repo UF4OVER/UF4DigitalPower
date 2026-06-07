@@ -65,6 +65,7 @@ UPDATE_MESSAGE_TEXT = {
 }
 
 
+
 class StatisticsWidget(QWidget):
     def __init__(self, title: str, value: str, parent=None):
         super().__init__(parent=parent)

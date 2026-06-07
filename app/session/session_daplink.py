@@ -27,7 +27,9 @@ from xml.etree import ElementTree as ET
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QProcess, QThread, QTimer, pyqtSignal
 
-from config import CTX, logger
+from config import CTX, get_logger
+
+logger = get_logger("DaplinkSession")
 
 DAPLINK_FLASH_TIMEOUT_MS = 5 * 60 * 1000
 PYOCD_PROGRESS_PHASE_RANGES = {
@@ -484,7 +486,7 @@ class DaplinkPyocdSession(QObject):
         """根据页面选项拼出 pyOCD flash 参数，路径、地址和连接模式都在这里统一收口。"""
         file_path = str(Path(payload.file_path or "").resolve())
         file_ext = Path(file_path).suffix.lower().lstrip(".")
-        base_address = self._resolve_download_address(payload.base_address, f".{file_ext}", target_info)
+        base_address = self._resolve_download_address(payload.base_address, file_ext, target_info)
         connect_mode = (payload.connect.connect_mode or "under-reset").strip().lower()
         if connect_mode == "attach":
             connect_mode = "under-reset"
@@ -779,7 +781,7 @@ class DaplinkPyocdSession(QObject):
         )
         if session is None:
             message = "未找到可用的 DAPLink/CMSIS-DAP 调试器。"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         return session
 
@@ -788,7 +790,7 @@ class DaplinkPyocdSession(QObject):
             if item.target_name == (target_name or "").strip().lower():
                 return item
         message = "请选择来自本地 Pack 的有效 target。"
-        logger.error(f"{self.__class__.__name__}: {message}")
+        logger.error(message)
         raise RuntimeError(message)
 
     def _require_targets(self) -> list[DaplinkTargetInfo]:
@@ -796,7 +798,7 @@ class DaplinkPyocdSession(QObject):
             self._pack_paths, self._target_items = self.discover_pack_targets()
         if not self._target_items:
             message = f"在 {self.pack_dir()} 中未发现可用的 CMSIS-Pack target。"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         return self._target_items
 
@@ -805,7 +807,7 @@ class DaplinkPyocdSession(QObject):
             self._pack_paths, self._target_items = self.discover_pack_targets()
         if not self._pack_paths:
             message = f"在 {self.pack_dir()} 中未找到 .pack 文件。"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         return self._pack_paths
 

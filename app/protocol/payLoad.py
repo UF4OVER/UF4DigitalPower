@@ -16,6 +16,7 @@ from .dataType import TypeBase, TYPE_REGISTRY
 CMD_ACK = 0x00
 CMD_NACK = 0xFF
 
+
 class Payload:
     def __init__(self):
         self.buf = bytearray()

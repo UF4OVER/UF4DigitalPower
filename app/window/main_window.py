@@ -32,16 +32,7 @@ class Window(WindowShellMixin, NavigationMixin, ThemeBackgroundMixin, MSFluentWi
 
         self.createPages()
         self.registerNavigation()
-        self.initTitleOverlay()
-        self.initThemeBackground()
-        self.splashScreen.finish()
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, "dynamicIsland"):
-            self.dynamicIsland.recenter()
-
-    def initTitleOverlay(self) -> None:
         self.titleBar.raise_()
         self.titleBar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
@@ -49,6 +40,8 @@ class Window(WindowShellMixin, NavigationMixin, ThemeBackgroundMixin, MSFluentWi
         self.dynamicIsland.recenter()
         self.dynamicIsland.raise_()
 
+        self.initThemeBackground()
+        self.splashScreen.finish()
+
     def showDynamicIsland(self, title: str, content: str = "", level: str = "info", duration: int = 3200):
-        if hasattr(self, "dynamicIsland"):
-            self.dynamicIsland.notify(title, content, level, duration)
+        self.dynamicIsland.notify(title, content, level, duration)

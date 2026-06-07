@@ -1,0 +1,5 @@
+QScrollArea#VersionPage,
+QWidget#versionScrollWidget {
+    background-color: transparent;
+    border: none;
+}

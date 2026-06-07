@@ -8,7 +8,7 @@
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
 #  @Contact :
-#  @Python  : 3.10
+#  @Python  : 3.11
 # -------------------------------
 
 import sys
@@ -21,9 +21,16 @@ time_ = time.time()
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QApplication
 
-from app.manager import loadSavedFont, logger
+from config import get_logger,cfg
+from app.manager import loadSavedFont
+
+logger = get_logger("Bootstrap")
+
+
 from ui import Window
-from config import cfg
+# # 解决 qfluentwidgets 对 QSS 中 path 带空格的情况无法识别的问题
+# from PyQt5.QtWidgets import QStyleFactory
+# QStyleFactory.setStyle("Fusion")
 
 class Application(Window):
     def __init__(self):

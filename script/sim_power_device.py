@@ -25,7 +25,12 @@ from enum import IntEnum
 from PyQt5.QtCore import QCoreApplication, QIODevice, QObject, QTimer
 from PyQt5.QtSerialPort import QSerialPort
 
-logger = logging.getLogger("F4CP.sim_power_device")
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(threadName)s/%(levelname)s] [%(name)s]: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("Simulator")
 
 
 class PowerCommand(IntEnum):
@@ -279,12 +284,12 @@ class SimPowerDevice(QObject):
     def open(self) -> None:
         if not self.serial.open(QIODevice.OpenModeFlag.ReadWrite):
             message = f"open {self.serial.portName()} failed: {self.serial.errorString()}"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
-        print(f"Sim power device listening on {self.serial.portName()} @ {self.serial.baudRate()}")
+        logger.info(f"Sim power device listening on {self.serial.portName()} @ {self.serial.baudRate()}")
         if self.fault_mode != "normal" and self.fault_count > 0:
-            print(
-                f"fault injection enabled: mode={self.fault_mode}, "
+            logger.info(
+                f"Fault injection enabled: mode={self.fault_mode}, "
                 f"count={self.fault_count}, command={self.fault_command}"
             )
 
@@ -333,31 +338,31 @@ class SimPowerDevice(QObject):
         data = raw.data() if hasattr(raw, "data") else bytes(raw)
         if not data:
             return
-        print(f"RX {data.hex(' ')}")
+        logger.debug(f"RX {data.hex(' ')}")
         for frame in self.parser.input_bytes(data):
             self._handle_frame(frame)
 
     def _on_error(self, error) -> None:
         if error == QSerialPort.SerialPortError.NoError:
             return
-        print(f"serial error: {self.serial.errorString()}", file=sys.stderr)
+        logger.error(f"Serial error: {self.serial.errorString()}")
 
     def _write(self, data: bytes) -> None:
         self.serial.write(data)
         self.serial.waitForBytesWritten(100)
-        print(f"TX {data.hex(' ')}")
+        logger.debug(f"TX {data.hex(' ')}")
 
     def _send_ack(self, seq: int, payload: bytes = b"") -> None:
         self._write(build_frame(PowerCommand.ACK, seq, payload))
 
     def _send_nack(self, seq: int, reason: str) -> None:
-        print(f"NACK seq={seq}: {reason}")
+        logger.warning(f"NACK seq={seq}: {reason}")
         self._write(build_frame(PowerCommand.NACK, seq, b""))
 
     def _send_bad_crc(self, seq: int) -> None:
         frame = bytearray(build_frame(PowerCommand.ACK, seq, b""))
         frame[-1] ^= 0xFF
-        print(f"BAD_CRC seq={seq}")
+        logger.warning(f"Injecting BAD_CRC seq={seq}")
         self._write(bytes(frame))
 
     def _should_fault(self, cmd: PowerCommand) -> bool:
@@ -375,7 +380,7 @@ class SimPowerDevice(QObject):
             self.stream_timer.stop()
 
         if self.fault_mode == "drop":
-            print(f"DROP seq={frame.seq} cmd={cmd.name}")
+            logger.info(f"DROP seq={frame.seq} cmd={cmd.name}")
             return True
         if self.fault_mode == "nack":
             self._send_nack(frame.seq, "injected fault")
@@ -384,7 +389,7 @@ class SimPowerDevice(QObject):
             self._send_bad_crc(frame.seq)
             return True
         if self.fault_mode == "close":
-            print(f"CLOSE seq={frame.seq} cmd={cmd.name}")
+            logger.info(f"CLOSE seq={frame.seq} cmd={cmd.name}")
             self.close()
             return True
         return False
@@ -396,7 +401,7 @@ class SimPowerDevice(QObject):
             self._send_nack(frame.seq, f"unknown cmd 0x{frame.cmd:02X}")
             return
 
-        print(f"FRAME cmd={cmd.name} seq={frame.seq} payload={frame.payload.hex(' ')}")
+        logger.info(f"RECV cmd={cmd.name} seq={frame.seq} payload={frame.payload.hex(' ')}")
         if self._inject_fault(frame, cmd):
             return
         try:
@@ -457,8 +462,8 @@ class SimPowerDevice(QObject):
         self.stream_fast_samples_until_slow = 0
         self._send_ack(frame.seq)
         self.stream_timer.start(max(1, fast_period_ms))
-        print(
-            f"stream started fast={fast_period_ms}ms "
+        logger.info(
+            f"Stream started: fast={fast_period_ms}ms "
             f"types={','.join(type_id.name for type_id in self.stream_fast_types)}; "
             f"slow={slow_period_ms}ms "
             f"types={','.join(type_id.name for type_id in self.stream_slow_types)}"
@@ -591,7 +596,7 @@ def main() -> int:
     try:
         device.open()
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
+        logger.error(str(exc))
         return 1
 
     app.aboutToQuit.connect(device.close)

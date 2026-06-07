@@ -22,7 +22,9 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QIODevice, QEvent, QCoreApplication, QObject, QMutex, QMutexLocker
 from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
 
-from config import logger
+from config import get_logger
+
+logger = get_logger("SerialSession")
 
 class SerialEventType(IntEnum):
     RX = QEvent.registerEventType()
@@ -194,7 +196,7 @@ class SerialSession(QObject):
                 f"串口打开失败 {self.cfg.port}: "
                 f"{error_str} (代码: {error_code})"
             )
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         self._ser.readyRead.connect(self._on_ready_read)
         self._ser.errorOccurred.connect(self._on_error_occurred)
@@ -222,7 +224,7 @@ class SerialSession(QObject):
         """线程内写入数据，成功后再投递 TX 事件给界面日志。"""
         if not self.is_open:
             message = "Serial port is not open"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         if not data:
             return 0
@@ -231,14 +233,14 @@ class SerialSession(QObject):
             written = self._ser.write(data)
             if written != len(data):
                 message = f"串口写入不完整: 期望 {len(data)} 字节，实际 {written} 字节"
-                logger.error(f"{self.__class__.__name__}: {message}")
+                logger.error(message)
                 raise RuntimeError(message)
             timeout_ms = max(500, int(getattr(self.cfg, "read_timeout_s", 0.1) * 1000))
             if not self._ser.waitForBytesWritten(timeout_ms):
                 message = f"串口写入超时: {self._ser.errorString()}"
-                logger.error(f"{self.__class__.__name__}: {message}")
+                logger.error(message)
                 raise RuntimeError(message)
-            logger.info(f"{self.__class__.__name__} 写入数据: {data.hex()}")
+            logger.info(f"写入数据: {data.hex()}")
 
         self._post_event(TxEvent(data))
         return len(data)
@@ -289,11 +291,11 @@ class SerialSession(QObject):
                         self.write(data)
                     except Exception as exc:
                         # notify UI of error
-                        logger.error(f"{self.__class__.__name__}: {exc}")
+                        logger.error(f"{exc}")
                         self._post_event(ErrorEvent(code=-1, message=str(exc), fatal=True))
                         self._post_event(StateEvent(SerialState.ERROR, info=str(exc)))
                 return True
         except Exception as exc:
-            logger.error(f"{self.__class__.__name__}: {e}")
+            logger.error(f"{e}")
             pass
         return super().event(e)

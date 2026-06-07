@@ -18,9 +18,9 @@ import json
 import re
 import socket
 from dataclasses import dataclass
-from urllib.parse import urlparse
 from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QThread, pyqtSignal
 from qfluentwidgets import qconfig
@@ -31,11 +31,15 @@ from config import (
 	LATEST_LOWER_VERSION_OPTION,
 	LATEST_UPPER_VERSION_OPTION,
 	VERSION_REMOTE_SECTION,
-	logger,
+	get_logger,
 )
+from app.core.update_request import build_request
 from .manager_firmware import firmware_manager
 
+logger = get_logger("UpdateManager")
+
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
+
 
 
 def _normalize_version(value: object, fallback: str = "--") -> str:
@@ -118,7 +122,7 @@ class UpdateCheckThread(QThread):
 		try:
 			result = self.manager._perform_check(self.manual)  # NOQA
 		except Exception as e:
-			logger.exception(f"{self.__class__.__name__}: Unexpected error during app update check :{e}")
+			logger.exception(f"Unexpected error during app update check :{e}")
 			result = UpdateCheckResult(
 				success=False,
 				manual=self.manual,
@@ -289,14 +293,14 @@ class UpdateManager:
 		if github_api_url:
 			return self._fetch_github_latest_release(github_api_url)
 
-		request = Request(update_url, headers={"User-Agent": "F4CP-UpdateChecker"})
+		request = build_request(update_url, headers={"User-Agent": "F4CP-UpdateChecker"})
 		with urlopen(request, timeout=8) as response:
 			payload = response.read().decode("utf-8-sig")
 		return {"versions": self._parse_remote_versions(payload)}
 
 	def _fetch_github_latest_release(self, api_url: str) -> dict[str, object]:
 		"""读取 GitHub latest release，并把 tag 当作应用最新版本。"""
-		request = Request(
+		request = build_request(
 			api_url,
 			headers={
 				"Accept": "application/vnd.github+json",

@@ -16,8 +16,10 @@ from types import SimpleNamespace
 from PyQt5.QtBluetooth import QBluetoothSocket, QBluetoothAddress, QBluetoothServiceInfo, QBluetoothUuid
 from PyQt5.QtCore import QObject, QIODevice, QCoreApplication
 
-from config import logger
+from config import get_logger
 from .session_serial import SerialState, StateEvent,TxEvent, SerialEventType, ErrorEvent, RxEvent
+
+logger = get_logger("BluetoothSession")
 
 
 class PowerBluetoothSession(QObject):
@@ -46,7 +48,7 @@ class PowerBluetoothSession(QObject):
             or QBluetoothServiceInfo is None
         ):
             message = "当前环境不支持 Qt Bluetooth"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
 
         self._postEvent(StateEvent(SerialState.OPENING))
@@ -71,7 +73,7 @@ class PowerBluetoothSession(QObject):
     def write(self, data: bytes) -> int:
         if not self.is_open:
             message = "蓝牙设备未连接"
-            logger.error(f"{self.__class__.__name__}: {message}")
+            logger.error(message)
             raise RuntimeError(message)
         written = int(self._socket.write(data))
         self._postEvent(TxEvent(data))

@@ -16,12 +16,13 @@ from .config import (
     AppContext,
     DirPaths,
     F4CPConfig,
-    # ---- convenience shortcuts ----
+    # ---- 便捷快捷方式----
     cfg,
     AppIconPath,
     logger,
+    get_logger,
 
-    # ---- application constants ----
+    # ---- 应用常量 ----
     VERSION,
     YEAR,
     AUTHOR,
