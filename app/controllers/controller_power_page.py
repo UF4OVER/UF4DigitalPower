@@ -49,6 +49,7 @@ class PowerPageController(QObject):
         client.outputLimitsWritten.connect(page._onOutputLimitsWritten)
         client.protectionValuesWritten.connect(page._onProtectionValuesWritten)
         client.powerStateWritten.connect(page._onPowerStateWritten)
+        client.writeTransactionFinished.connect(page._onWriteTransactionFinished)
         client.writeFailureLimitReached.connect(page._disconnectAfterWriteFailures)
         client.communicationFailureLimitReached.connect(page._disconnectAfterCommunicationFailures)
 

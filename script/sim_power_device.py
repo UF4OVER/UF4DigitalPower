@@ -50,6 +50,8 @@ class PowerDataType(IntEnum):
     OUTPUT_CURRENT = 13
     CORE_TEMPERATURE = 14
     BOARD_TEMPERATURE = 15
+    TEMP1_TEMPERATURE = BOARD_TEMPERATURE
+    TEMP2_TEMPERATURE = 16
     SET_VOLTAGE_LIMIT = 17
     SET_CURRENT_LIMIT = 18
     CC_CV_MODE = 20
@@ -90,6 +92,7 @@ STREAM_TYPES = (
     PowerDataType.OUTPUT_CURRENT,
     PowerDataType.CORE_TEMPERATURE,
     PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.TEMP2_TEMPERATURE,
     PowerDataType.FAN_SPEED,
     PowerDataType.FAN_SET_VALUE,
 )
@@ -101,10 +104,7 @@ U8_TYPES = {
     PowerDataType.STATE_MACHINE_STATE,
 }
 
-SIGNED_TYPES = {
-    PowerDataType.INPUT_CURRENT,
-    PowerDataType.OUTPUT_CURRENT,
-}
+SIGNED_TYPES: set[PowerDataType] = set()
 
 STATUS_TYPES = (
     PowerDataType.INPUT_VOLTAGE,
@@ -113,6 +113,7 @@ STATUS_TYPES = (
     PowerDataType.OUTPUT_CURRENT,
     PowerDataType.CORE_TEMPERATURE,
     PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.TEMP2_TEMPERATURE,
     PowerDataType.SET_VOLTAGE_LIMIT,
     PowerDataType.SET_CURRENT_LIMIT,
     PowerDataType.CC_CV_MODE,
@@ -120,6 +121,8 @@ STATUS_TYPES = (
     PowerDataType.FAULT_STATE,
     PowerDataType.STATE_MACHINE_FLAG_BITS,
     PowerDataType.STATE_MACHINE_STATE,
+    PowerDataType.INPUT_CURRENT_RAW,
+    PowerDataType.OUTPUT_CURRENT_RAW,
     PowerDataType.OTP_VALUE,
     PowerDataType.OTP_SET_VALUE,
     PowerDataType.OVP_VALUE,
@@ -131,6 +134,9 @@ STATUS_TYPES = (
     PowerDataType.PWM_D_COMPARE,
     PowerDataType.FAN_SPEED,
     PowerDataType.FAN_SET_VALUE,
+    PowerDataType.LOOP_CURRENT_FEEDBACK,
+    PowerDataType.LOOP_CURRENT_REFERENCE,
+    PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE,
 )
 
 
@@ -269,6 +275,7 @@ class SimPowerDevice(QObject):
         self.stream_slow_types: tuple[PowerDataType, ...] = (
             PowerDataType.CORE_TEMPERATURE,
             PowerDataType.BOARD_TEMPERATURE,
+            PowerDataType.TEMP2_TEMPERATURE,
             PowerDataType.FAN_SPEED,
             PowerDataType.FAN_SET_VALUE,
         )
@@ -306,6 +313,7 @@ class SimPowerDevice(QObject):
             PowerDataType.OUTPUT_CURRENT: 500,
             PowerDataType.CORE_TEMPERATURE: 35000,
             PowerDataType.BOARD_TEMPERATURE: 32000,
+            PowerDataType.TEMP2_TEMPERATURE: 33000,
             PowerDataType.SET_VOLTAGE_LIMIT: 12000,
             PowerDataType.SET_CURRENT_LIMIT: 3000,
             PowerDataType.CC_CV_MODE: 1,
@@ -538,6 +546,7 @@ class SimPowerDevice(QObject):
         self.values[PowerDataType.INPUT_CURRENT] = max(0, int(self.values[PowerDataType.OUTPUT_CURRENT] * 0.55) + 120)
         self.values[PowerDataType.CORE_TEMPERATURE] = 35000 + int(1500 * math.sin(phase / 4.0))
         self.values[PowerDataType.BOARD_TEMPERATURE] = 32000 + int(1000 * math.sin(phase / 5.0))
+        self.values[PowerDataType.TEMP2_TEMPERATURE] = 33000 + int(900 * math.sin(phase / 6.0))
         self.values[PowerDataType.FAN_SPEED] = min(1000, max(0, self.values.get(PowerDataType.FAN_SET_VALUE, 700)))
         self.values[PowerDataType.OVP_VALUE] = self.values[PowerDataType.OUTPUT_VOLTAGE]
         self.values[PowerDataType.OCP_VALUE] = self.values[PowerDataType.OUTPUT_CURRENT]

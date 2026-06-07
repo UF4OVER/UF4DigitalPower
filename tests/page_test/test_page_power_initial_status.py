@@ -22,6 +22,24 @@ from PyQt5.QtWidgets import QApplication
 from app.widgets.pages.page_power import PowerPage
 
 
+class _FakeSession:
+    is_open = True
+
+    def __init__(self):
+        self.cfg = SimpleNamespace(port="COM_TEST")
+
+    def set_event_receiver(self, _receiver) -> None:
+        pass
+
+
+def _disconnect_protocol_slots(page: PowerPage) -> None:
+    for signal in (page.outputLimitsRequested, page.protectionValuesRequested):
+        try:
+            signal.disconnect()
+        except TypeError:
+            pass
+
+
 class PowerPageInitialStatusTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -49,7 +67,8 @@ class PowerPageInitialStatusTests(unittest.TestCase):
         page = PowerPage()
 
         try:
-            page._client._session = SimpleNamespace(is_open=True)
+            _disconnect_protocol_slots(page)
+            page._client._session = _FakeSession()
             page._setWriteControlsEnabled(True)
             page.parameterEditor.outputVoltage.setValue(12.345)
             page.parameterEditor.outputCurrent.setValue(1.234)

@@ -49,6 +49,8 @@ class PowerDataType(IntEnum):
     OUTPUT_CURRENT = 13
     CORE_TEMPERATURE = 14
     BOARD_TEMPERATURE = 15
+    TEMP1_TEMPERATURE = BOARD_TEMPERATURE
+    TEMP2_TEMPERATURE = 16
     SET_VOLTAGE_LIMIT = 17
     SET_CURRENT_LIMIT = 18
     CC_CV_MODE = 20
@@ -154,11 +156,12 @@ COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD = 3
 
 POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Input Voltage"),
-    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.I32, PowerAccess.READ, "mA", "Input Current", signed=True),
+    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Input Current"),
     PowerDataType.OUTPUT_VOLTAGE: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Output Voltage"),
-    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.I32, PowerAccess.READ, "mA", "Output Current", signed=True),
-    PowerDataType.CORE_TEMPERATURE: PowerDataMeta(PowerDataType.CORE_TEMPERATURE, PowerValueType.U32, PowerAccess.READ, "mC", "core Temperature"),
-    PowerDataType.BOARD_TEMPERATURE: PowerDataMeta(PowerDataType.BOARD_TEMPERATURE, PowerValueType.U32, PowerAccess.READ, "mC", "Board Temperature"),
+    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Output Current"),
+    PowerDataType.CORE_TEMPERATURE: PowerDataMeta(PowerDataType.CORE_TEMPERATURE, PowerValueType.I32, PowerAccess.READ, "mC", "Core Temperature", signed=True),
+    PowerDataType.BOARD_TEMPERATURE: PowerDataMeta(PowerDataType.BOARD_TEMPERATURE, PowerValueType.I32, PowerAccess.READ, "mC", "Temp1 Temperature", signed=True),
+    PowerDataType.TEMP2_TEMPERATURE: PowerDataMeta(PowerDataType.TEMP2_TEMPERATURE, PowerValueType.I32, PowerAccess.READ, "mC", "Temp2 Temperature", signed=True),
     PowerDataType.SET_VOLTAGE_LIMIT: PowerDataMeta(PowerDataType.SET_VOLTAGE_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "Set Voltage Limit"),
     PowerDataType.SET_CURRENT_LIMIT: PowerDataMeta(PowerDataType.SET_CURRENT_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "Set Current Limit"),
     PowerDataType.CC_CV_MODE: PowerDataMeta(PowerDataType.CC_CV_MODE, PowerValueType.U8, PowerAccess.READ, "enum", "CC/CV Mode"),
@@ -176,7 +179,7 @@ POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
     PowerDataType.OVP_SET_VALUE: PowerDataMeta(PowerDataType.OVP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "OVP Set Value"),
     PowerDataType.OCP_VALUE: PowerDataMeta(PowerDataType.OCP_VALUE, PowerValueType.U32, PowerAccess.READ, "mA", "OCP Value"),
     PowerDataType.OCP_SET_VALUE: PowerDataMeta(PowerDataType.OCP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "OCP Set Value"),
-    PowerDataType.DUTY_CMD: PowerDataMeta(PowerDataType.DUTY_CMD, PowerValueType.U32, PowerAccess.READ, "permille", "Duty Command"),
+    PowerDataType.DUTY_CMD: PowerDataMeta(PowerDataType.DUTY_CMD, PowerValueType.U32, PowerAccess.READ, "tick", "Duty Command"),
     PowerDataType.PWM_A_COMPARE: PowerDataMeta(PowerDataType.PWM_A_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM A Compare"),
     PowerDataType.PWM_D_COMPARE: PowerDataMeta(PowerDataType.PWM_D_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM D Compare"),
     PowerDataType.FAN_SPEED: PowerDataMeta(PowerDataType.FAN_SPEED, PowerValueType.U32, PowerAccess.READ, "permille", "Fan Speed"),
@@ -195,6 +198,7 @@ POWER_STATUS_FIELD_MAP = {
     PowerDataType.OUTPUT_CURRENT: "iout_ma",
     PowerDataType.CORE_TEMPERATURE: "core_temp_mc",
     PowerDataType.BOARD_TEMPERATURE: "board_temp_mc",
+    PowerDataType.TEMP2_TEMPERATURE: "temp2_temp_mc",
     PowerDataType.SET_VOLTAGE_LIMIT: "set_voltage_limit_mv",
     PowerDataType.SET_CURRENT_LIMIT: "set_current_limit_ma",
     PowerDataType.CC_CV_MODE: "cc_cv_mode",
@@ -222,6 +226,7 @@ STATUS_TYPES = (  # NOQA sim 里面的不作为源码维护
     PowerDataType.OUTPUT_CURRENT,
     PowerDataType.CORE_TEMPERATURE,
     PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.TEMP2_TEMPERATURE,
     PowerDataType.SET_VOLTAGE_LIMIT,
     PowerDataType.SET_CURRENT_LIMIT,
     PowerDataType.CC_CV_MODE,
@@ -242,7 +247,38 @@ STATUS_TYPES = (  # NOQA sim 里面的不作为源码维护
     PowerDataType.FAN_SET_VALUE,
 )
 
-REPORT_STATUS_TYPES = STATUS_TYPES
+REPORT_STATUS_TYPES = (
+    PowerDataType.INPUT_VOLTAGE,
+    PowerDataType.INPUT_CURRENT,
+    PowerDataType.OUTPUT_VOLTAGE,
+    PowerDataType.OUTPUT_CURRENT,
+    PowerDataType.CORE_TEMPERATURE,
+    PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.TEMP2_TEMPERATURE,
+    PowerDataType.SET_VOLTAGE_LIMIT,
+    PowerDataType.SET_CURRENT_LIMIT,
+    PowerDataType.CC_CV_MODE,
+    PowerDataType.POWER_STATE,
+    PowerDataType.FAULT_STATE,
+    PowerDataType.STATE_MACHINE_FLAG_BITS,
+    PowerDataType.STATE_MACHINE_STATE,
+    PowerDataType.INPUT_CURRENT_RAW,
+    PowerDataType.OUTPUT_CURRENT_RAW,
+    PowerDataType.OTP_VALUE,
+    PowerDataType.OTP_SET_VALUE,
+    PowerDataType.OVP_VALUE,
+    PowerDataType.OVP_SET_VALUE,
+    PowerDataType.OCP_VALUE,
+    PowerDataType.OCP_SET_VALUE,
+    PowerDataType.DUTY_CMD,
+    PowerDataType.PWM_A_COMPARE,
+    PowerDataType.PWM_D_COMPARE,
+    PowerDataType.FAN_SPEED,
+    PowerDataType.FAN_SET_VALUE,
+    PowerDataType.LOOP_CURRENT_FEEDBACK,
+    PowerDataType.LOOP_CURRENT_REFERENCE,
+    PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE,
+)
 
 STREAM_FAST_TYPES = (
     PowerDataType.INPUT_VOLTAGE,
@@ -254,6 +290,7 @@ STREAM_FAST_TYPES = (
 STREAM_SLOW_TYPES = (
     PowerDataType.CORE_TEMPERATURE,
     PowerDataType.BOARD_TEMPERATURE,
+    PowerDataType.TEMP2_TEMPERATURE,
     PowerDataType.FAN_SPEED,
     PowerDataType.FAN_SET_VALUE,
 )
@@ -269,6 +306,7 @@ DEFAULT_STATUS_VALUES: dict[PowerDataType, int] = {
     PowerDataType.OUTPUT_CURRENT: 0,
     PowerDataType.CORE_TEMPERATURE: 0,
     PowerDataType.BOARD_TEMPERATURE: 0,
+    PowerDataType.TEMP2_TEMPERATURE: 0,
     PowerDataType.SET_VOLTAGE_LIMIT: 0,
     PowerDataType.SET_CURRENT_LIMIT: 0,
     PowerDataType.CC_CV_MODE: 0,
@@ -276,6 +314,8 @@ DEFAULT_STATUS_VALUES: dict[PowerDataType, int] = {
     PowerDataType.FAULT_STATE: 0,
     PowerDataType.STATE_MACHINE_FLAG_BITS: 0,
     PowerDataType.STATE_MACHINE_STATE: 0,
+    PowerDataType.INPUT_CURRENT_RAW: 0,
+    PowerDataType.OUTPUT_CURRENT_RAW: 0,
     PowerDataType.OTP_VALUE: 0,
     PowerDataType.OTP_SET_VALUE: 0,
     PowerDataType.OVP_VALUE: 0,
@@ -287,6 +327,9 @@ DEFAULT_STATUS_VALUES: dict[PowerDataType, int] = {
     PowerDataType.PWM_D_COMPARE: 0,
     PowerDataType.FAN_SPEED: 0,
     PowerDataType.FAN_SET_VALUE: 0,
+    PowerDataType.LOOP_CURRENT_FEEDBACK: 0,
+    PowerDataType.LOOP_CURRENT_REFERENCE: 0,
+    PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE: 0,
 }
 
 # ========================= session_power.py stop ===================================== #

@@ -31,6 +31,7 @@ from app.session.session_power import (
     STREAM_SLOW_PERIOD_MS,
     STREAM_SLOW_TYPES,
     STATUS_TYPES,
+    build_frame,
     decode_stream_sample,
     pack_stream_start_request,
     stream_sample_size,
@@ -56,9 +57,13 @@ class _FakeSerialSession:
         self.is_open = True
         self.cfg = SimpleNamespace(port=port)
         self.event_receiver = None
+        self.clear_input_buffer_calls = 0
 
     def set_event_receiver(self, receiver):
         self.event_receiver = receiver
+
+    def clear_input_buffer(self):
+        self.clear_input_buffer_calls += 1
 
 
 class _TestPowerClient(F4CPPowerClient):
@@ -81,6 +86,7 @@ class _TestPowerClient(F4CPPowerClient):
             iout_ma=500,
             core_temp_mc=35000,
             board_temp_mc=32000,
+            temp2_temp_mc=33000,
             set_voltage_limit_mv=12000,
             set_current_limit_ma=3000,
             cc_cv_mode=0,
@@ -122,6 +128,12 @@ class _TestPowerClient(F4CPPowerClient):
         self._stop_raw_stream_state()
 
 
+class _FailingStopPowerClient(_TestPowerClient):
+    def stop_streaming(self, timeout_ms: int = 1000) -> None:
+        self.stream_stop_calls.append(timeout_ms)
+        raise RuntimeError("stream stop failed")
+
+
 class PowerClientPollingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -144,11 +156,28 @@ class PowerClientPollingTests(unittest.TestCase):
 
         self.assertTrue(client._stream_enabled)
         self.assertEqual(client.stream_start_calls[0][0], 250)
-        self.assertEqual(client.read_status_calls, [])
+        self.assertEqual(client.read_status_calls, [1000])
 
         client.stop_polling()
         self.assertFalse(client._stream_enabled)
         self.assertEqual(client.stream_stop_calls, [1000])
+
+    def test_streaming_preserves_initial_report_values(self):
+        client = F4CPPowerClient()
+        client._request = lambda *args, **kwargs: {}
+        client._last_values.update(
+            {
+                PowerDataType.OVP_SET_VALUE: 44000,
+                PowerDataType.OCP_SET_VALUE: 3500,
+                PowerDataType.OTP_SET_VALUE: 85000,
+            }
+        )
+
+        client.start_streaming(250)
+
+        self.assertEqual(client._last_values[PowerDataType.OVP_SET_VALUE], 44000)
+        self.assertEqual(client._last_values[PowerDataType.OCP_SET_VALUE], 3500)
+        self.assertEqual(client._last_values[PowerDataType.OTP_SET_VALUE], 85000)
 
     def test_output_limit_write_refreshes_status_after_ack(self):
         client = _TestPowerClient()
@@ -195,6 +224,22 @@ class PowerClientPollingTests(unittest.TestCase):
 
         self.assertTrue(client._stream_enabled)
         self.assertEqual(client.stream_start_calls[-1][0], 250)
+
+    def test_output_write_reports_error_when_stream_pause_fails(self):
+        client = _FailingStopPowerClient()
+        client.attach_session(cast(SerialSession, _FakeSerialSession()))
+        client.start_polling(250)
+        self._process_events()
+
+        errors = []
+        client.error.connect(errors.append)
+
+        client.request_set_output_limits(12000, 3500, True)
+
+        self.assertEqual(client.write_calls, [])
+        self.assertEqual(client.stream_stop_calls, [1000])
+        self.assertTrue(errors)
+        self.assertIn("stream stop failed", errors[0])
 
     def test_output_write_resumes_when_poll_timer_was_temporarily_inactive(self):
         client = _TestPowerClient()
@@ -307,6 +352,44 @@ class PowerClientPollingTests(unittest.TestCase):
         self.assertIn(PowerDataType.CORE_TEMPERATURE, first_values)
         self.assertNotIn(PowerDataType.CORE_TEMPERATURE, second_values)
         self.assertEqual(client._stream_fast_samples_until_slow, 48)
+
+    def test_stream_stop_frame_parser_skips_raw_noise_before_ack(self):
+        client = F4CPPowerClient()
+        ack = build_frame(0x02, 7, b"")
+        raw_noise = (
+            b"\x01\x02"
+            + b"\xAA\x55\xFF\x7F\x00\x00"
+            + b"\x10\x20"
+            + b"\xAA\x55\x02\x00\x02\x66\x00\x00"
+        )
+        client._stream_enabled = True
+        client._stream_stop_pending = True
+        client._buffer.extend(raw_noise + ack)
+
+        frame = client._extract_frame()
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame["cmd"], 0x02)
+        self.assertEqual(frame["seq"], 7)
+
+    def test_stream_pending_request_parser_skips_raw_noise_before_ack(self):
+        client = F4CPPowerClient()
+        ack = build_frame(0x02, 9, b"")
+        raw_noise = (
+            b"\x33\x44"
+            + b"\xAA\x55\x20\x00\xFE\xED"
+            + b"\x55\xAA"
+            + b"\xAA\x55\x02\x00\x02\x88\x00\x00"
+        )
+        client._stream_enabled = True
+        client._pending = SimpleNamespace()
+        client._buffer.extend(raw_noise + ack)
+
+        frame = client._extract_frame()
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame["cmd"], 0x02)
+        self.assertEqual(frame["seq"], 9)
 
 
 if __name__ == "__main__":
