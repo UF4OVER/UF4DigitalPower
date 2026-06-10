@@ -47,12 +47,12 @@
     },
     "NewVersion": {
         "NewLocalVersion": "v1.0.0",
-        "NewLowerVersion": "v0.0.2",
-        "NewUpperVersion": "v0.0.3"
+        "NewLowerVersion": "",
+        "NewUpperVersion": ""
     },
     "OldVersion": {
         "OldLocalVersion": "1.0.0",
-        "OldLowerVersion": "v0.0.2",
-        "OldUpperVersion": "v0.0.3"
+        "OldLowerVersion": "",
+        "OldUpperVersion": ""
     }
 }
