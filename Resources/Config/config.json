@@ -7,7 +7,7 @@
         "HelpUrl": "https://update.hepi.ng/docs/help",
         "ReleaseUrl": "https://github.com/UF4OVER/UF4DigitalPower/releases/latest",
         "RepoUrl": "https://github.com/UF4OVER/UF4DigitalPower",
-        "Version": "0.6.0.rc1",
+        "Version": "1.0.0",
         "Year": 2026,
         "ZhSupportUrl": "https://github.com/UF4OVER/UF4DigitalPower"
     },
@@ -26,7 +26,7 @@
             "Microsoft YaHei",
             "PingFang SC"
         ],
-        "ThemeColor": "#ff34ff29",
+        "ThemeColor": "#ffff1010",
         "ThemeMode": "Dark"
     },
     "Appearance": {
@@ -34,24 +34,24 @@
         "FontFile": "__system__"
     },
     "GithubAuth": {
-        "AvatarUrl": "https://avatars.githubusercontent.com/u/142976215?v=4",
-        "Login": "UF4OVER",
-        "Name": "Yu℃",
-        "ProfileUrl": "https://github.com/UF4OVER",
-        "SessionExpiresAt": 1783673168,
-        "SessionToken": "ss9Ik3JWc62fkVfSvQXBvFV7CJpMovTrb8w2IFuG3cG2iznYyMYI5JGSy-EFn3_8"
+        "AvatarUrl": "",
+        "Login": "",
+        "Name": "",
+        "ProfileUrl": "",
+        "SessionExpiresAt": 0,
+        "SessionToken": ""
     },
     "MainWindow": {
         "HighDpiScaling": true,
         "MicaEnabled": true
     },
     "NewVersion": {
-        "NewLocalVersion": "0.6.0.rc1",
-        "NewLowerVersion": "",
-        "NewUpperVersion": ""
+        "NewLocalVersion": "v1.0.0",
+        "NewLowerVersion": "v0.0.2",
+        "NewUpperVersion": "v0.0.3"
     },
     "OldVersion": {
-        "OldLocalVersion": "0.6.0.rc1",
+        "OldLocalVersion": "1.0.0",
         "OldLowerVersion": "v0.0.2",
         "OldUpperVersion": "v0.0.3"
     }

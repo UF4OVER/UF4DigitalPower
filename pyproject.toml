@@ -1,6 +1,6 @@
 [project]
 name = "F4CP"
-version = "0.6.1.dev1"
+version = "1.0.0"
 # dev1    开发快照，最早期，不稳定
 # a1       alpha 内测版，功能可能还没完整
 # b1       beta 测试版，功能基本有了，但可能有 bug
