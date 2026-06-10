@@ -44,7 +44,7 @@
     },
     "OldVersion": {
         "OldLocalVersion": "0.6.0.rc1",
-        "OldLowerVersion": "",
-        "OldUpperVersion": ""
+        "OldLowerVersion": "v0.0.2",
+        "OldUpperVersion": "v0.0.3"
     }
 }

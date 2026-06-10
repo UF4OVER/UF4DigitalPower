@@ -783,7 +783,10 @@ class PowerPage(ScrollArea):
         self._syncPendingParameterWrites(status)
         self.parameterEditor.setFromStatus(status)
         switch_value = status.power_enabled
-        if self._stagedOutputEnabled is not None:
+        faulted = status.fault_state != 0
+        if faulted:
+            self._stagedOutputEnabled = None
+        elif self._stagedOutputEnabled is not None:
             if self._stagedOutputEnabled == status.power_enabled:
                 self._stagedOutputEnabled = None
             else:
@@ -810,6 +813,8 @@ class PowerPage(ScrollArea):
             or previous.fault_state != status.fault_state
         ):
             self._appendLog(f"状态 输出={'开启' if status.power_enabled else '关闭'} 状态机={status.state_flag_name} 拓扑={status.topology_name} 故障={faults} VOUT={status.vout_v:.3f}V IOUT={status.iout_a:.3f}A")
+            if faulted and (previous is None or previous.fault_state != status.fault_state):
+                self._appendLog(f"保护触发：已停止输出，故障={faults} (0x{status.fault_state:04X})")
         if log_changes and self.logLevelCombo.currentData() == "verbose" and time.monotonic() - self._lastVerboseLogTs >= 2.0:
             self._lastVerboseLogTs = time.monotonic()
             self._appendLog(self._client.pretty_print_status(status))
