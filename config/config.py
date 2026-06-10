@@ -143,6 +143,24 @@ logger = logging.getLogger("F4CP")
 logger.setLevel(logging.DEBUG)
 
 
+class _ConsoleFormatter(logging.Formatter):
+    """Keep console output concise while file logs retain full tracebacks."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        original_exc_info = record.exc_info
+        original_exc_text = getattr(record, "exc_text", None)
+        original_stack_info = record.stack_info
+        try:
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
+            return super().format(record)
+        finally:
+            record.exc_info = original_exc_info
+            record.exc_text = original_exc_text
+            record.stack_info = original_stack_info
+
+
 def get_logger(name: str) -> logging.Logger:
     """Return a child logger of the main F4CP logger."""
     return logging.getLogger(f"F4CP.{name}")
@@ -168,7 +186,10 @@ def _init_logger_once(log_dir: Path):
         "[%(asctime)s] [%(threadName)s/%(levelname)s] [%(name)s]: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(_ConsoleFormatter(
+        "[%(asctime)s] [%(threadName)s/%(levelname)s] [%(name)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
     file_handler.setFormatter(formatter)
 
     if not logger.hasHandlers():
@@ -197,6 +218,12 @@ class F4CPConfig(QConfig):
     firmwareBaseUrl = ConfigItem("FirmwareRemote", "BaseUrl", "")
     firmwareGithubOwner = ConfigItem("FirmwareRemote", "GithubOwner", "UF4OVER")
     firmwareGithubRepo = ConfigItem("FirmwareRemote", "GithubRepo", "UF4DigitalPower")
+    githubSessionToken = ConfigItem("GithubAuth", "SessionToken", "")
+    githubLogin = ConfigItem("GithubAuth", "Login", "")
+    githubName = ConfigItem("GithubAuth", "Name", "")
+    githubAvatarUrl = ConfigItem("GithubAuth", "AvatarUrl", "")
+    githubProfileUrl = ConfigItem("GithubAuth", "ProfileUrl", "")
+    githubSessionExpiresAt = ConfigItem("GithubAuth", "SessionExpiresAt", 0)
 
     localAppVersion = ConfigItem("OldVersion", "OldLocalVersion", "")
     localUpperVersion = ConfigItem("OldVersion", "OldUpperVersion", "")

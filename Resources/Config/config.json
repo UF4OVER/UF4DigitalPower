@@ -33,6 +33,14 @@
         "FontFamily": "",
         "FontFile": "__system__"
     },
+    "GithubAuth": {
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/142976215?v=4",
+        "Login": "UF4OVER",
+        "Name": "Yu℃",
+        "ProfileUrl": "https://github.com/UF4OVER",
+        "SessionExpiresAt": 1783673168,
+        "SessionToken": "ss9Ik3JWc62fkVfSvQXBvFV7CJpMovTrb8w2IFuG3cG2iznYyMYI5JGSy-EFn3_8"
+    },
     "MainWindow": {
         "HighDpiScaling": true,
         "MicaEnabled": true

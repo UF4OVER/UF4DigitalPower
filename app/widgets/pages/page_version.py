@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from dataclasses import dataclass
 from urllib.request import urlopen
 
@@ -62,7 +63,12 @@ from app.manager import (
     FirmwareDownloadFinishedEvent,
     FirmwareHistoryFinishedEvent,
     FirmwareRelease,
+    GithubAuthResult,
+    GithubLoginThread,
+    GithubLogoutThread,
+    GithubSessionRefreshThread,
     StyleSheet,
+    cached_session_state,
     firmware_download_manager,
     firmware_history_manager,
     update_manager,
@@ -186,6 +192,10 @@ class VersionPage(ScrollArea):
         self._detailRelease: FirmwareRelease | None = None
         self._detailChangelog = ""
         self._downloadingKinds: set[str] = set()
+        self._githubLoginThread: GithubLoginThread | None = None
+        self._githubRefreshThread: GithubSessionRefreshThread | None = None
+        self._githubLogoutThread: GithubLogoutThread | None = None
+        self._githubSessionChecked = False
 
         self.scrollWidget = QWidget(self)
         self.scrollWidget.setObjectName("versionScrollWidget")
@@ -195,6 +205,7 @@ class VersionPage(ScrollArea):
 
         self._initHeader()
         self._initSummary()
+        self._initGithubAuthCard()
         self._initFirmwareCard()
         self._initSoftwareHistoryCard()
 
@@ -311,6 +322,38 @@ class VersionPage(ScrollArea):
         self.firmwareCard.addLayout(body)
         self.mainLayout.addWidget(self.firmwareCard)
 
+    def _initGithubAuthCard(self) -> None:
+        self.githubCard = SectionCard(
+            "GitHub 登录",
+            "登录 GitHub 后，当前账号访问更新站时会获得双倍请求额度；未登录时仍可访问，但额度为默认值。",
+            self.scrollWidget,
+        )
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+
+        textBox = QWidget(self.githubCard)
+        textLayout = QVBoxLayout(textBox)
+        textLayout.setContentsMargins(0, 0, 0, 0)
+        textLayout.setSpacing(4)
+        self.githubStatusLabel = StrongBodyLabel("未登录", textBox)
+        self.githubMetaLabel = CaptionLabel("登录后可获得双倍访问额度。", textBox)
+        self.githubMetaLabel.setWordWrap(True)
+        textLayout.addWidget(self.githubStatusLabel)
+        textLayout.addWidget(self.githubMetaLabel)
+
+        self.githubLoginButton = PrimaryPushButton(FIF.PEOPLE, "GitHub 登录", self.githubCard)
+        self.githubRefreshButton = PushButton(FIF.SYNC, "刷新状态", self.githubCard)
+        self.githubLogoutButton = PushButton(FIF.CLOSE, "退出登录", self.githubCard)
+
+        row.addWidget(textBox, 1)
+        row.addWidget(self.githubLoginButton)
+        row.addWidget(self.githubRefreshButton)
+        row.addWidget(self.githubLogoutButton)
+        self.githubCard.addLayout(row)
+        self.mainLayout.addWidget(self.githubCard)
+
     def _initSoftwareHistoryCard(self) -> None:
         self.softwareCard = SectionCard("软件提交", "读取当前项目 Git 历史，便于查看本软件最近的提交记录。", self.scrollWidget)
         toolbar = QHBoxLayout()
@@ -337,6 +380,9 @@ class VersionPage(ScrollArea):
     def _connectSignals(self) -> None:
         self.openUpdateSiteButton.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self._firmwareBaseUrl())))
         self.openRepoButton.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(REPO_URL)))
+        self.githubLoginButton.clicked.connect(self._startGithubLogin)
+        self.githubRefreshButton.clicked.connect(lambda: self._refreshGithubSession(force=True))
+        self.githubLogoutButton.clicked.connect(self._logoutGithub)
         self.kindCombo.currentIndexChanged.connect(self._populateReleaseTable)
         self.refreshFirmwareButton.clicked.connect(lambda: self.refreshFirmwareHistory(force_refresh=True))
         self.downloadFirmwareButton.clicked.connect(self.downloadSelectedFirmware)
@@ -365,6 +411,10 @@ class VersionPage(ScrollArea):
     def showEvent(self, event):
         super().showEvent(event)
         self._applyVersionSnapshot()
+        if not self._githubSessionChecked:
+            self._applyGithubSessionSnapshot()
+            self._refreshGithubSession(force=False)
+            self._githubSessionChecked = True
 
     def _onThemeChanged(self, *_):
         StyleSheet.VERSION_PAGE.apply(self)
@@ -669,6 +719,114 @@ class VersionPage(ScrollArea):
         self.powerVersionCard.setValue(f"{snapshot.local_lower_version or '--'} / {snapshot.latest_lower_version or '--'}")
         self.upperVersionCard.setValue(f"{snapshot.local_upper_version or '--'} / {snapshot.latest_upper_version or '--'}")
 
+    def _applyGithubSessionSnapshot(self) -> None:
+        session = cached_session_state()
+        if session.authenticated:
+            self.githubStatusLabel.setText(f"已登录: {session.display_name}")
+            expiry_text = self._formatExpiry(session.expires_at)
+            self.githubMetaLabel.setText(
+                f"GitHub 账号: @{session.github_login or '--'} | 会话到期: {expiry_text} | 当前访问更新站可获得双倍额度。"
+            )
+            self.githubLoginButton.setText("重新登录")
+            self.githubLogoutButton.setEnabled(True)
+        else:
+            self.githubStatusLabel.setText("未登录")
+            self.githubMetaLabel.setText("登录 GitHub 后，刷新固件索引和下载文件会获得双倍访问额度。")
+            self.githubLoginButton.setText("GitHub 登录")
+            self.githubLogoutButton.setEnabled(False)
+        self.githubRefreshButton.setEnabled(True)
+
+    def _setGithubBusy(self, busy: bool, action_text: str = "") -> None:
+        self.githubLoginButton.setEnabled(not busy)
+        self.githubRefreshButton.setEnabled(not busy)
+        self.githubLogoutButton.setEnabled(not busy and cached_session_state().authenticated)
+        if busy and action_text:
+            self.githubMetaLabel.setText(action_text)
+
+    def _startGithubLogin(self) -> None:
+        if self._githubLoginThread is not None and self._githubLoginThread.isRunning():
+            showMessage(self, "登录进行中", "浏览器授权流程仍在进行，请先完成当前登录。", "info")
+            return
+        self._githubLoginThread = GithubLoginThread(self)
+        self._githubLoginThread.authorizeUrlReady.connect(self._openGithubAuthorizeUrl)
+        self._githubLoginThread.resultReady.connect(self._handleGithubLoginResult)
+        self._githubLoginThread.finished.connect(self._cleanupGithubLoginThread)
+        self._setGithubBusy(True, "正在请求 GitHub 授权地址，请稍候...")
+        self._githubLoginThread.start()
+
+    def _openGithubAuthorizeUrl(self, url: str) -> None:
+        self.githubMetaLabel.setText("浏览器授权页已打开，请在 GitHub 完成登录与授权。")
+        QDesktopServices.openUrl(QUrl(url))
+
+    def _handleGithubLoginResult(self, result: GithubAuthResult) -> None:
+        self._setGithubBusy(False)
+        self._applyGithubSessionSnapshot()
+        if result.success:
+            showMessage(self, "GitHub 登录成功", "当前账号已绑定到更新站，后续请求可获得双倍额度。", "success")
+        else:
+            showMessage(self, "GitHub 登录失败", result.message, "warning")
+
+    def _cleanupGithubLoginThread(self) -> None:
+        if self._githubLoginThread is not None:
+            self._githubLoginThread.deleteLater()
+            self._githubLoginThread = None
+
+    def _refreshGithubSession(self, force: bool = False) -> None:
+        session = cached_session_state()
+        if not session.session_token:
+            self._applyGithubSessionSnapshot()
+            return
+        if self._githubRefreshThread is not None and self._githubRefreshThread.isRunning():
+            return
+        if not force and session.expires_at > int(time.time()) and session.github_login:
+            self._applyGithubSessionSnapshot()
+            return
+        self._githubRefreshThread = GithubSessionRefreshThread(session.session_token, self)
+        self._githubRefreshThread.resultReady.connect(self._handleGithubRefreshResult)
+        self._githubRefreshThread.finished.connect(self._cleanupGithubRefreshThread)
+        self._setGithubBusy(True, "正在校验 GitHub 登录状态...")
+        self._githubRefreshThread.start()
+
+    def _handleGithubRefreshResult(self, result: GithubAuthResult) -> None:
+        self._setGithubBusy(False)
+        self._applyGithubSessionSnapshot()
+        if result.success:
+            if result.session is not None:
+                showMessage(self, "GitHub 状态已更新", f"当前登录账号：@{result.session.github_login}", "success", autoCloseMs=2200)
+        else:
+            showMessage(self, "GitHub 登录失效", result.message, "warning")
+
+    def _cleanupGithubRefreshThread(self) -> None:
+        if self._githubRefreshThread is not None:
+            self._githubRefreshThread.deleteLater()
+            self._githubRefreshThread = None
+
+    def _logoutGithub(self) -> None:
+        session = cached_session_state()
+        if not session.session_token:
+            self._applyGithubSessionSnapshot()
+            return
+        if self._githubLogoutThread is not None and self._githubLogoutThread.isRunning():
+            return
+        self._githubLogoutThread = GithubLogoutThread(session.session_token, self)
+        self._githubLogoutThread.resultReady.connect(self._handleGithubLogoutResult)
+        self._githubLogoutThread.finished.connect(self._cleanupGithubLogoutThread)
+        self._setGithubBusy(True, "正在退出 GitHub 登录...")
+        self._githubLogoutThread.start()
+
+    def _handleGithubLogoutResult(self, result: GithubAuthResult) -> None:
+        self._setGithubBusy(False)
+        self._applyGithubSessionSnapshot()
+        if result.success:
+            showMessage(self, "已退出 GitHub 登录", "当前访问更新站将恢复为默认额度。", "success", autoCloseMs=2200)
+        else:
+            showMessage(self, "退出失败", result.message, "warning")
+
+    def _cleanupGithubLogoutThread(self) -> None:
+        if self._githubLogoutThread is not None:
+            self._githubLogoutThread.deleteLater()
+            self._githubLogoutThread = None
+
     def _releaseFromSelectedRow(self) -> FirmwareRelease | None:
         row = self.releaseTable.currentRow()
         if row < 0:
@@ -695,6 +853,13 @@ class VersionPage(ScrollArea):
         if size < 1024 * 1024:
             return f"{size / 1024:.1f} KB"
         return f"{size / 1024 / 1024:.2f} MB"
+
+    @staticmethod
+    def _formatExpiry(timestamp_value: int) -> str:
+        if timestamp_value <= 0:
+            return "--"
+        local_time = time.localtime(timestamp_value)
+        return time.strftime("%Y-%m-%d %H:%M:%S", local_time)
 
     def _applyLocalStyle(self) -> None:
         dark = isDarkTheme()
