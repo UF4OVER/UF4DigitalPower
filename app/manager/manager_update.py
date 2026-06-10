@@ -41,6 +41,19 @@ logger = get_logger("UpdateManager")
 UPDATE_FETCH_EXCEPTIONS = (URLError, TimeoutError, socket.timeout)
 
 
+def _short_update_error_message(exc: Exception, fallback: str = "检查更新失败。") -> str:
+	text = str(exc or "").strip().lower()
+	if "429" in text or "too many requests" in text:
+		return "请求过于频繁，请稍后再试。"
+	if "403" in text or "forbidden" in text:
+		return "访问更新服务被拒绝，请稍后再试。"
+	if "timeout" in text or "timed out" in text:
+		return "连接更新服务器超时，请稍后重试。"
+	if "cannot connect" in text or "name or service not known" in text:
+		return "连接更新服务器失败，请检查网络。"
+	return fallback
+
+
 
 def _normalize_version(value: object, fallback: str = "--") -> str:
 	text = str(value or "").strip()
@@ -126,7 +139,7 @@ class UpdateCheckThread(QThread):
 			result = UpdateCheckResult(
 				success=False,
 				manual=self.manual,
-				message="Failed to check updates.",
+				message=_short_update_error_message(e, "检查更新失败。"),
 				snapshot=self.manager.get_cached_versions(),
 			)
 		self.resultReady.emit(result)

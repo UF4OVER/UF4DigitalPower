@@ -14,4 +14,5 @@
 from .manager_stylesheet import *
 from .manager_font import *
 from .manager_firmware import *
+from .manager_github_auth import *
 from .manager_update import *

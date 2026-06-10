@@ -143,6 +143,24 @@ logger = logging.getLogger("F4CP")
 logger.setLevel(logging.DEBUG)
 
 
+class _ConsoleFormatter(logging.Formatter):
+    """Keep console output concise while file logs retain full tracebacks."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        original_exc_info = record.exc_info
+        original_exc_text = getattr(record, "exc_text", None)
+        original_stack_info = record.stack_info
+        try:
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
+            return super().format(record)
+        finally:
+            record.exc_info = original_exc_info
+            record.exc_text = original_exc_text
+            record.stack_info = original_stack_info
+
+
 def get_logger(name: str) -> logging.Logger:
     """Return a child logger of the main F4CP logger."""
     return logging.getLogger(f"F4CP.{name}")
@@ -168,7 +186,10 @@ def _init_logger_once(log_dir: Path):
         "[%(asctime)s] [%(threadName)s/%(levelname)s] [%(name)s]: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(_ConsoleFormatter(
+        "[%(asctime)s] [%(threadName)s/%(levelname)s] [%(name)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
     file_handler.setFormatter(formatter)
 
     if not logger.hasHandlers():
@@ -197,17 +218,23 @@ class F4CPConfig(QConfig):
     firmwareBaseUrl = ConfigItem("FirmwareRemote", "BaseUrl", "")
     firmwareGithubOwner = ConfigItem("FirmwareRemote", "GithubOwner", "UF4OVER")
     firmwareGithubRepo = ConfigItem("FirmwareRemote", "GithubRepo", "UF4DigitalPower")
+    githubSessionToken = ConfigItem("GithubAuth", "SessionToken", "")
+    githubLogin = ConfigItem("GithubAuth", "Login", "")
+    githubName = ConfigItem("GithubAuth", "Name", "")
+    githubAvatarUrl = ConfigItem("GithubAuth", "AvatarUrl", "")
+    githubProfileUrl = ConfigItem("GithubAuth", "ProfileUrl", "")
+    githubSessionExpiresAt = ConfigItem("GithubAuth", "SessionExpiresAt", 0)
 
     localAppVersion = ConfigItem("OldVersion", "OldLocalVersion", "")
     localUpperVersion = ConfigItem("OldVersion", "OldUpperVersion", "")
     localLowerVersion = ConfigItem("OldVersion", "OldLowerVersion", "")
-    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v0.5.4.dev1")
+    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v1.0.0")
     latestUpperVersion = ConfigItem("NewVersion", "NewUpperVersion", "v0.0.2")
     latestLowerVersion = ConfigItem("NewVersion", "NewLowerVersion", "v0.0.2")
 
     appYear = ConfigItem("Application", "Year", 2026)
     appAuthor = ConfigItem("Application", "Author", "UF4OVER")
-    appVersion = ConfigItem("Application", "Version", "0.5.4.dev1")
+    appVersion = ConfigItem("Application", "Version", "1.0.0")
     appHelpUrl = ConfigItem("Application", "HelpUrl", "https://update.hepi.ng/docs/help")
     appRepoUrl = ConfigItem("Application", "RepoUrl", "https://github.com/UF4OVER/UF4DigitalPower")
     appExampleUrl = ConfigItem("Application", "ExampleUrl", "https://github.com/UF4OVER/UF4DigitalPower")
@@ -286,45 +313,13 @@ class AppContext:
 
 
 # ============================================================================
-#  测试用例
-# ============================================================================
-
-
-_default_context: AppContext | None = None
-
-
-def get_default_context() -> AppContext:
-    global _default_context
-    if _default_context is None:
-        _default_context = CTX
-    return _default_context
-
-
-def set_app_context(ctx: AppContext) -> None:
-    global _default_context
-    _default_context = ctx
-
-
-def reset_app_context() -> None:
-    global _default_context
-    _default_context = None
-
-# ============================================================================
-#  CTX — 模块级单例，唯一需要导入的东西
+#  CTX — 模块级全局单例，唯一需要导入的东西
 # ============================================================================
 
 CTX: AppContext = AppContext()
 
-# CTX: AppContext  = AppContext(base_dir=Path(__file__).resolve().parent.parent / ".config")
 # Convenience shortcuts derived from CTX
-cfg         = CTX.cfg          # F4CPConfig (qfluentwidgets)
-_config_json_path = CTX.dirs.ConfigDir / "config.json"
-if not _config_json_path.exists():
-    _config_json_path.parent.mkdir(parents=True, exist_ok=True)
-    _config_json_path.write_text("{}", encoding="utf-8")
-
-qconfig.load(_config_json_path, cfg)
-
+cfg = CTX.cfg                    # F4CPConfig (qfluentwidgets)
 AppIconPath = CTX.app_icon_path  # str — path to app icon
 
 

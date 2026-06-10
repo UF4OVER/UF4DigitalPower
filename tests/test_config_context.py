@@ -22,9 +22,6 @@ from config.config import (
     AppContext,
     CTX,
     DirPaths,
-    get_default_context,
-    reset_app_context,
-    set_app_context,
 )
 from qfluentwidgets import Theme, qconfig
 
@@ -91,11 +88,9 @@ class DirPathsTests(unittest.TestCase):
 class AppContextTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="f4cp_test_"))
-        reset_app_context()
 
     def tearDown(self):
         import shutil
-        reset_app_context()
         _restore_global_qconfig()
         if self.tmp.exists():
             shutil.rmtree(self.tmp, ignore_errors=True)
@@ -133,28 +128,6 @@ class AppContextTests(unittest.TestCase):
             ctx.reload()
         except Exception as exc:
             self.fail(f"reload() raised {exc}")
-
-    def test_default_context_singleton(self):
-        """get_default_context returns same instance on repeated calls."""
-        ctx1 = get_default_context()
-        ctx2 = get_default_context()
-        self.assertIs(ctx1, ctx2)
-        reset_app_context()
-
-    def test_set_app_context_override(self):
-        """set_app_context replaces the default context."""
-        ctx1 = AppContext(base_dir=self.tmp)
-        set_app_context(ctx1)
-        ctx2 = get_default_context()
-        self.assertIs(ctx1, ctx2)
-
-    def test_reset_app_context(self):
-        """reset_app_context clears the cached default."""
-        ctx1 = AppContext(base_dir=self.tmp)
-        set_app_context(ctx1)
-        reset_app_context()
-        ctx2 = get_default_context()
-        self.assertIsNot(ctx1, ctx2)
 
 
 class ConfigExportTests(unittest.TestCase):
