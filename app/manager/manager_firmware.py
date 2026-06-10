@@ -39,6 +39,22 @@ DEFAULT_FIRMWARE_BASE_URL = "https://update.hepi.ng"  # 这是默认请求网址
 FIRMWARE_CACHE_FILE_NAME = "firmware_remote_cache.json"
 
 
+def _short_error_message(exc: Exception, fallback: str) -> str:
+    text = str(exc or "").strip()
+    normalized = text.lower()
+    if "http 429" in normalized or "too many requests" in normalized:
+        return "请求过于频繁，请稍后再试。"
+    if "forbidden" in normalized or "http 403" in normalized:
+        return "访问被拒绝，请检查登录状态或服务器策略。"
+    if "401" in normalized or "unauthorized" in normalized:
+        return "登录已失效，请重新登录后再试。"
+    if "cannot connect" in normalized or "timed out" in normalized or "timeout" in normalized:
+        return "连接更新服务器失败，请稍后重试。"
+    if "invalid json" in normalized:
+        return "服务器返回的数据格式无效，请稍后重试。"
+    return fallback
+
+
 @dataclass(frozen=True)
 class FirmwareRelease:
     kind: str
@@ -139,7 +155,7 @@ class FirmwareCheckThread(QThread):
             logger.exception("Failed to check firmware updates")
             result = FirmwareCheckResult(
                 success=False,
-                message=str(exc) or "Failed to check firmware updates.",
+                message=_short_error_message(exc, "检查固件更新失败。"),
                 latest={},
                 has_updates={},
             )
@@ -173,7 +189,7 @@ class FirmwareDownloadThread(QThread):
             result = FirmwareDownloadResult(
                 success=False,
                 kind=self.kind,
-                message=str(exc) or "Failed to download firmware.",
+                message=_short_error_message(exc, "下载固件失败。"),
             )
         self.resultReady.emit(result)
 
@@ -197,7 +213,7 @@ class FirmwareHistoryThread(QThread):
             logger.exception("Failed to fetch firmware history")
             result = FirmwareHistoryResult(
                 success=False,
-                message=str(exc) or "Failed to fetch firmware history.",
+                message=_short_error_message(exc, "获取固件历史失败。"),
                 releases={},
             )
         self.resultReady.emit(result)
@@ -233,7 +249,7 @@ class FirmwareDetailThread(QThread):
                 success=False,
                 kind=self.kind,
                 version=self.version,
-                message=str(exc) or "Failed to fetch firmware detail.",
+                message=_short_error_message(exc, "获取固件详情失败。"),
             )
         self.resultReady.emit(result)
 

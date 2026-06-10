@@ -595,6 +595,13 @@ class DaplinkPage(ScrollArea):
         self._postRequest(daplink_pyocd.DaplinkRequestPayload(action="scan_probes"))
 
     def readInfo(self):
+        if self._selectedProbe() is None:
+            self.showMessage(
+                '未检测到调试器',
+                '请先连接 DAPLink / CMSIS-DAP，再读取目标信息。',
+                "warning",
+            )
+            return
         if self._session.is_busy:
             return
         self._preparePowerPageForDaplink()
@@ -614,10 +621,26 @@ class DaplinkPage(ScrollArea):
             )
             return
 
+        if self._selectedProbe() is None:
+            self.showMessage(
+                '未检测到调试器',
+                '请先连接 DAPLink / CMSIS-DAP，再开始烧录。',
+                "warning",
+            )
+            return
+
         if self._selectedTarget() is None:
             self.showMessage(
                 '缺少目标',
                 '请先从本地 Pack 中选择目标。',
+                "warning",
+            )
+            return
+
+        if self._deviceInfo is None or self._deviceInfo.probe_uid in {"", "--"}:
+            self.showMessage(
+                '请先连接目标',
+                '请先点击“连接”读取调试器与目标芯片信息，再开始烧录。',
                 "warning",
             )
             return
@@ -720,6 +743,8 @@ class DaplinkPage(ScrollArea):
     def _applyProbeItems(self, probes: list[daplink_pyocd.DaplinkProbeInfo]):
         self.probeCombo.clear()
         self._probeItems = probes
+        self._deviceInfo = None
+        self._clearInfoLabels()
 
         if not probes:
             self.probeCombo.addItem('未发现 DAPLink / CMSIS-DAP')
