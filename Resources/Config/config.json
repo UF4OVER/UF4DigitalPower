@@ -52,7 +52,7 @@
     },
     "OldVersion": {
         "OldLocalVersion": "1.0.0",
-        "OldLowerVersion": "",
-        "OldUpperVersion": ""
+        "OldLowerVersion": "v0.0.2",
+        "OldUpperVersion": "v0.0.3"
     }
 }

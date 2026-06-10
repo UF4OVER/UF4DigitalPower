@@ -313,45 +313,13 @@ class AppContext:
 
 
 # ============================================================================
-#  测试用例
-# ============================================================================
-
-
-_default_context: AppContext | None = None
-
-
-def get_default_context() -> AppContext:
-    global _default_context
-    if _default_context is None:
-        _default_context = CTX
-    return _default_context
-
-
-def set_app_context(ctx: AppContext) -> None:
-    global _default_context
-    _default_context = ctx
-
-
-def reset_app_context() -> None:
-    global _default_context
-    _default_context = None
-
-# ============================================================================
-#  CTX — 模块级单例，唯一需要导入的东西
+#  CTX — 模块级全局单例，唯一需要导入的东西
 # ============================================================================
 
 CTX: AppContext = AppContext()
 
-# CTX: AppContext  = AppContext(base_dir=Path(__file__).resolve().parent.parent / ".config")
 # Convenience shortcuts derived from CTX
-cfg         = CTX.cfg          # F4CPConfig (qfluentwidgets)
-_config_json_path = CTX.dirs.ConfigDir / "config.json"
-if not _config_json_path.exists():
-    _config_json_path.parent.mkdir(parents=True, exist_ok=True)
-    _config_json_path.write_text("{}", encoding="utf-8")
-
-qconfig.load(_config_json_path, cfg)
-
+cfg = CTX.cfg                    # F4CPConfig (qfluentwidgets)
 AppIconPath = CTX.app_icon_path  # str — path to app icon
 
 
