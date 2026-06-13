@@ -12,6 +12,7 @@
 # -------------------------------
 
 from .tvlcom import (
+    MAX_PROTOCOL_BODY_LEN,
     TvlcomFrameParser,
     TvlcomTlvItem,
     build_frame,
