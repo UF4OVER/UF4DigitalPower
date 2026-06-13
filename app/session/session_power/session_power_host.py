@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Synchronous TVLCOM host helper for scripts and manual power tests."""
+"""Synchronous UF4COM host helper for scripts and manual power tests."""
 
 from __future__ import annotations
 
@@ -10,12 +10,13 @@ from PyQt5.QtSerialPort import QSerialPort
 
 from app.core.const import (
     PowerClientError,
-    PowerClientNackError,
+    PowerClientDeviceError,
     PowerClientProtocolError,
     PowerClientTimeoutError,
     PowerCommand,
     PowerDataType,
-    REPORT_STATUS_TYPES,
+    PowerFrameFlag,
+    STATUS_READ_TYPES,
 )
 from app.protocol.tvlcom import (
     build_frame,
@@ -33,6 +34,10 @@ def _u32(value: int) -> bytes:
 
 def _u8(value: int) -> bytes:
     return int(value).to_bytes(1, "little", signed=False)
+
+
+def _u16(value: int) -> bytes:
+    return int(value).to_bytes(2, "little", signed=False)
 
 
 class TVLHost:
@@ -94,7 +99,12 @@ class TVLHost:
         for type_id in types:
             ensure_readable(type_id)
         payload = b"".join(encode_tlv(type_id) for type_id in types)
-        values = self._request(PowerCommand.READ, payload, timeout=timeout)
+        values = self._request(
+            PowerCommand.READ,
+            payload,
+            timeout=timeout,
+            expected_cmd=PowerCommand.READ_RSP,
+        )
         missing = [type_id.name for type_id in types if type_id not in values]
         if missing:
             raise PowerClientProtocolError(f"Missing response types: {', '.join(missing)}")
@@ -102,13 +112,8 @@ class TVLHost:
         return values
 
     def read_report_values(self, timeout: float | None = None) -> dict[PowerDataType, int]:
-        values = self._request(
-            PowerCommand.REPORT,
-            b"",
-            timeout=timeout,
-            expected_cmd=PowerCommand.REPORT,
-        )
-        missing = [type_id.name for type_id in REPORT_STATUS_TYPES if type_id not in values]
+        values = self.read_values(*STATUS_READ_TYPES, timeout=timeout)
+        missing = [type_id.name for type_id in STATUS_READ_TYPES if type_id not in values]
         if missing:
             raise PowerClientProtocolError(f"Missing report types: {', '.join(missing)}")
         self._last_values.update(values)
@@ -122,7 +127,12 @@ class TVLHost:
         for type_id, raw_value in values.items():
             ensure_writable(type_id, raw_value)
         payload = b"".join(encode_tlv(type_id, raw_value) for type_id, raw_value in values.items())
-        self._request(PowerCommand.WRITE, payload, timeout=timeout)
+        self._request(
+            PowerCommand.WRITE,
+            payload,
+            timeout=timeout,
+            expected_cmd=PowerCommand.WRITE_RSP,
+        )
         self._last_values.update(
             {
                 type_id: int.from_bytes(raw_value, "little", signed=False)
@@ -148,7 +158,7 @@ class TVLHost:
         self.write_values({PowerDataType.OCP_SET_VALUE: _u32(value_ma)})
 
     def set_otp_mc(self, value_mc: int) -> None:
-        self.write_values({PowerDataType.OTP_SET_VALUE: _u32(value_mc)})
+        self.write_values({PowerDataType.OTP_SET_VALUE: _u16(value_mc)})
 
     def set_power_state(self, enabled: bool) -> None:
         self.write_values({PowerDataType.POWER_STATE: _u8(1 if enabled else 0)})
@@ -171,8 +181,8 @@ class TVLHost:
         self,
         cmd: PowerCommand,
         payload: bytes,
+        expected_cmd: PowerCommand,
         timeout: float | None = None,
-        expected_cmd: PowerCommand = PowerCommand.ACK,
     ) -> dict[PowerDataType, int]:
         self._seq = (self._seq + 1) & 0xFF
         seq = self._seq
@@ -186,21 +196,15 @@ class TVLHost:
 
             frame = self.recv_frame(timeout=remaining)
             frame_cmd = int(frame["cmd"])
+            flags = int(frame.get("flags", 0))
 
-            if frame_cmd == int(PowerCommand.REPORT):
-                if expected_cmd == PowerCommand.REPORT:
-                    if int(frame["seq"]) != seq:
-                        if int(frame["seq"]) == 0:
-                            self._handle_report(frame)
-                            continue
-                        raise PowerClientProtocolError(
-                            f"REPORT seq mismatch: expected {seq}, got {frame['seq']}"
-                        )
-                    return decode_tlvs(bytes(frame["payload"]), strict=False)
-                self._handle_report(frame)
+            if frame_cmd == int(PowerCommand.STREAM_DATA):
+                self._handle_stream_data_frame(frame)
                 continue
-            if frame_cmd == int(PowerCommand.NACK):
-                raise PowerClientNackError(f"Device returned NACK for seq={frame['seq']}")
+            if flags & int(PowerFrameFlag.ERROR):
+                payload = bytes(frame["payload"])
+                code = int.from_bytes(payload[1:3], "big", signed=False) if len(payload) >= 3 else 0
+                raise PowerClientDeviceError(f"Device returned UF4COM error 0x{code:04X} for seq={frame['seq']}")
             if frame_cmd != int(expected_cmd):
                 raise PowerClientProtocolError(f"Unexpected response cmd=0x{frame_cmd:02X}")
             if int(frame["seq"]) != seq:
@@ -209,7 +213,5 @@ class TVLHost:
                 )
             return decode_tlvs(bytes(frame["payload"]))
 
-    def _handle_report(self, frame: dict[str, int | bytes]) -> None:
-        if int(frame["seq"]) != 0:
-            raise PowerClientProtocolError(f"REPORT seq should be 0, got {frame['seq']}")
+    def _handle_stream_data_frame(self, frame: dict[str, int | bytes]) -> None:
         self._last_values.update(decode_tlvs(bytes(frame["payload"]), strict=False))

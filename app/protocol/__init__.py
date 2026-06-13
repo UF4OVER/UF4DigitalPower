@@ -16,7 +16,7 @@ from .tvlcom import (
     TvlcomFrameParser,
     TvlcomTlvItem,
     build_frame,
-    crc16_modbus,
+    crc16_ccitt,
     decode_stream_sample,
     decode_tlvs,
     encode_tlv,

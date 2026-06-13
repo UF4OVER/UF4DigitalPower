@@ -39,7 +39,7 @@ from app.core.const import (
     STATE_MACHINE_NAMES,
     STATE_FLAG_NAMES,
     PowerClientError,
-    REPORT_STATUS_TYPES,
+    STATUS_READ_TYPES,
     STREAM_SLOW_TYPES,
     STREAM_FAST_TYPES,
     STREAM_FAST_PERIOD_MS,
@@ -53,7 +53,8 @@ from app.core.const import (
     COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD,
     WRITE_POLL_RESUME_DELAY_MS,
     POWER_STATUS_FIELD_MAP,
-    PowerClientNackError,
+    PowerClientDeviceError,
+    PowerFrameFlag,
 )
 from app.protocol.tvlcom import (
     build_frame,
@@ -78,6 +79,10 @@ def _u32(value: int) -> bytes:
 
 def _u8(value: int) -> bytes:
     return int(value).to_bytes(1, "little", signed=False)
+
+
+def _u16(value: int) -> bytes:
+    return int(value).to_bytes(2, "little", signed=False)
 
 
 def build_status(values: dict[PowerDataType, int]) -> PowerStatus:
@@ -187,23 +192,23 @@ class PowerStatus:
 
     @property
     def core_temp_c(self) -> float:
-        return self.core_temp_mc / 1000.0
+        return self.core_temp_mc / 100.0
 
     @property
     def board_temp_c(self) -> float:
-        return self.board_temp_mc / 1000.0
+        return self.board_temp_mc / 100.0
 
     @property
     def temp2_temp_c(self) -> float:
-        return self.temp2_temp_mc / 1000.0
+        return self.temp2_temp_mc / 100.0
 
     @property
     def otp_value_c(self) -> float:
-        return self.otp_value_mc / 1000.0
+        return self.otp_value_mc / 100.0
 
     @property
     def otp_set_value_c(self) -> float:
-        return self.otp_set_value_mc / 1000.0
+        return self.otp_set_value_mc / 100.0
 
     @property
     def ovp_value_v(self) -> float:
@@ -268,7 +273,7 @@ class DebugSnapshot:
 class _PendingRequest:
     seq: int
     loop: QEventLoop
-    expected_cmd: PowerCommand = PowerCommand.ACK
+    expected_cmd: PowerCommand
     response: dict[PowerDataType, int] | None = None
     error: Exception | None = None
 
@@ -375,7 +380,7 @@ class F4CPPowerClient(QObject):
     def start_polling(self, interval_ms: int = 800) -> None:
         """启动状态刷新。
 
-        新固件优先走原始流模式，失败时再回落到普通 READ/REPORT 轮询。
+        新固件优先走 UF4COM STREAM_DATA 帧，失败时再回落到普通 READ 轮询。
         """
         interval = max(200, int(interval_ms))
         if self.is_connected and not self.is_busy:
@@ -454,7 +459,7 @@ class F4CPPowerClient(QObject):
                 {
                     PowerDataType.OVP_SET_VALUE: _u32(ovp_mv),
                     PowerDataType.OCP_SET_VALUE: _u32(ocp_ma),
-                    PowerDataType.OTP_SET_VALUE: _u32(otp_mc),
+                    PowerDataType.OTP_SET_VALUE: _u16(otp_mc),
                     PowerDataType.FAN_SET_VALUE: _u32(fan_value),
                 },
                 timeout_ms=2000,
@@ -499,7 +504,12 @@ class F4CPPowerClient(QObject):
         for type_id in types:
             _ensure_readable(type_id)
         payload = b"".join(encode_tlv(type_id) for type_id in types)
-        response = self._request(PowerCommand.READ, payload, timeout_ms=timeout_ms)
+        response = self._request(
+            PowerCommand.READ,
+            payload,
+            timeout_ms=timeout_ms,
+            expected_cmd=PowerCommand.READ_RSP,
+        )
 
         if types == (PowerDataType.DEBUG_SNAPSHOT,):
             return response
@@ -511,13 +521,8 @@ class F4CPPowerClient(QObject):
         return response
 
     def read_report_values(self, timeout_ms: int = 1000) -> dict[PowerDataType, int]:
-        response = self._request(
-            PowerCommand.REPORT,
-            b"",
-            timeout_ms=timeout_ms,
-            expected_cmd=PowerCommand.REPORT,
-        )
-        missing = [type_id.name for type_id in REPORT_STATUS_TYPES if type_id not in response]
+        response = self.read_values(*STATUS_READ_TYPES, timeout_ms=timeout_ms)
+        missing = [type_id.name for type_id in STATUS_READ_TYPES if type_id not in response]
         if missing:
             raise PowerClientProtocolError(f"Missing report types: {', '.join(missing)}")
         self._last_values.update(response)
@@ -528,7 +533,12 @@ class F4CPPowerClient(QObject):
         for type_id, raw_value in values.items():
             _ensure_writable(type_id, raw_value)
         payload = b"".join(encode_tlv(type_id, raw_value) for type_id, raw_value in values.items())
-        self._request(PowerCommand.WRITE, payload, timeout_ms=timeout_ms)
+        self._request(
+            PowerCommand.WRITE,
+            payload,
+            timeout_ms=timeout_ms,
+            expected_cmd=PowerCommand.WRITE_RSP,
+        )
         self._last_values.update(
             {
                 type_id: int.from_bytes(raw_value, "little", signed=False)
@@ -565,9 +575,13 @@ class F4CPPowerClient(QObject):
             (),
             0,
         )
-        self._request(PowerCommand.STREAM_START, payload, timeout_ms=timeout_ms)
-        # STREAM_START 的 ACK 后面可能已经跟着首批裸流字节。
-        # 这时客户端还没切进裸流解析模式，残留半包会导致后续样本错位。
+        self._request(
+            PowerCommand.STREAM_START,
+            payload,
+            timeout_ms=timeout_ms,
+            expected_cmd=PowerCommand.STREAM_START_RSP,
+        )
+        # STREAM_START 响应后可能已经跟着首批 STREAM_DATA 帧，清一次输入避免旧包扰动。
         self._clear_receive_backlog()
         for type_id, value in DEFAULT_STATUS_VALUES.items():
             self._last_values.setdefault(type_id, value)
@@ -586,7 +600,7 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer.stop()
         self._stream_slow_poll_timer.stop()
         self.log.emit(
-            "Raw stream started "
+            "UF4COM stream started "
             f"(fast={STREAM_FAST_PERIOD_MS} ms "
             f"types={','.join(type_id.name for type_id in fast_types)}; "
             f"slow={STREAM_SLOW_PERIOD_MS} ms "
@@ -598,7 +612,12 @@ class F4CPPowerClient(QObject):
         if was_enabled and self.is_connected and not self.is_busy:
             self._stream_stop_pending = True
             try:
-                self._request(PowerCommand.STREAM_STOP, b"", timeout_ms=timeout_ms)
+                self._request(
+                    PowerCommand.STREAM_STOP,
+                    b"",
+                    timeout_ms=timeout_ms,
+                    expected_cmd=PowerCommand.STREAM_STOP_RSP,
+                )
             finally:
                 self._stream_stop_pending = False
                 self._stop_raw_stream_state()
@@ -607,10 +626,22 @@ class F4CPPowerClient(QObject):
             self._stop_raw_stream_state()
             self._buffer.clear()
         if was_enabled:
-            self.log.emit("Raw stream stopped")
+            self.log.emit("UF4COM stream stopped")
 
     def read_debug_snapshot(self, timeout_ms: int = 1000) -> DebugSnapshot:
-        result = self.read_values(PowerDataType.DEBUG_SNAPSHOT, timeout_ms=timeout_ms)
+        result = self.read_values(
+            PowerDataType.OUTPUT_VOLTAGE_RAW,
+            PowerDataType.OUTPUT_VOLTAGE,
+            PowerDataType.OVP_SET_VALUE,
+            PowerDataType.INPUT_CURRENT_RAW,
+            PowerDataType.OUTPUT_CURRENT_RAW,
+            PowerDataType.INPUT_CURRENT,
+            PowerDataType.OUTPUT_CURRENT,
+            PowerDataType.LOOP_CURRENT_FEEDBACK,
+            PowerDataType.LOOP_CURRENT_REFERENCE,
+            PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE,
+            timeout_ms=timeout_ms,
+        )
 
         missing = [
             type_id.name
@@ -649,7 +680,7 @@ class F4CPPowerClient(QObject):
         self.write_values({PowerDataType.OCP_SET_VALUE: _u32(value_ma)}, timeout_ms=timeout_ms)
 
     def set_otp_mc(self, value_mc: int, timeout_ms: int = 1000) -> None:
-        self.write_values({PowerDataType.OTP_SET_VALUE: _u32(value_mc)}, timeout_ms=timeout_ms)
+        self.write_values({PowerDataType.OTP_SET_VALUE: _u16(value_mc)}, timeout_ms=timeout_ms)
 
     def set_fan_value(self, value: int, timeout_ms: int = 1000) -> None:
         self.write_values({PowerDataType.FAN_SET_VALUE: _u32(value)}, timeout_ms=timeout_ms)
@@ -746,7 +777,7 @@ class F4CPPowerClient(QObject):
         write_action: Callable[[], None],
         started_at: float,
     ) -> None:
-        """等客户端空闲后再真正写入，避免写请求和自动轮询抢同一个 ACK。"""
+        """等客户端空闲后再真正写入，避免写请求和自动轮询抢同一个响应。"""
         if self._shutting_down or not self.is_connected:
             self._schedule_polling_resume()
             return
@@ -810,7 +841,7 @@ class F4CPPowerClient(QObject):
             interval = self._poll_requested_interval_ms
             self._poll_resume_interval_ms = interval if interval is not None else 800
             self.stop_streaming(timeout_ms=1000)
-            self.log.emit("Raw stream paused for write")
+            self.log.emit("UF4COM stream paused for write")
             return
         if self._poll_requested_interval_ms is not None:
             self._poll_resume_interval_ms = self._poll_requested_interval_ms
@@ -841,7 +872,7 @@ class F4CPPowerClient(QObject):
                 self.start_streaming(interval)
                 return
             except Exception as exc:
-                self.error.emit(f"Raw stream resume failed: {exc}")
+                self.error.emit(f"UF4COM stream resume failed: {exc}")
         self._poll_timer.start(interval)
         self.log.emit(f"Host polling resumed ({interval} ms)")
         QTimer.singleShot(0, self._poll_once)
@@ -860,14 +891,14 @@ class F4CPPowerClient(QObject):
         try:
             self.read_status(timeout_ms=timeout_ms)
         except Exception as exc:
-            self.error.emit(f"WRITE ACK received, but status refresh failed: {exc}")
+            self.error.emit(f"WRITE_RSP received, but status refresh failed: {exc}")
 
     def _request(
         self,
         cmd: PowerCommand,
         payload: bytes,
+        expected_cmd: PowerCommand,
         timeout_ms: int = 1000,
-        expected_cmd: PowerCommand = PowerCommand.ACK,
     ) -> dict[PowerDataType, int]:
         """发送一条命令并等待对应响应。
 
@@ -921,17 +952,6 @@ class F4CPPowerClient(QObject):
         self.log.emit(f"RX {data.hex(' ')}")
         self._buffer.extend(data)
 
-        if self._stream_enabled and self._pending is None and not self._stream_stop_pending:
-            try:
-                while True:
-                    values = self._extract_raw_stream_values()
-                    if values is None:
-                        break
-                    self._handle_raw_stream_values(values)
-            except Exception as exc:
-                self._handle_raw_stream_decode_error(exc)
-            return
-
         while True:
             try:
                 frame = self._extract_frame()
@@ -943,10 +963,8 @@ class F4CPPowerClient(QObject):
             if frame is None:
                 break
 
-            if int(frame["cmd"]) == int(PowerCommand.REPORT):
-                if self._complete_pending_report(frame):
-                    continue
-                self._handle_report(frame)
+            if int(frame["cmd"]) == int(PowerCommand.STREAM_DATA):
+                self._handle_stream_data_frame(frame)
                 continue
 
             try:
@@ -972,50 +990,14 @@ class F4CPPowerClient(QObject):
             self._pending.response = response
             self._pending.loop.quit()
 
-    def _complete_pending_report(self, frame: dict[str, int | bytes]) -> bool:
-        """处理由主动 REPORT 请求返回的帧，和设备自动上报的 REPORT 区分开。"""
-        if self._pending is None or self._pending.expected_cmd != PowerCommand.REPORT:
-            return False
-        if int(frame["seq"]) != self._pending.seq:
-            if int(frame["seq"]) == 0:
-                return False
-            self.log.emit(
-                f"Ignored stale REPORT seq={frame['seq']} while waiting for seq={self._pending.seq}"
-            )
-            return True
-        try:
-            self._pending.response = decode_tlvs(bytes(frame["payload"]), strict=False)
-        except Exception as exc:
-            self._fail_pending(exc)
-            self.error.emit(str(exc))
-            return True
-        self._pending.loop.quit()
-        return True
-
-    def _handle_report(self, frame: dict[str, int | bytes]) -> None:
-        """处理设备主动上报的状态帧，刷新缓存并通知 UI。"""
-        if int(frame["seq"]) != 0:
-            self.error.emit(f"REPORT seq should be 0, got {frame['seq']}")
-            return
-
+    def _handle_stream_data_frame(self, frame: dict[str, int | bytes]) -> None:
+        """处理 UF4COM 主动 STREAM_DATA 帧。"""
         try:
             values = decode_tlvs(bytes(frame["payload"]), strict=False)
         except Exception as exc:
-            self.error.emit(str(exc))
+            self._handle_raw_stream_decode_error(exc)
             return
-
-        self._last_values.update(values)
-        self._reset_communication_failures()
-        self.log.emit(
-            f"REPORT seq=0 types={','.join(type_id.name for type_id in values)}"
-        )
-        status = self._status_from_values(values)
-        if status is None:
-            missing = [type_id.name for type_id in STATUS_TYPES if type_id not in _normalize_status_values(self._last_values)]
-            self.log.emit(f"REPORT cached, waiting for fields: {','.join(missing)}")
-            return
-        self._last_status = status
-        self.statusUpdated.emit(status)
+        self._handle_raw_stream_values(values)
 
     def _status_from_values(self, values: dict[PowerDataType, int]) -> PowerStatus | None:
         values = _normalize_status_values(values)
@@ -1124,14 +1106,14 @@ class F4CPPowerClient(QObject):
         bad_count = self._stream_bad_frame_count
 
         self.log.emit(
-            f"Raw stream bad frame {bad_count}/3: {exc}"
+            f"UF4COM stream bad frame {bad_count}/3: {exc}"
             + "; discarded bad frame and waiting next frame"
         )
 
         if bad_count < 3:
             return
 
-        message = f"Raw stream failed for 3 consecutive frames: {exc}"
+        message = f"UF4COM stream failed for 3 consecutive frames: {exc}"
         self._stop_raw_stream_state()
         self._record_communication_failure(message)
         self.error.emit(message)
@@ -1182,7 +1164,7 @@ class F4CPPowerClient(QObject):
             self._stream_slow_refresh_in_progress = False
 
         if restart_error is not None:
-            self.error.emit(f"Raw stream restart failed after slow-group refresh: {restart_error}")
+            self.error.emit(f"UF4COM stream restart failed after slow-group refresh: {restart_error}")
 
         if not values:
             return
@@ -1214,7 +1196,7 @@ class F4CPPowerClient(QObject):
                 return None
             except Exception as exc:
                 last_error = exc
-                self.log.emit(f"Raw stream restart retry {attempt + 1}/2 failed: {exc}")
+                self.log.emit(f"UF4COM stream restart retry {attempt + 1}/2 failed: {exc}")
 
         return last_error
 
@@ -1223,12 +1205,6 @@ class F4CPPowerClient(QObject):
 
     def _extract_frame(self) -> dict[str, int | bytes] | None:
         """从接收缓存里提取一帧完整协议数据，顺手丢掉帧头前的噪声。"""
-        if self._stream_enabled and self._pending is None and not self._stream_stop_pending:
-            values = self._extract_raw_stream_values()
-            if values is None:
-                return None
-            self._handle_raw_stream_values(values)
-            return None
         return extract_frame_from_buffer(
             self._buffer,
             stream_frame_search=self._is_stream_frame_search_active(),
@@ -1236,12 +1212,16 @@ class F4CPPowerClient(QObject):
 
     def _parse_response(self, frame: dict[str, int | bytes]) -> dict[PowerDataType, int]:
         cmd = int(frame["cmd"])
+        flags = int(frame.get("flags", 0))
         payload = bytes(frame["payload"])
 
-        if cmd == int(PowerCommand.NACK):
-            raise PowerClientNackError(f"Device returned NACK for seq={frame['seq']}")
-        if cmd != int(PowerCommand.ACK):
-            raise PowerClientProtocolError(f"Unexpected response cmd=0x{cmd:02X}")
+        if flags & int(PowerFrameFlag.ERROR):
+            code = int.from_bytes(payload[1:3], "big", signed=False) if len(payload) >= 3 else 0
+            raise PowerClientDeviceError(f"Device returned UF4COM error 0x{code:04X} for seq={frame['seq']}")
+        if self._pending is not None and cmd != int(self._pending.expected_cmd):
+            raise PowerClientProtocolError(
+                f"Unexpected response cmd=0x{cmd:02X}, expected 0x{int(self._pending.expected_cmd):02X}"
+            )
         return decode_tlvs(payload)
 
     def _fail_pending(self, exc: Exception) -> None:

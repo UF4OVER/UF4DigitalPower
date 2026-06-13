@@ -884,7 +884,7 @@ class PowerPage(ScrollArea):
             return
         ovp_mv = int(round(self.parameterEditor.ovp.value() * 1000))
         ocp_ma = int(round(self.parameterEditor.ocp.value() * 1000))
-        otp_mc = int(round(self.parameterEditor.otp.value() * 1000))
+        otp_mc = int(round(self.parameterEditor.otp.value() * 100))
         fan_value = int(self.parameterEditor.fan.value())
         self._pendingProtectionSettings = (ovp_mv, ocp_ma, otp_mc, fan_value)
         self._beginWriteOperation()
@@ -910,7 +910,7 @@ class PowerPage(ScrollArea):
             ovp_mv, ocp_ma, otp_mc, fan_value = self._pendingProtectionSettings
             editor_ovp_mv = int(round(self.parameterEditor.ovp.value() * 1000))
             editor_ocp_ma = int(round(self.parameterEditor.ocp.value() * 1000))
-            editor_otp_mc = int(round(self.parameterEditor.otp.value() * 1000))
+            editor_otp_mc = int(round(self.parameterEditor.otp.value() * 100))
             editor_fan_value = int(self.parameterEditor.fan.value())
             if (
                 status.ovp_set_value_mv == ovp_mv

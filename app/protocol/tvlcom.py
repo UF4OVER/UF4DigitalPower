@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Shared TVLCOM protocol facade used by the power and serial pages."""
+"""Shared UF4COM protocol facade used by the power and serial pages."""
 
 from __future__ import annotations
 
-from .tvlcom_crc import crc16_modbus
+from .tvlcom_crc import crc16_ccitt
 from .tvlcom_frame import MAX_PROTOCOL_BODY_LEN, TvlcomFrameParser, build_frame, extract_frame_from_buffer
 from .tvlcom_stream import decode_stream_sample, pack_stream_start_request, stream_sample_size
 from .tvlcom_tlv import (
@@ -21,7 +21,7 @@ __all__ = [
     "TvlcomFrameParser",
     "TvlcomTlvItem",
     "build_frame",
-    "crc16_modbus",
+    "crc16_ccitt",
     "decode_stream_sample",
     "decode_tlvs",
     "encode_tlv",
