@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from .tvlcom_crc import crc16_ccitt
 from .tvlcom_frame import MAX_PROTOCOL_BODY_LEN, TvlcomFrameParser, build_frame, extract_frame_from_buffer
-from .tvlcom_stream import decode_stream_sample, pack_stream_start_request, stream_sample_size
+from .tvlcom_stream import pack_stream_start_request
 from .tvlcom_tlv import (
     TvlcomTlvItem,
     decode_tlvs,
@@ -22,7 +22,6 @@ __all__ = [
     "TvlcomTlvItem",
     "build_frame",
     "crc16_ccitt",
-    "decode_stream_sample",
     "decode_tlvs",
     "encode_tlv",
     "ensure_readable",
@@ -31,5 +30,4 @@ __all__ = [
     "iter_tlv_items",
     "pack_read_request",
     "pack_stream_start_request",
-    "stream_sample_size",
 ]

@@ -58,14 +58,12 @@ from app.core.const import (
 )
 from app.protocol.tvlcom import (
     build_frame,
-    decode_stream_sample,
     decode_tlvs,
     encode_tlv,
     ensure_readable as _ensure_readable,
     ensure_writable as _ensure_writable,
     extract_frame_from_buffer,
     pack_stream_start_request,
-    stream_sample_size,
 )
 
 
@@ -316,10 +314,6 @@ class F4CPPowerClient(QObject):
         self._stream_fast_types: tuple[PowerDataType, ...] = ()
         self._stream_slow_types: tuple[PowerDataType, ...] = ()
         self._stream_enabled = False
-        self._stream_fast_sample_size = 0
-        self._stream_slow_sample_size = 0
-        self._stream_fast_samples_until_slow = 0
-        self._stream_slow_every_fast_samples = 0
         self._stream_stop_pending = False
         self._stream_bad_frame_count = 0
         self._stream_slow_poll_started = False
@@ -344,7 +338,7 @@ class F4CPPowerClient(QObject):
         self._last_status = None
         self._consecutive_write_failures = 0
         self._consecutive_communication_failures = 0
-        self._stop_raw_stream_state()
+        self._stop_stream_state()
         session.set_event_receiver(self)
         self._clear_receive_backlog()
         self.connectionChanged.emit(session.is_open)
@@ -367,7 +361,7 @@ class F4CPPowerClient(QObject):
         self._last_status = None
         self._consecutive_write_failures = 0
         self._consecutive_communication_failures = 0
-        self._stop_raw_stream_state()
+        self._stop_stream_state()
         self.connectionChanged.emit(False)
 
     @pyqtSlot()
@@ -567,8 +561,6 @@ class F4CPPowerClient(QObject):
             _ensure_readable(type_id)
         for type_id in slow_types:
             _ensure_readable(type_id)
-        fast_sample_size = stream_sample_size(fast_types)
-        slow_sample_size = 0
         payload = pack_stream_start_request(
             fast_types,
             STREAM_FAST_PERIOD_MS,
@@ -588,10 +580,6 @@ class F4CPPowerClient(QObject):
         self._stream_types = fast_types + slow_types
         self._stream_fast_types = fast_types
         self._stream_slow_types = slow_types
-        self._stream_fast_sample_size = fast_sample_size
-        self._stream_slow_sample_size = slow_sample_size
-        self._stream_slow_every_fast_samples = 0
-        self._stream_fast_samples_until_slow = 0
         self._stream_enabled = True
         self._stream_bad_frame_count = 0
         self._stream_slow_poll_started = False
@@ -620,10 +608,10 @@ class F4CPPowerClient(QObject):
                 )
             finally:
                 self._stream_stop_pending = False
-                self._stop_raw_stream_state()
+                self._stop_stream_state()
                 self._clear_receive_backlog()
         else:
-            self._stop_raw_stream_state()
+            self._stop_stream_state()
             self._buffer.clear()
         if was_enabled:
             self.log.emit("UF4COM stream stopped")
@@ -995,9 +983,9 @@ class F4CPPowerClient(QObject):
         try:
             values = decode_tlvs(bytes(frame["payload"]), strict=False)
         except Exception as exc:
-            self._handle_raw_stream_decode_error(exc)
+            self._handle_stream_decode_error(exc)
             return
-        self._handle_raw_stream_values(values)
+        self._handle_stream_values(values)
 
     def _status_from_values(self, values: dict[PowerDataType, int]) -> PowerStatus | None:
         values = _normalize_status_values(values)
@@ -1041,19 +1029,15 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer.stop()
         self._poll_requested_interval_ms = None
         self._poll_resume_interval_ms = None
-        self._stop_raw_stream_state()
+        self._stop_stream_state()
         self._fail_pending(PowerClientError(message))
         self.connectionChanged.emit(False)
 
-    def _stop_raw_stream_state(self) -> None:
+    def _stop_stream_state(self) -> None:
         self._stream_enabled = False
         self._stream_types = ()
         self._stream_fast_types = ()
         self._stream_slow_types = ()
-        self._stream_fast_sample_size = 0
-        self._stream_slow_sample_size = 0
-        self._stream_fast_samples_until_slow = 0
-        self._stream_slow_every_fast_samples = 0
         self._stream_stop_pending = False
         self._stream_bad_frame_count = 0
         self._stream_slow_poll_started = False
@@ -1072,36 +1056,7 @@ class F4CPPowerClient(QObject):
         except Exception as exc:
             self.log.emit(f"Input buffer clear failed: {exc}")
 
-    def _extract_raw_stream_values(self) -> dict[PowerDataType, int] | None:
-        """从裸流里切出一组快/慢通道样本；数据不够时先留在缓存里。"""
-        if not self._stream_enabled or not self._stream_fast_types:
-            return None
-        expected_size = self._stream_fast_sample_size
-        include_slow = (
-            bool(self._stream_slow_types)
-            and self._stream_slow_sample_size > 0
-            and self._stream_fast_samples_until_slow <= 0
-        )
-        if include_slow:
-            expected_size += self._stream_slow_sample_size
-
-        if len(self._buffer) < expected_size:
-            return None
-
-        sample = bytes(self._buffer[:expected_size])
-        del self._buffer[:expected_size]
-
-        fast_sample = sample[:self._stream_fast_sample_size]
-        values = decode_stream_sample(fast_sample, self._stream_fast_types)
-        if include_slow:
-            slow_sample = sample[self._stream_fast_sample_size:]
-            values.update(decode_stream_sample(slow_sample, self._stream_slow_types))
-            self._stream_fast_samples_until_slow = self._stream_slow_every_fast_samples - 1
-        elif self._stream_slow_every_fast_samples > 0:
-            self._stream_fast_samples_until_slow -= 1
-        return values
-
-    def _handle_raw_stream_decode_error(self, exc: Exception) -> None:
+    def _handle_stream_decode_error(self, exc: Exception) -> None:
         self._stream_bad_frame_count += 1
         bad_count = self._stream_bad_frame_count
 
@@ -1114,12 +1069,12 @@ class F4CPPowerClient(QObject):
             return
 
         message = f"UF4COM stream failed for 3 consecutive frames: {exc}"
-        self._stop_raw_stream_state()
+        self._stop_stream_state()
         self._record_communication_failure(message)
         self.error.emit(message)
         self.communicationFailureLimitReached.emit(message)
 
-    def _handle_raw_stream_values(self, values: dict[PowerDataType, int]) -> None:
+    def _handle_stream_values(self, values: dict[PowerDataType, int]) -> None:
         self._stream_bad_frame_count = 0
         if (not self._stream_slow_poll_started) and self._stream_enabled:
             self._stream_slow_poll_started = True

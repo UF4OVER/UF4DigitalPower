@@ -36,10 +36,6 @@ def _u8(value: int) -> bytes:
     return int(value).to_bytes(1, "little", signed=False)
 
 
-def _u16(value: int) -> bytes:
-    return int(value).to_bytes(2, "little", signed=False)
-
-
 class TVLHost:
     """Reusable QSerialPort host for the F4CP power protocol."""
 
@@ -111,14 +107,6 @@ class TVLHost:
         self._last_values.update(values)
         return values
 
-    def read_report_values(self, timeout: float | None = None) -> dict[PowerDataType, int]:
-        values = self.read_values(*STATUS_READ_TYPES, timeout=timeout)
-        missing = [type_id.name for type_id in STATUS_READ_TYPES if type_id not in values]
-        if missing:
-            raise PowerClientProtocolError(f"Missing report types: {', '.join(missing)}")
-        self._last_values.update(values)
-        return values
-
     def write_values(
         self,
         values: dict[PowerDataType, bytes],
@@ -143,22 +131,7 @@ class TVLHost:
     def read_status(self, timeout: float | None = None):
         from app.session.session_power import build_status
 
-        return build_status(self.read_report_values(timeout=timeout))
-
-    def set_voltage_limit_mv(self, value_mv: int) -> None:
-        self.write_values({PowerDataType.SET_VOLTAGE_LIMIT: _u32(value_mv)})
-
-    def set_current_limit_ma(self, value_ma: int) -> None:
-        self.write_values({PowerDataType.SET_CURRENT_LIMIT: _u32(value_ma)})
-
-    def set_ovp_mv(self, value_mv: int) -> None:
-        self.write_values({PowerDataType.OVP_SET_VALUE: _u32(value_mv)})
-
-    def set_ocp_ma(self, value_ma: int) -> None:
-        self.write_values({PowerDataType.OCP_SET_VALUE: _u32(value_ma)})
-
-    def set_otp_mc(self, value_mc: int) -> None:
-        self.write_values({PowerDataType.OTP_SET_VALUE: _u16(value_mc)})
+        return build_status(self.read_values(*STATUS_READ_TYPES, timeout=timeout))
 
     def set_power_state(self, enabled: bool) -> None:
         self.write_values({PowerDataType.POWER_STATE: _u8(1 if enabled else 0)})
