@@ -3,7 +3,7 @@
 #  @Project : F4CP
 #  @Time    : 2026 - 01-08 12:30
 #  @FileName: page_device.py
-#  @FileType: 串口调试页面文件，负责串口/蓝牙收发和 TLV 调试
+#  @FileType: 串口调试页面文件，负责串口/蓝牙收发和 UF4COM TV 调试
 #  @Software: PyCharm 2024.1.6 (Professional Edition)
 #  @System  : Windows 11 23H2
 #  @Author  : UF4
@@ -79,7 +79,7 @@ from app.session import (
     TxEvent,
     listSerialPorts,
 )
-from app.core.const import POWER_DATA_META, PowerCommand, PowerDataType
+from app.core.const import POWER_DATA_META, PowerCommand, PowerDataType, PowerFrameFlag
 from app.protocol.tvlcom import (
     TvlcomFrameParser,
     build_frame,
@@ -91,10 +91,10 @@ from config import get_logger
 logger = get_logger("DevicePage")
 
 SESSION_PAGE_BAUD_RATES = ("9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600")
-SESSION_PAGE_SEND_MODES = ("Raw(HEX/ASCII)", "TVLCOM_V2")
+SESSION_PAGE_SEND_MODES = ("Raw(HEX/ASCII)", "UF4COM")
 SESSION_PAGE_RAW_FORMATS = ("HEX", "ASCII")
-SESSION_PAGE_V2_DEFAULT_CMD = int(PowerCommand.READ)
-SESSION_PAGE_V2_DEFAULT_TYPE = int(PowerDataType.SET_VOLTAGE_LIMIT)
+SESSION_PAGE_UF4COM_DEFAULT_CMD = int(PowerCommand.READ)
+SESSION_PAGE_UF4COM_DEFAULT_TYPE = int(PowerDataType.SET_VOLTAGE_LIMIT)
 
 class DeviceTransport(Protocol):
     @property
@@ -268,8 +268,8 @@ class DevicePage(ScrollArea):
         self._session: Optional[DeviceTransport] = None
         self._bluetoothDevices: dict[str, str] = {}
         self._bluetoothDiscoveryAgent = None
-        self._v2Parser: Optional[TvlcomFrameParser] = None
-        self._v2Seq = 0
+        self._uf4comParser: Optional[TvlcomFrameParser] = None
+        self._uf4comSeq = 0
         self._rxBuf = bytearray()
         self._rxBytes = 0
         self._txBytes = 0
@@ -316,8 +316,8 @@ class DevicePage(ScrollArea):
         titleLayout = QVBoxLayout(titleBox)
         titleLayout.setContentsMargins(0, 0, 0, 0)
         titleLayout.setSpacing(2)
-        self.titleLabel = TitleLabel("串口与 TVLCOM 调试", titleBox)
-        self.subtitleLabel = BodyLabel("面向 UF4 数字电源的串口连接、Raw 收发和 TVLCOM V2 组包调试。", titleBox)
+        self.titleLabel = TitleLabel("串口与 UF4COM 调试", titleBox)
+        self.subtitleLabel = BodyLabel("面向 UF4 数字电源的串口连接、Raw 收发和 UF4COM 组包调试。", titleBox)
         titleLayout.addWidget(self.titleLabel)
         titleLayout.addWidget(self.subtitleLabel)
 
@@ -383,7 +383,7 @@ class DevicePage(ScrollArea):
         self.vBoxLayout.addWidget(self.connectionCard)
 
     def _initSendCard(self):
-        self.sendCard = PageCard("发送", "Raw 模式直接发送 HEX / ASCII；TVLCOM V2 模式会根据 TLV 表自动组帧。", self.scrollWidget)
+        self.sendCard = PageCard("发送", "Raw 模式直接发送 HEX / ASCII；UF4COM 模式会根据 TV 表自动组帧。", self.scrollWidget)
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(8)
@@ -397,7 +397,7 @@ class DevicePage(ScrollArea):
         self.cmdLabel = BodyLabel("CMD", self.sendCard)
         self.cmdSpin = SpinBox(self.sendCard)
         self.cmdSpin.setRange(0, 255)
-        self.cmdSpin.setValue(SESSION_PAGE_V2_DEFAULT_CMD)
+        self.cmdSpin.setValue(SESSION_PAGE_UF4COM_DEFAULT_CMD)
         self.cmdSpin.setDisplayIntegerBase(16)
 
         self.repeatLabel = BodyLabel("重复", self.sendCard)
@@ -429,7 +429,7 @@ class DevicePage(ScrollArea):
         self.vBoxLayout.addWidget(self.sendCard)
 
     def _initTlvCard(self):
-        self.tlvCard = PageCard("TVLCOM V2 Payload", "每一行对应一个 TLV 数据项，启用后参与组包。", self.scrollWidget)
+        self.tlvCard = PageCard("UF4COM TV Payload", "每一行对应一个 TV 数据项，启用后参与组包。", self.scrollWidget)
         self.tlvTable = TableWidget(self.tlvCard)
         self.tlvTable.setColumnCount(4)
         self.tlvTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -440,7 +440,7 @@ class DevicePage(ScrollArea):
         bar = QHBoxLayout()
         bar.setContentsMargins(0, 0, 0, 0)
         bar.setSpacing(8)
-        self.addTlvBtn = PushButton("新增 TLV", self.tlvCard)
+        self.addTlvBtn = PushButton("新增 TV", self.tlvCard)
         self.delTlvBtn = PushButton("删除选中", self.tlvCard)
         self.exportTlvBtn = PushButton("导出 JSON", self.tlvCard)
         self.importTlvBtn = PushButton("导入 JSON", self.tlvCard)
@@ -453,7 +453,7 @@ class DevicePage(ScrollArea):
         self.vBoxLayout.addWidget(self.tlvCard)
 
     def _initConsoleCard(self):
-        self.consoleCard = PageCard("日志", "蓝色为接收，绿色为发送/ACK，红色为错误。", self.scrollWidget)
+        self.consoleCard = PageCard("日志", "蓝色为接收，绿色为发送/响应，红色为错误。", self.scrollWidget)
         stats = QHBoxLayout()
         stats.setContentsMargins(0, 0, 0, 0)
         stats.setSpacing(16)
@@ -496,12 +496,12 @@ class DevicePage(ScrollArea):
         self._refreshTexteditColor()
 
     def _applyTexts(self):
-        self.parseSwitch.setOnText("解析 TVLCOM")
-        self.parseSwitch.setOffText("解析 TVLCOM")
+        self.parseSwitch.setOnText("解析 UF4COM")
+        self.parseSwitch.setOffText("解析 UF4COM")
         self.stateLabel.setText("未连接" if not self._session or not self._session.is_open else "已连接")
         self.connectButton.setText("连接" if not self._session or not self._session.is_open else "断开")
         self.logEdit.setPlaceholderText("设备日志 / 返回数据…")
-        self.txEdit.setPlaceholderText("Raw：输入 HEX（例如 01 0A FF）；TVLCOM V2 可留空，使用下方 TLV 表组包")
+        self.txEdit.setPlaceholderText("Raw：输入 HEX（例如 01 0A FF）；UF4COM 可留空，使用下方 TV 表组包")
         self._onConnectionTypeChanged(self.connectionTypeCombo.currentText())
         self._applyMode()
 
@@ -530,15 +530,15 @@ class DevicePage(ScrollArea):
             return True
         return super().event(e)
 
-    def _isV2Mode(self) -> bool:
+    def _isUf4comMode(self) -> bool:
         return self.modeCombo.currentIndex() == 1
 
     def _applyMode(self):
-        isV2 = self._isV2Mode()
-        self.tlvCard.setVisible(isV2)
-        self.rawFmtCombo.setVisible(not isV2)
-        self.cmdLabel.setVisible(isV2)
-        self.cmdSpin.setVisible(isV2)
+        isUf4com = self._isUf4comMode()
+        self.tlvCard.setVisible(isUf4com)
+        self.rawFmtCombo.setVisible(not isUf4com)
+        self.cmdLabel.setVisible(isUf4com)
+        self.cmdSpin.setVisible(isUf4com)
         self.tlvTable.setHorizontalHeaderLabels(["类型 ID", "类型", "值", "启用"])
         self._refreshTlvRowEditorsForMode()
 
@@ -548,9 +548,9 @@ class DevicePage(ScrollArea):
         if not (
             text.startswith("RX(")
             or text.startswith("TX(")
-            or text.startswith("V2 RX")
-            or text.startswith("V2 ACK")
-            or text.startswith("V2 NACK")
+            or text.startswith("UF4COM RX")
+            or text.startswith("UF4COM RSP")
+            or text.startswith("UF4COM ERR")
         ):
             logger.info(text)
 
@@ -558,9 +558,9 @@ class DevicePage(ScrollArea):
         dark = isDarkTheme()
         if lc.startswith("ERR:") or lc.startswith("错误:"):
             color = QColor("#FF6B6B" if dark else "#B91C1C")
-        elif lc.startswith("RX(") or lc.startswith("V2 RX"):
+        elif lc.startswith("RX(") or lc.startswith("UF4COM RX"):
             color = QColor("#6EA8FE" if dark else "#1D4ED8")
-        elif lc.startswith("V2 ACK") or lc.startswith("V2 NACK") or lc.startswith("TX v2") or lc.startswith("TX("):
+        elif lc.startswith("uf4com rsp") or lc.startswith("uf4com err") or lc.startswith("tx uf4com") or lc.startswith("tx("):
             color = QColor("#8BD78F" if dark else "#166534")
         elif lc.startswith("已打开") or lc.startswith("正在连接") or lc.startswith("Disconnected"):
             color = QColor("#D6B4FF" if dark else "#7C3AED")
@@ -614,11 +614,11 @@ class DevicePage(ScrollArea):
 
         typeSpin = SpinBox(self.tlvTable)
         typeSpin.setRange(0, 255)
-        typeSpin.setValue(SESSION_PAGE_V2_DEFAULT_TYPE)
+        typeSpin.setValue(SESSION_PAGE_UF4COM_DEFAULT_TYPE)
         self.tlvTable.setCellWidget(row, 0, typeSpin)
 
         kindCombo = ComboBox(self.tlvTable)
-        kindCombo.currentTextChanged.connect(lambda text, spin=typeSpin: self._syncV2TypeIdWithKind(spin, text))
+        kindCombo.currentTextChanged.connect(lambda text, spin=typeSpin: self._syncUf4comTypeIdWithKind(spin, text))
         self.tlvTable.setCellWidget(row, 1, kindCombo)
         self._configureKindCombo(kindCombo, typeSpin)
 
@@ -642,10 +642,10 @@ class DevicePage(ScrollArea):
                 continue
 
             kindCombo = self.tlvTable.cellWidget(rowIndex, 1)
-            kind = kindCombo.currentText() if isinstance(kindCombo, ComboBox) else self._defaultV2Selector()
-            typeId = self._v2TypeIdFromKind(kind)
+            kind = kindCombo.currentText() if isinstance(kindCombo, ComboBox) else self._defaultUf4comSelector()
+            typeId = self._uf4comTypeIdFromKind(kind)
             if typeId is None:
-                raise ValueError(f"V2 unsupported type: {kind}")
+                raise ValueError(f"UF4COM unsupported type: {kind}")
 
             valueItem = self.tlvTable.item(rowIndex, 2)
             rows.append(_TlvRow(kind=kind, value=valueItem.text() if valueItem else "", typeId=typeId))
@@ -673,33 +673,33 @@ class DevicePage(ScrollArea):
             typeSpin = self.tlvTable.cellWidget(row, 0)
             kindCombo = self.tlvTable.cellWidget(row, 1)
             if isinstance(kindCombo, ComboBox):
-                kindCombo.setCurrentText(self._normalizeV2Kind(kind, typeId))
+                kindCombo.setCurrentText(self._normalizeUf4comKind(kind, typeId))
             if isinstance(typeSpin, SpinBox) and isinstance(kindCombo, ComboBox):
-                typeSpin.setValue(self._v2TypeIdFromKind(kindCombo.currentText()) or typeId)
+                typeSpin.setValue(self._uf4comTypeIdFromKind(kindCombo.currentText()) or typeId)
             self.tlvTable.setItem(row, 2, QTableWidgetItem(value))
             enable = self.tlvTable.cellWidget(row, 3)
             if isinstance(enable, SwitchButton):
                 enable.setChecked(True)
 
-    def _v2TypeIds(self) -> list[int]:
+    def _uf4comTypeIds(self) -> list[int]:
         return sorted(int(type_id) for type_id in POWER_DATA_META)
 
-    def _v2SelectorOptions(self) -> list[str]:
-        return [self._v2TypeName(typeId) for typeId in self._v2TypeIds()]
+    def _uf4comSelectorOptions(self) -> list[str]:
+        return [self._uf4comTypeName(typeId) for typeId in self._uf4comTypeIds()]
 
-    def _defaultV2Selector(self) -> str:
-        options = self._v2SelectorOptions()
-        default = self._v2TypeName(SESSION_PAGE_V2_DEFAULT_TYPE)
+    def _defaultUf4comSelector(self) -> str:
+        options = self._uf4comSelectorOptions()
+        default = self._uf4comTypeName(SESSION_PAGE_UF4COM_DEFAULT_TYPE)
         return default if default in options else (options[0] if options else "")
 
-    def _v2TypeIdFromKind(self, kind: str) -> Optional[int]:
+    def _uf4comTypeIdFromKind(self, kind: str) -> Optional[int]:
         normalized = (kind or "").strip()
         if not normalized:
             return None
         token = normalized.split(" ", 1)[0]
         try:
             value = int(token, 0)
-            return value if value in self._v2TypeIds() else None
+            return value if value in self._uf4comTypeIds() else None
         except ValueError:
             pass
         lookup = token.upper()
@@ -712,28 +712,28 @@ class DevicePage(ScrollArea):
                 return int(type_id)
         return None
 
-    def _normalizeV2Kind(self, kind: str, typeId: int = 0) -> str:
-        resolvedTypeId = self._v2TypeIdFromKind(kind)
-        if resolvedTypeId is None and typeId in self._v2TypeIds():
+    def _normalizeUf4comKind(self, kind: str, typeId: int = 0) -> str:
+        resolvedTypeId = self._uf4comTypeIdFromKind(kind)
+        if resolvedTypeId is None and typeId in self._uf4comTypeIds():
             resolvedTypeId = typeId
         if resolvedTypeId is None:
-            raise ValueError(f"V2 unsupported type: {kind or typeId}")
-        return self._v2TypeName(resolvedTypeId)
+            raise ValueError(f"UF4COM unsupported type: {kind or typeId}")
+        return self._uf4comTypeName(resolvedTypeId)
 
     def _configureKindCombo(self, kindCombo: ComboBox, typeSpin: SpinBox, preferredKind: str = "", preferredTypeId: int = 0):
         kindCombo.blockSignals(True)
         kindCombo.clear()
-        options = self._v2SelectorOptions()
+        options = self._uf4comSelectorOptions()
         kindCombo.addItems(options)
-        selected = self._defaultV2Selector()
+        selected = self._defaultUf4comSelector()
         if options:
             try:
-                selected = self._normalizeV2Kind(preferredKind, preferredTypeId)
+                selected = self._normalizeUf4comKind(preferredKind, preferredTypeId)
             except ValueError:
                 pass
         if selected:
             kindCombo.setCurrentText(selected)
-            self._syncV2TypeIdWithKind(typeSpin, selected)
+            self._syncUf4comTypeIdWithKind(typeSpin, selected)
         kindCombo.blockSignals(False)
 
     def _refreshTlvRowEditorsForMode(self):
@@ -746,25 +746,25 @@ class DevicePage(ScrollArea):
                 except ValueError:
                     self._configureKindCombo(kindCombo, typeSpin)
 
-    def _buildV2PayloadFromTable(self) -> bytes:
-        """把 TLV 表格的每一行转换成 TVLCOMV2 payload。"""
+    def _buildUf4comPayloadFromTable(self) -> bytes:
+        """把 TV 表格的每一行转换成 UF4COM payload。"""
         payload = bytearray()
         for row in self._iterTlvRows():
             try:
                 data_type = PowerDataType(int(row.typeId) & 0xFF)
             except ValueError as exc:
-                raise ValueError(f"V2 unsupported type ID: 0x{row.typeId:02X}")
+                raise ValueError(f"UF4COM unsupported type ID: 0x{row.typeId:02X}")
             if data_type not in POWER_DATA_META:
-                raise ValueError(f"V2 unsupported type ID: 0x{row.typeId:02X}")
-            payload.extend(encode_tlv(data_type, self._coerceV2Value(row, data_type)))
+                raise ValueError(f"UF4COM unsupported type ID: 0x{row.typeId:02X}")
+            payload.extend(encode_tlv(data_type, self._coerceUf4comValue(row, data_type)))
         return bytes(payload)
 
-    def _syncV2TypeIdWithKind(self, typeSpin: SpinBox, kind: str):
-        suggested = self._v2TypeIdFromKind(kind)
+    def _syncUf4comTypeIdWithKind(self, typeSpin: SpinBox, kind: str):
+        suggested = self._uf4comTypeIdFromKind(kind)
         if suggested is not None:
             typeSpin.setValue(suggested)
 
-    def _coerceV2Value(self, row: _TlvRow, data_type: PowerDataType) -> bytes:
+    def _coerceUf4comValue(self, row: _TlvRow, data_type: PowerDataType) -> bytes:
         """按类型注册表把表格里的字符串值转成协议真正需要的 Python 值。"""
         rawValue = row.value.strip()
         if not rawValue:
@@ -773,19 +773,19 @@ class DevicePage(ScrollArea):
             return self._parseRawInput(rawValue[4:], "HEX")
         meta = POWER_DATA_META.get(data_type)
         if meta is None:
-            raise ValueError(f"V2 unsupported value type: {row.kind}")
+            raise ValueError(f"UF4COM unsupported value type: {row.kind}")
         value = int(rawValue, 0)
         return value.to_bytes(meta.length, "little", signed=meta.signed)
 
-    def _resetV2Protocol(self):
-        self._v2Parser = None
-        self._v2Seq = 0
+    def _resetUf4comProtocol(self):
+        self._uf4comParser = None
+        self._uf4comSeq = 0
 
-    def _initV2Protocol(self):
-        """初始化 V2 帧解析器和 ACK/NACK 分发器。"""
-        self._v2Parser = TvlcomFrameParser()
+    def _initUf4comProtocol(self):
+        """初始化 UF4COM 帧解析器。"""
+        self._uf4comParser = TvlcomFrameParser()
 
-    def _v2TypeName(self, typeId: int) -> str:
+    def _uf4comTypeName(self, typeId: int) -> str:
         try:
             data_type = PowerDataType(typeId)
         except ValueError:
@@ -794,34 +794,46 @@ class DevicePage(ScrollArea):
         suffix = f" {meta.unit}" if meta and meta.unit else ""
         return f"{data_type.name}{suffix}"
 
-    def _formatV2PayloadItems(self, payload: bytes) -> str:
+    def _formatUf4comPayloadItems(self, payload: bytes) -> str:
         if not payload:
             return ""
         parts = []
         for item in iter_tlv_items(payload, strict=False):
-            name = self._v2TypeName(item.type_id)
+            name = self._uf4comTypeName(item.type_id)
             if item.value is None:
                 rendered = item.raw.hex(" ") if item.raw else "<read>"
+            elif (
+                item.data_type is not None
+                and (meta := POWER_DATA_META.get(item.data_type)) is not None
+                and meta.unit == "0.01C"
+            ):
+                rendered = f"{item.value / 100.0:.2f} °C"
             else:
                 rendered = str(item.value)
             parts.append(f"T{item.type_id:02X}({name}):{rendered}")
         return ", ".join(parts)
 
-    def _handleV2RxFrames(self, data: bytes):
-        """把收到的字节喂给 V2 解析器，并把解析结果写到接收日志。"""
-        if self._v2Parser is None:
+    def _handleUf4comRxFrames(self, data: bytes):
+        """把收到的字节喂给 UF4COM 解析器，并把解析结果写到接收日志。"""
+        if self._uf4comParser is None:
             return
-        for frame in self._v2Parser.input_bytes(data):
+        for frame in self._uf4comParser.input_bytes(data):
             cmd = int(frame["cmd"])
-            if cmd == int(PowerCommand.ACK):
-                prefix = "V2 ACK"
-            elif cmd == int(PowerCommand.NACK):
-                prefix = "V2 NACK"
+            flags = int(frame.get("flags", 0))
+            if flags & int(PowerFrameFlag.ERROR):
+                prefix = "UF4COM ERR"
+            elif cmd in {
+                int(PowerCommand.READ_RSP),
+                int(PowerCommand.WRITE_RSP),
+                int(PowerCommand.STREAM_START_RSP),
+                int(PowerCommand.STREAM_STOP_RSP),
+            }:
+                prefix = "UF4COM RSP"
             else:
-                prefix = "V2 RX"
+                prefix = "UF4COM RX"
             self.rxEventSignal.emit(
                 f'{prefix} cmd={cmd:02X} seq={frame["seq"]} '
-                f'[{self._formatV2PayloadItems(bytes(frame["payload"]))}]'
+                f'[{self._formatUf4comPayloadItems(bytes(frame["payload"]))}]'
             )
 
     def _parseRawInput(self, text: str, fmt: str) -> bytes:
@@ -934,7 +946,7 @@ class DevicePage(ScrollArea):
             self._connectSerial()
 
     def _connectSerial(self):
-        """打开串口调试连接，并准备 V2 协议解析上下文。"""
+        """打开串口调试连接，并准备 UF4COM 协议解析上下文。"""
         port = self.portCombo.currentText().strip()
         if not port or port == "未发现串口":
             self._appendLog("错误: 未找到串口。请先刷新并检查驱动。")
@@ -949,7 +961,7 @@ class DevicePage(ScrollArea):
         self._session.on_tx = lambda data: self._appendLog(f'TX({len(data)}): {data.hex(" ")}')
         self._session.on_debug = lambda text: self._appendLog(f"DBG: {text}")
         self._session.on_state = lambda ok: self.stateSignal.emit(ok)
-        self._initV2Protocol()
+        self._initUf4comProtocol()
 
         try:
             self._session.open()
@@ -957,7 +969,7 @@ class DevicePage(ScrollArea):
         except Exception as exc:
             self._onError(str(exc))
             self._session = None
-            self._resetV2Protocol()
+            self._resetUf4comProtocol()
 
     def _connectBluetooth(self):
         """打开蓝牙调试连接，接口保持和串口会话一致，便于复用收发逻辑。"""
@@ -973,7 +985,7 @@ class DevicePage(ScrollArea):
             self._session.set_event_receiver(self)
         except Exception:
             pass
-        self._initV2Protocol()
+        self._initUf4comProtocol()
 
         try:
             self._session.open()
@@ -981,16 +993,16 @@ class DevicePage(ScrollArea):
         except Exception as exc:
             self._onError(str(exc))
             self._session = None
-            self._resetV2Protocol()
+            self._resetUf4comProtocol()
 
     def _disconnect(self):
-        """关闭当前连接并清掉 V2 解析器，避免下一次连接沿用旧缓存。"""
+        """关闭当前连接并清掉 UF4COM 解析器，避免下一次连接沿用旧缓存。"""
         try:
             if self._session:
                 self._session.close()
         finally:
             self._session = None
-            self._resetV2Protocol()
+            self._resetUf4comProtocol()
             self._appendLog("Disconnected")
             self._applyTexts()
             self._onState(False)
@@ -1024,24 +1036,24 @@ class DevicePage(ScrollArea):
         logger.error(msg)
 
     def _onRxRaw(self, data: bytes):
-        """收到原始数据后更新统计；如果启用解析，则同时尝试拆 V2 帧。"""
+        """收到原始数据后更新统计；如果启用解析，则同时尝试拆 UF4COM 帧。"""
         self._rxBytes += len(data)
         self._updateStats()
         self._rxBuf.extend(data)
-        if self.parseSwitch.isChecked() and self._v2Parser is not None:
+        if self.parseSwitch.isChecked() and self._uf4comParser is not None:
             try:
-                self._handleV2RxFrames(data)
+                self._handleUf4comRxFrames(data)
             except Exception as exc:
-                self.errSignal.emit(f"TVLCOMV2_FULL feed failed: {exc}")
+                self.errSignal.emit(f"UF4COM feed failed: {exc}")
 
     def onSend(self):
-        """发送按钮入口：Raw 模式直接发字节，V2 模式先组帧再发送。"""
+        """发送按钮入口：Raw 模式直接发字节，UF4COM 模式先组帧再发送。"""
         if not self._session or not self._session.is_open:
             self._appendLog("错误: 设备未连接")
             return
 
         repeat = int(self.repeatSpin.value())
-        if not self._isV2Mode():
+        if not self._isUf4comMode():
             raw = self.txEdit.text().strip()
             if not raw:
                 return
@@ -1058,22 +1070,22 @@ class DevicePage(ScrollArea):
             return
 
         try:
-            payload = self._buildV2PayloadFromTable()
+            payload = self._buildUf4comPayloadFromTable()
         except Exception as exc:
-            self._appendLog(f"错误: TVLCOM_V2 组包失败: {exc}")
+            self._appendLog(f"错误: UF4COM 组包失败: {exc}")
             return
 
         cmd = self.cmdSpin.value()
         seqs: list[int] = []
         total = 0
         for _ in range(repeat):
-            self._v2Seq = (self._v2Seq + 1) % 256
-            frame = build_frame(cmd, self._v2Seq, payload)
+            self._uf4comSeq = (self._uf4comSeq + 1) % 256
+            frame = build_frame(cmd, self._uf4comSeq, payload)
             self._safeWrite(frame)
             total += len(frame)
-            seqs.append(self._v2Seq)
+            seqs.append(self._uf4comSeq)
         self._txBytes += total
         self._updateStats()
 
         seqText = str(seqs[0]) if len(seqs) == 1 else ",".join(str(seq) for seq in seqs)
-        self._appendLog(f'TX v2: CMD={cmd:02X} seq={seqText} payload=({len(payload)}) {payload.hex(" ")}')
+        self._appendLog(f'TX UF4COM: CMD={cmd:02X} seq={seqText} payload=({len(payload)}) {payload.hex(" ")}')

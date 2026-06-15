@@ -353,6 +353,83 @@ class PowerClientPollingTests(unittest.TestCase):
         self.assertNotIn(PowerDataType.CORE_TEMPERATURE, second_values)
         self.assertEqual(client._stream_fast_samples_until_slow, 48)
 
+    def test_raw_stream_bad_frame_is_discarded_and_next_frame_is_used(self):
+        client = F4CPPowerClient()
+        client._last_values.update(DEFAULT_TEST_STATUS_VALUES)
+        client._stream_enabled = True
+        client._stream_fast_types = STREAM_FAST_TYPES
+        client._stream_slow_types = STREAM_SLOW_TYPES
+        client._stream_fast_sample_size = stream_sample_size(STREAM_FAST_TYPES)
+        client._stream_slow_sample_size = stream_sample_size(STREAM_SLOW_TYPES)
+        client._stream_slow_every_fast_samples = 50
+        client._stream_fast_samples_until_slow = 49
+
+        errors = []
+        logs = []
+        statuses = []
+        client.error.connect(errors.append)
+        client.log.connect(logs.append)
+        client.statusUpdated.connect(statuses.append)
+
+        bad_first = (
+            (12000).to_bytes(2, "little")
+            + b"\x5E\x01"
+            + (12100).to_bytes(2, "little")
+            + STREAM_CHANNEL_SEPARATOR
+            + (12200).to_bytes(2, "little")
+            + STREAM_CHANNEL_SEPARATOR
+            + (12300).to_bytes(2, "little")
+        )
+        good_second = _pack_stream_group(STREAM_FAST_TYPES, 13000)
+        client._buffer.extend(bad_first + good_second)
+
+        client._handle_rx(SimpleNamespace(payload=SimpleNamespace(data=b"")))
+        self.assertEqual(len(statuses), 0)
+        self.assertEqual(client._stream_bad_frame_count, 1)
+        self.assertTrue(any("Raw stream bad frame 1/3" in item for item in logs))
+
+        client._handle_rx(SimpleNamespace(payload=SimpleNamespace(data=b"\x00")))
+
+        self.assertEqual(errors, [])
+        self.assertEqual(client._stream_bad_frame_count, 0)
+        self.assertTrue(statuses)
+        self.assertEqual(client._last_values[PowerDataType.INPUT_VOLTAGE], 13000)
+
+    def test_raw_stream_disconnects_after_three_consecutive_bad_frames(self):
+        client = F4CPPowerClient()
+        client._last_values.update(DEFAULT_TEST_STATUS_VALUES)
+        client._stream_enabled = True
+        client._stream_fast_types = STREAM_FAST_TYPES
+        client._stream_slow_types = STREAM_SLOW_TYPES
+        client._stream_fast_sample_size = stream_sample_size(STREAM_FAST_TYPES)
+        client._stream_slow_sample_size = stream_sample_size(STREAM_SLOW_TYPES)
+        client._stream_slow_every_fast_samples = 50
+        client._stream_fast_samples_until_slow = 49
+
+        errors = []
+        disconnects = []
+        client.error.connect(errors.append)
+        client.communicationFailureLimitReached.connect(disconnects.append)
+
+        bad_frame = (
+            (12000).to_bytes(2, "little")
+            + b"\x5E\x01"
+            + (12100).to_bytes(2, "little")
+            + STREAM_CHANNEL_SEPARATOR
+            + (12200).to_bytes(2, "little")
+            + STREAM_CHANNEL_SEPARATOR
+            + (12300).to_bytes(2, "little")
+        )
+
+        for _ in range(3):
+            client._buffer.extend(bad_frame)
+            client._handle_rx(SimpleNamespace(payload=SimpleNamespace(data=b"\x00")))
+
+        self.assertFalse(client._stream_enabled)
+        self.assertTrue(errors)
+        self.assertTrue(disconnects)
+        self.assertIn("Raw stream failed for 3 consecutive frames", errors[-1])
+
     def test_stream_stop_frame_parser_skips_raw_noise_before_ack(self):
         client = F4CPPowerClient()
         ack = build_frame(0x02, 7, b"")

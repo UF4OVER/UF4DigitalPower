@@ -12,11 +12,11 @@
 # -------------------------------
 
 from .tvlcom import (
+    MAX_PROTOCOL_BODY_LEN,
     TvlcomFrameParser,
     TvlcomTlvItem,
     build_frame,
-    crc16_modbus,
-    decode_stream_sample,
+    crc16_ccitt,
     decode_tlvs,
     encode_tlv,
     ensure_readable,
@@ -25,5 +25,4 @@ from .tvlcom import (
     iter_tlv_items,
     pack_read_request,
     pack_stream_start_request,
-    stream_sample_size,
 )

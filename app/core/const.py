@@ -27,20 +27,22 @@ class PowerClientCrcError(PowerClientError):
 class PowerClientProtocolError(PowerClientError):
     """Raised when the frame structure or response content is invalid."""
 
-class PowerClientNackError(PowerClientError):
-    """Raised when the devices returns NACK."""
+class PowerClientDeviceError(PowerClientError):
+    """Raised when the device returns a UF4COM error frame."""
 
 class PowerClientAccessError(PowerClientProtocolError):
     """Raised when a requested operation violates the data metadata."""
 
 class PowerCommand(IntEnum):
-    ACK = 0x00
     READ = 0x01
     WRITE = 0x02
-    REPORT = 0x03
-    STREAM_START = 0x04
-    STREAM_STOP = 0x05
-    NACK = 0xFF
+    STREAM_START = 0x10
+    STREAM_STOP = 0x11
+    STREAM_DATA = 0x15
+    READ_RSP = 0x81
+    WRITE_RSP = 0x82
+    STREAM_START_RSP = 0x90
+    STREAM_STOP_RSP = 0x91
 
 class PowerDataType(IntEnum):
     INPUT_VOLTAGE = 10
@@ -74,13 +76,29 @@ class PowerDataType(IntEnum):
     FAN_SPEED = 38
     FAN_SET_VALUE = 39
     DEBUG_SNAPSHOT = 40
-    APP_TVL_DEBUG_SNAPSHOT = 40  # Legacy alias; use DEBUG_SNAPSHOT in new code.
     LOOP_CURRENT_FEEDBACK = 41
     LOOP_CURRENT_REFERENCE = 42
     VOLTAGE_LOOP_CURRENT_REFERENCE = 43
 
+class PowerFrameFlag(IntEnum):
+    ACK_REQ = 0x01
+    ACK_FRAME = 0x02
+    ERROR = 0x04
+
+class PowerProtocolErrorCode(IntEnum):
+    OK = 0x0000
+    INVALID_ID = 0x0001
+    INVALID_CMD = 0x0002
+    CRC_ERROR = 0x0003
+    INVALID_LEN = 0x0004
+    WRITE_PROTECT = 0x0005
+    OUT_OF_RANGE = 0x0006
+    DEVICE_BUSY = 0x0007
+    INTERNAL_ERROR = 0x0008
+
 class PowerValueType(IntEnum):
     U8 = 1
+    U16 = 2
     U32 = 4
     I32 = 4
 
@@ -143,7 +161,6 @@ CC_CV_NAMES = {
 }
 
 SOF = b"\xAA\x55"
-STREAM_CHANNEL_SEPARATOR = b"\xFE\xED"
 
 STREAM_FAST_PERIOD_MS = 20
 STREAM_SLOW_PERIOD_MS = 1000
@@ -155,38 +172,38 @@ WRITE_FAILURE_DISCONNECT_THRESHOLD = 3
 COMMUNICATION_FAILURE_DISCONNECT_THRESHOLD = 3
 
 POWER_DATA_META: dict[PowerDataType, PowerDataMeta] = {
-    PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Input Voltage"),
-    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Input Current"),
-    PowerDataType.OUTPUT_VOLTAGE: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE, PowerValueType.U32, PowerAccess.READ, "mV", "Output Voltage"),
-    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.U32, PowerAccess.READ, "mA", "Output Current"),
-    PowerDataType.CORE_TEMPERATURE: PowerDataMeta(PowerDataType.CORE_TEMPERATURE, PowerValueType.I32, PowerAccess.READ, "mC", "Core Temperature", signed=True),
-    PowerDataType.BOARD_TEMPERATURE: PowerDataMeta(PowerDataType.BOARD_TEMPERATURE, PowerValueType.I32, PowerAccess.READ, "mC", "Temp1 Temperature", signed=True),
-    PowerDataType.TEMP2_TEMPERATURE: PowerDataMeta(PowerDataType.TEMP2_TEMPERATURE, PowerValueType.I32, PowerAccess.READ, "mC", "Temp2 Temperature", signed=True),
-    PowerDataType.SET_VOLTAGE_LIMIT: PowerDataMeta(PowerDataType.SET_VOLTAGE_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "Set Voltage Limit"),
-    PowerDataType.SET_CURRENT_LIMIT: PowerDataMeta(PowerDataType.SET_CURRENT_LIMIT, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "Set Current Limit"),
+    PowerDataType.INPUT_VOLTAGE: PowerDataMeta(PowerDataType.INPUT_VOLTAGE, PowerValueType.U16, PowerAccess.READ, "mV", "Input Voltage"),
+    PowerDataType.INPUT_CURRENT: PowerDataMeta(PowerDataType.INPUT_CURRENT, PowerValueType.U16, PowerAccess.READ, "mA", "Input Current"),
+    PowerDataType.OUTPUT_VOLTAGE: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE, PowerValueType.U16, PowerAccess.READ, "mV", "Output Voltage"),
+    PowerDataType.OUTPUT_CURRENT: PowerDataMeta(PowerDataType.OUTPUT_CURRENT, PowerValueType.U16, PowerAccess.READ, "mA", "Output Current"),
+    PowerDataType.CORE_TEMPERATURE: PowerDataMeta(PowerDataType.CORE_TEMPERATURE, PowerValueType.U16, PowerAccess.READ, "0.01C", "Core Temperature"),
+    PowerDataType.BOARD_TEMPERATURE: PowerDataMeta(PowerDataType.BOARD_TEMPERATURE, PowerValueType.U16, PowerAccess.READ, "0.01C", "Temp1 Temperature"),
+    PowerDataType.TEMP2_TEMPERATURE: PowerDataMeta(PowerDataType.TEMP2_TEMPERATURE, PowerValueType.U16, PowerAccess.READ, "0.01C", "Temp2 Temperature"),
+    PowerDataType.SET_VOLTAGE_LIMIT: PowerDataMeta(PowerDataType.SET_VOLTAGE_LIMIT, PowerValueType.U16, PowerAccess.READ_WRITE, "mV", "Set Voltage Limit"),
+    PowerDataType.SET_CURRENT_LIMIT: PowerDataMeta(PowerDataType.SET_CURRENT_LIMIT, PowerValueType.U16, PowerAccess.READ_WRITE, "mA", "Set Current Limit"),
     PowerDataType.CC_CV_MODE: PowerDataMeta(PowerDataType.CC_CV_MODE, PowerValueType.U8, PowerAccess.READ, "enum", "CC/CV Mode"),
     PowerDataType.POWER_STATE: PowerDataMeta(PowerDataType.POWER_STATE, PowerValueType.U8, PowerAccess.READ_WRITE, "bool", "Power State"),
-    PowerDataType.FAULT_STATE: PowerDataMeta(PowerDataType.FAULT_STATE, PowerValueType.U32, PowerAccess.READ, "bitmask", "Fault State"),
+    PowerDataType.FAULT_STATE: PowerDataMeta(PowerDataType.FAULT_STATE, PowerValueType.U16, PowerAccess.READ, "bitmask", "Fault State"),
     PowerDataType.STATE_MACHINE_FLAG_BITS: PowerDataMeta(PowerDataType.STATE_MACHINE_FLAG_BITS, PowerValueType.U8, PowerAccess.READ, "enum", "State Machine Flag Bits"),
     PowerDataType.STATE_MACHINE_STATE: PowerDataMeta(PowerDataType.STATE_MACHINE_STATE, PowerValueType.U8, PowerAccess.READ, "enum", "State Machine State"),
-    PowerDataType.INPUT_VOLTAGE_RAW: PowerDataMeta(PowerDataType.INPUT_VOLTAGE_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Input Voltage Raw"),
-    PowerDataType.INPUT_CURRENT_RAW: PowerDataMeta(PowerDataType.INPUT_CURRENT_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Input Current Raw"),
-    PowerDataType.OUTPUT_VOLTAGE_RAW: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Output Voltage Raw"),
-    PowerDataType.OUTPUT_CURRENT_RAW: PowerDataMeta(PowerDataType.OUTPUT_CURRENT_RAW, PowerValueType.U32, PowerAccess.READ, "adc", "Output Current Raw"),
-    PowerDataType.OTP_VALUE: PowerDataMeta(PowerDataType.OTP_VALUE, PowerValueType.U32, PowerAccess.READ, "mC", "OTP Value"),
-    PowerDataType.OTP_SET_VALUE: PowerDataMeta(PowerDataType.OTP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mC", "OTP Set Value"),
-    PowerDataType.OVP_VALUE: PowerDataMeta(PowerDataType.OVP_VALUE, PowerValueType.U32, PowerAccess.READ, "mV", "OVP Value"),
-    PowerDataType.OVP_SET_VALUE: PowerDataMeta(PowerDataType.OVP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mV", "OVP Set Value"),
-    PowerDataType.OCP_VALUE: PowerDataMeta(PowerDataType.OCP_VALUE, PowerValueType.U32, PowerAccess.READ, "mA", "OCP Value"),
-    PowerDataType.OCP_SET_VALUE: PowerDataMeta(PowerDataType.OCP_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "mA", "OCP Set Value"),
-    PowerDataType.DUTY_CMD: PowerDataMeta(PowerDataType.DUTY_CMD, PowerValueType.U32, PowerAccess.READ, "tick", "Duty Command"),
-    PowerDataType.PWM_A_COMPARE: PowerDataMeta(PowerDataType.PWM_A_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM A Compare"),
-    PowerDataType.PWM_D_COMPARE: PowerDataMeta(PowerDataType.PWM_D_COMPARE, PowerValueType.U32, PowerAccess.READ, "ticks", "PWM D Compare"),
-    PowerDataType.FAN_SPEED: PowerDataMeta(PowerDataType.FAN_SPEED, PowerValueType.U32, PowerAccess.READ, "permille", "Fan Speed"),
-    PowerDataType.FAN_SET_VALUE: PowerDataMeta(PowerDataType.FAN_SET_VALUE, PowerValueType.U32, PowerAccess.READ_WRITE, "permille", "Fan Set Value"),
-    PowerDataType.LOOP_CURRENT_FEEDBACK: PowerDataMeta(PowerDataType.LOOP_CURRENT_FEEDBACK, PowerValueType.U32, PowerAccess.READ, "mA", "Loop Current Feedback"),
-    PowerDataType.LOOP_CURRENT_REFERENCE: PowerDataMeta(PowerDataType.LOOP_CURRENT_REFERENCE, PowerValueType.U32, PowerAccess.READ, "mA", "Loop Current Reference"),
-    PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE: PowerDataMeta(PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE, PowerValueType.U32, PowerAccess.READ, "mV", "Voltage Loop Reference"),
+    PowerDataType.INPUT_VOLTAGE_RAW: PowerDataMeta(PowerDataType.INPUT_VOLTAGE_RAW, PowerValueType.U16, PowerAccess.READ, "adc", "Input Voltage Raw"),
+    PowerDataType.INPUT_CURRENT_RAW: PowerDataMeta(PowerDataType.INPUT_CURRENT_RAW, PowerValueType.U16, PowerAccess.READ, "adc", "Input Current Raw"),
+    PowerDataType.OUTPUT_VOLTAGE_RAW: PowerDataMeta(PowerDataType.OUTPUT_VOLTAGE_RAW, PowerValueType.U16, PowerAccess.READ, "adc", "Output Voltage Raw"),
+    PowerDataType.OUTPUT_CURRENT_RAW: PowerDataMeta(PowerDataType.OUTPUT_CURRENT_RAW, PowerValueType.U16, PowerAccess.READ, "adc", "Output Current Raw"),
+    PowerDataType.OTP_VALUE: PowerDataMeta(PowerDataType.OTP_VALUE, PowerValueType.U16, PowerAccess.READ, "0.01C", "OTP Value"),
+    PowerDataType.OTP_SET_VALUE: PowerDataMeta(PowerDataType.OTP_SET_VALUE, PowerValueType.U16, PowerAccess.READ_WRITE, "0.01C", "OTP Set Value"),
+    PowerDataType.OVP_VALUE: PowerDataMeta(PowerDataType.OVP_VALUE, PowerValueType.U16, PowerAccess.READ, "mV", "OVP Value"),
+    PowerDataType.OVP_SET_VALUE: PowerDataMeta(PowerDataType.OVP_SET_VALUE, PowerValueType.U16, PowerAccess.READ_WRITE, "mV", "OVP Set Value"),
+    PowerDataType.OCP_VALUE: PowerDataMeta(PowerDataType.OCP_VALUE, PowerValueType.U16, PowerAccess.READ, "mA", "OCP Value"),
+    PowerDataType.OCP_SET_VALUE: PowerDataMeta(PowerDataType.OCP_SET_VALUE, PowerValueType.U16, PowerAccess.READ_WRITE, "mA", "OCP Set Value"),
+    PowerDataType.DUTY_CMD: PowerDataMeta(PowerDataType.DUTY_CMD, PowerValueType.U16, PowerAccess.READ, "tick", "Duty Command"),
+    PowerDataType.PWM_A_COMPARE: PowerDataMeta(PowerDataType.PWM_A_COMPARE, PowerValueType.U16, PowerAccess.READ, "ticks", "PWM A Compare"),
+    PowerDataType.PWM_D_COMPARE: PowerDataMeta(PowerDataType.PWM_D_COMPARE, PowerValueType.U16, PowerAccess.READ, "ticks", "PWM D Compare"),
+    PowerDataType.FAN_SPEED: PowerDataMeta(PowerDataType.FAN_SPEED, PowerValueType.U16, PowerAccess.READ, "permille", "Fan Speed"),
+    PowerDataType.FAN_SET_VALUE: PowerDataMeta(PowerDataType.FAN_SET_VALUE, PowerValueType.U16, PowerAccess.READ_WRITE, "permille", "Fan Set Value"),
+    PowerDataType.LOOP_CURRENT_FEEDBACK: PowerDataMeta(PowerDataType.LOOP_CURRENT_FEEDBACK, PowerValueType.U16, PowerAccess.READ, "mA", "Loop Current Feedback"),
+    PowerDataType.LOOP_CURRENT_REFERENCE: PowerDataMeta(PowerDataType.LOOP_CURRENT_REFERENCE, PowerValueType.U16, PowerAccess.READ, "mA", "Loop Current Reference"),
+    PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE: PowerDataMeta(PowerDataType.VOLTAGE_LOOP_CURRENT_REFERENCE, PowerValueType.U16, PowerAccess.READ, "mV", "Voltage Loop Reference"),
 }
 
 TYPE_LENGTHS = {type_id: meta.length for type_id, meta in POWER_DATA_META.items()}
@@ -247,7 +264,7 @@ STATUS_TYPES = (  # NOQA sim 里面的不作为源码维护
     PowerDataType.FAN_SET_VALUE,
 )
 
-REPORT_STATUS_TYPES = (
+STATUS_READ_TYPES = (
     PowerDataType.INPUT_VOLTAGE,
     PowerDataType.INPUT_CURRENT,
     PowerDataType.OUTPUT_VOLTAGE,
