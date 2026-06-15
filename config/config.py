@@ -228,9 +228,9 @@ class F4CPConfig(QConfig):
     localAppVersion = ConfigItem("OldVersion", "OldLocalVersion", "")
     localUpperVersion = ConfigItem("OldVersion", "OldUpperVersion", "")
     localLowerVersion = ConfigItem("OldVersion", "OldLowerVersion", "")
-    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "v1.0.0")
-    latestUpperVersion = ConfigItem("NewVersion", "NewUpperVersion", "v0.0.2")
-    latestLowerVersion = ConfigItem("NewVersion", "NewLowerVersion", "v0.0.2")
+    latestAppVersion = ConfigItem("NewVersion", "NewLocalVersion", "1.1.0.RC1")
+    latestUpperVersion = ConfigItem("NewVersion", "NewUpperVersion", "v0.0.0")
+    latestLowerVersion = ConfigItem("NewVersion", "NewLowerVersion", "v0.0.0")
 
     appYear = ConfigItem("Application", "Year", 2026)
     appAuthor = ConfigItem("Application", "Author", "UF4OVER")
