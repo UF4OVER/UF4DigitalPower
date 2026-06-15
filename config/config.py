@@ -12,12 +12,11 @@
 # -------------------------------
 
 import logging
-import os
-import shutil
 import sys
 import time
 from functools import cached_property
 from pathlib import Path
+
 from PyQt5.QtCore import pyqtSignal
 from qfluentwidgets import (
     BoolValidator,

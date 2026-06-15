@@ -51,8 +51,8 @@
         "NewUpperVersion": ""
     },
     "OldVersion": {
-        "OldLocalVersion": "",
-        "OldLowerVersion": "",
-        "OldUpperVersion": ""
+        "OldLocalVersion": "1.1.0.RC1",
+        "OldLowerVersion": "v0.0.2",
+        "OldUpperVersion": "v0.0.3"
     }
 }

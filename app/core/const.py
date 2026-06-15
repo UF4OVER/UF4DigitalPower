@@ -264,6 +264,9 @@ STATUS_TYPES = (  # NOQA sim 里面的不作为源码维护
     PowerDataType.FAN_SET_VALUE,
 )
 
+# Backward-compatible export used by protocol parity tests and older callers.
+REPORT_STATUS_TYPES = STATUS_TYPES
+
 STATUS_READ_TYPES = (
     PowerDataType.INPUT_VOLTAGE,
     PowerDataType.INPUT_CURRENT,
