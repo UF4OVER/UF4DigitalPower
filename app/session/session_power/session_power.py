@@ -40,10 +40,7 @@ from app.core.const import (
     STATE_FLAG_NAMES,
     PowerClientError,
     STATUS_READ_TYPES,
-    STREAM_SLOW_TYPES,
-    STREAM_FAST_TYPES,
     STREAM_FAST_PERIOD_MS,
-    STREAM_SLOW_PERIOD_MS,
     DEFAULT_STATUS_VALUES,
     FAULT_NAMES,
     WRITE_IDLE_WAIT_TIMEOUT_MS,
@@ -303,9 +300,6 @@ class F4CPPowerClient(QObject):
         self._poll_resume_timer = QTimer(self)
         self._poll_resume_timer.setSingleShot(True)
         self._poll_resume_timer.timeout.connect(self._resume_polling_if_ready)
-        self._stream_slow_poll_timer = QTimer(self)
-        self._stream_slow_poll_timer.setSingleShot(False)
-        self._stream_slow_poll_timer.timeout.connect(self._poll_stream_slow_group_once)
         self._poll_requested_interval_ms: int | None = None
         self._poll_resume_interval_ms: int | None = None
         self._consecutive_write_failures = 0
@@ -316,8 +310,6 @@ class F4CPPowerClient(QObject):
         self._stream_enabled = False
         self._stream_stop_pending = False
         self._stream_bad_frame_count = 0
-        self._stream_slow_poll_started = False
-        self._stream_slow_refresh_in_progress = False
 
     @property
     def is_connected(self) -> bool:
@@ -551,22 +543,20 @@ class F4CPPowerClient(QObject):
     def start_streaming(
         self,
         interval_ms: int = 800,
-        types: Iterable[PowerDataType] = STREAM_FAST_TYPES,
+        types: Iterable[PowerDataType] | None = None,
         timeout_ms: int = 1000,
     ) -> None:
-        fast_types = tuple(types)
-        # 裸流阶段只跑快组；慢组等流稳定后再通过单独请求刷新。
-        slow_types = STREAM_SLOW_TYPES
-        for type_id in fast_types:
-            _ensure_readable(type_id)
-        for type_id in slow_types:
-            _ensure_readable(type_id)
-        payload = pack_stream_start_request(
-            fast_types,
-            STREAM_FAST_PERIOD_MS,
-            (),
-            0,
-        )
+        # 默认请求全量流（空 payload 让固件下发 ID 表里所有变量）。
+        # 全量流已经包含温度/设定值/保护值等慢变量，不再需要慢组单独轮询。
+        if types is None:
+            payload = b""
+            stream_types: tuple[PowerDataType, ...] = ()
+        else:
+            stream_types = tuple(types)
+            for type_id in stream_types:
+                _ensure_readable(type_id)
+            payload = pack_stream_start_request(stream_types, STREAM_FAST_PERIOD_MS, (), 0)
+
         self._request(
             PowerCommand.STREAM_START,
             payload,
@@ -577,23 +567,22 @@ class F4CPPowerClient(QObject):
         self._clear_receive_backlog()
         for type_id, value in DEFAULT_STATUS_VALUES.items():
             self._last_values.setdefault(type_id, value)
-        self._stream_types = fast_types + slow_types
-        self._stream_fast_types = fast_types
-        self._stream_slow_types = slow_types
+        self._stream_types = stream_types
+        self._stream_fast_types = stream_types
+        self._stream_slow_types = ()
         self._stream_enabled = True
         self._stream_bad_frame_count = 0
-        self._stream_slow_poll_started = False
         self._poll_requested_interval_ms = max(200, int(interval_ms))
         self._poll_timer.stop()
         self._poll_resume_timer.stop()
-        self._stream_slow_poll_timer.stop()
-        self.log.emit(
-            "UF4COM stream started "
-            f"(fast={STREAM_FAST_PERIOD_MS} ms "
-            f"types={','.join(type_id.name for type_id in fast_types)}; "
-            f"slow={STREAM_SLOW_PERIOD_MS} ms "
-            f"types={','.join(type_id.name for type_id in slow_types)})"
-        )
+        if stream_types:
+            self.log.emit(
+                "UF4COM stream started "
+                f"(period={STREAM_FAST_PERIOD_MS} ms "
+                f"types={','.join(type_id.name for type_id in stream_types)})"
+            )
+        else:
+            self.log.emit(f"UF4COM stream started (period={STREAM_FAST_PERIOD_MS} ms, all IDs)")
 
     def stop_streaming(self, timeout_ms: int = 1000) -> None:
         was_enabled = self._stream_enabled
@@ -937,7 +926,9 @@ class F4CPPowerClient(QObject):
         data = event.payload.data
         if not data:
             return
-        self.log.emit(f"RX {data.hex(' ')}")
+        # 流模式下不打逐帧 RX 日志，避免 50Hz 全量流刷爆 UI 日志区
+        if not self._stream_enabled:
+            self.log.emit(f"RX {data.hex(' ')}")
         self._buffer.extend(data)
 
         while True:
@@ -1004,7 +995,8 @@ class F4CPPowerClient(QObject):
         return replace(self._last_status, **updates) if updates else self._last_status
 
     def _handle_tx(self, event: TxEvent) -> None:
-        self.log.emit(f"TX {event.payload.data.hex(' ')}")
+        if not self._stream_enabled:
+            self.log.emit(f"TX {event.payload.data.hex(' ')}")
 
     def _handle_error(self, event: ErrorEvent) -> None:
         message = event.payload.message
@@ -1040,9 +1032,6 @@ class F4CPPowerClient(QObject):
         self._stream_slow_types = ()
         self._stream_stop_pending = False
         self._stream_bad_frame_count = 0
-        self._stream_slow_poll_started = False
-        self._stream_slow_refresh_in_progress = False
-        self._stream_slow_poll_timer.stop()
 
     def _clear_receive_backlog(self) -> None:
         self._buffer.clear()
@@ -1076,10 +1065,6 @@ class F4CPPowerClient(QObject):
 
     def _handle_stream_values(self, values: dict[PowerDataType, int]) -> None:
         self._stream_bad_frame_count = 0
-        if (not self._stream_slow_poll_started) and self._stream_enabled:
-            self._stream_slow_poll_started = True
-            if self._stream_slow_types:
-                self._stream_slow_poll_timer.start(STREAM_SLOW_PERIOD_MS)
         self._last_values.update(values)
         self._reset_communication_failures()
         status = self._status_from_values(values)
@@ -1087,73 +1072,6 @@ class F4CPPowerClient(QObject):
             return
         self._last_status = status
         self.statusUpdated.emit(status)
-
-    def _poll_stream_slow_group_once(self) -> None:
-        if self._shutting_down or not self.is_connected or not self._stream_enabled:
-            self._stream_slow_poll_timer.stop()
-            return
-        if (
-            not self._stream_slow_types
-            or self.is_busy
-            or self._stream_stop_pending
-            or self._stream_slow_refresh_in_progress
-        ):
-            return
-
-        fast_types = self._stream_fast_types
-        slow_types = self._stream_slow_types
-        interval_ms = self._poll_requested_interval_ms or 800
-
-        self._stream_slow_refresh_in_progress = True
-        self._stream_slow_poll_timer.stop()
-        try:
-            self.stop_streaming(timeout_ms=1000)
-            values = self.read_values(*slow_types, timeout_ms=1000)
-        except Exception as exc:
-            self.error.emit(f"Slow group refresh failed: {exc}")
-            values = None
-        finally:
-            restart_error = None
-            if self.is_connected and not self._shutting_down:
-                restart_error = self._restart_stream_after_slow_refresh(interval_ms, fast_types)
-            self._stream_slow_refresh_in_progress = False
-
-        if restart_error is not None:
-            self.error.emit(f"UF4COM stream restart failed after slow-group refresh: {restart_error}")
-
-        if not values:
-            return
-
-        self._last_values.update(values)
-        status = self._status_from_values(values)
-        if status is None:
-            return
-        self._last_status = status
-        self.statusUpdated.emit(status)
-
-    def _restart_stream_after_slow_refresh(
-        self,
-        interval_ms: int,
-        fast_types: tuple[PowerDataType, ...],
-    ) -> Exception | None:
-        last_error: Exception | None = None
-
-        for attempt in range(2):
-            if not self.is_connected or self._shutting_down:
-                return None
-
-            self._clear_receive_backlog()
-            if attempt > 0:
-                time.sleep(0.05)
-
-            try:
-                self.start_streaming(interval_ms=interval_ms, types=fast_types, timeout_ms=1000)
-                return None
-            except Exception as exc:
-                last_error = exc
-                self.log.emit(f"UF4COM stream restart retry {attempt + 1}/2 failed: {exc}")
-
-        return last_error
 
     def _is_stream_frame_search_active(self) -> bool:
         return self._stream_stop_pending or (self._stream_enabled and self._pending is not None)
