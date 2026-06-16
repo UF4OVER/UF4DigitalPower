@@ -13,11 +13,9 @@
 
 import sys
 import time
-
-from PyQt5.QtGui import QCloseEvent
-
 time_ = time.time()
 
+from PyQt5.QtGui import QCloseEvent
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QApplication
 
@@ -26,11 +24,7 @@ from app.manager import loadSavedFont
 
 logger = get_logger("Bootstrap")
 
-
 from ui import Window
-# # 解决 qfluentwidgets 对 QSS 中 path 带空格的情况无法识别的问题
-# from PyQt5.QtWidgets import QStyleFactory
-# QStyleFactory.setStyle("Fusion")
 
 class Application(Window):
     def __init__(self):

@@ -1,0 +1,6 @@
+[submodule "lib/UF4COM"]
+	path = lib/UF4COM
+	url = https://github.com/UF4OVER/UF4COM.git
+[submodule "lib/DAPLINK"]
+	path = lib/DAPLINK
+	url = https://github.com/UF4OVER/DAPLINK_STM32F103XB.git
