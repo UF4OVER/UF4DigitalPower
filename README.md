@@ -6,6 +6,9 @@ F4CP 数字电源项目分为两个部分：
 2. [上位机软件](https://github.com/UF4OVER/UF4DigitalPower) 此仓库
 3. 其实作者想过通过硬件上位机来代替软件上位机，但是软硬件的复杂度还比较高，作者没办法同时兼顾，所以先把软件上位机做好了，硬件上位机就先放一放了。
 
+QQ交流群: 871340927<br>
+立创开源广场链接: https://oshwhub.com/uf4over/shu-zi-dian-yuan<br>
+
 项目中借鉴道到的其他项目或者公开文档
 
 - 通信协议 [UF4COM V3](https://github.com/UF4OVER/UF4COM)
