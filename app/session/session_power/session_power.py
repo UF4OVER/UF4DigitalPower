@@ -942,6 +942,9 @@ class F4CPPowerClient(QObject):
             if frame is None:
                 break
 
+            if self._frame_has_error(frame):
+                self._log_error_frame(frame)
+
             if int(frame["cmd"]) == int(PowerCommand.STREAM_DATA):
                 self._handle_stream_data_frame(frame)
                 continue
@@ -1083,13 +1086,29 @@ class F4CPPowerClient(QObject):
             stream_frame_search=self._is_stream_frame_search_active(),
         )
 
+    @staticmethod
+    def _frame_has_error(frame: dict[str, int | bytes]) -> bool:
+        return bool(int(frame.get("flags", 0)) & int(PowerFrameFlag.ERROR))
+
+    @staticmethod
+    def _frame_error_code(frame: dict[str, int | bytes]) -> int:
+        payload = bytes(frame["payload"])
+        return int.from_bytes(payload[1:3], "big", signed=False) if len(payload) >= 3 else 0
+
+    def _log_error_frame(self, frame: dict[str, int | bytes]) -> None:
+        message = (
+            f"UF4COM error frame cmd=0x{int(frame['cmd']):02X} "
+            f"seq={frame['seq']} code=0x{self._frame_error_code(frame):04X}"
+        )
+        self.log.emit(message)
+
     def _parse_response(self, frame: dict[str, int | bytes]) -> dict[PowerDataType, int]:
         cmd = int(frame["cmd"])
         flags = int(frame.get("flags", 0))
         payload = bytes(frame["payload"])
 
         if flags & int(PowerFrameFlag.ERROR):
-            code = int.from_bytes(payload[1:3], "big", signed=False) if len(payload) >= 3 else 0
+            code = self._frame_error_code(frame)
             raise PowerClientDeviceError(f"Device returned UF4COM error 0x{code:04X} for seq={frame['seq']}")
         if self._pending is not None and cmd != int(self._pending.expected_cmd):
             raise PowerClientProtocolError(
