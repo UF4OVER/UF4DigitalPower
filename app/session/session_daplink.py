@@ -815,7 +815,7 @@ class DaplinkPyocdSession(QObject):
         probe = session.probe
         return DaplinkDeviceInfo(
             probe_uid=getattr(probe, "unique_id", "--") or "--",
-            probe_description=getattr(probe, "description", "--") or "--",
+            probe_description=getattr(probe, "description.md", "--") or "--",
             vendor=getattr(probe, "vendor_name", "--") or "--",
             product=getattr(probe, "product_name", "--") or "--",
             target_name=target_info.target_name,
@@ -931,7 +931,7 @@ class DaplinkPyocdSession(QObject):
                 DaplinkProbeInfo(
                     index=index,
                     uid=getattr(probe, "unique_id", "") or "--",
-                    description=getattr(probe, "description", "") or "--",
+                    description=getattr(probe, "description.md", "") or "--",
                     vendor=getattr(probe, "vendor_name", "") or "--",
                     product=getattr(probe, "product_name", "") or "--",
                     probe_class=probe.__class__.__name__,
@@ -946,7 +946,7 @@ class DaplinkPyocdSession(QObject):
             str(value or "")
             for value in (
                 probe.__class__.__name__,
-                getattr(probe, "description", ""),
+                getattr(probe, "description.md", ""),
                 getattr(probe, "vendor_name", ""),
                 getattr(probe, "product_name", ""),
             )
