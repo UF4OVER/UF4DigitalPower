@@ -4,9 +4,13 @@ F4CP 是 UF4 数字电源项目的桌面上位机，用来连接、控制、监�
 
 QQ 交流群：871340927
 
+# V6 NEW VERSION:[UF4UpperPower branch:UF4DP2_DEBUG](https://github.com/UF4DigitalPower/UF4UpperPower)<br>
+
 立创开源广场：[https://oshwhub.com/uf4over/shu-zi-dian-yuan](https://oshwhub.com/uf4over/shu-zi-dian-yuan)
 
 [QA和一些说明](docs/description.md)
+
+
 
 ## 项目组成
 
@@ -17,7 +21,7 @@ F4CP 数字电源项目分为两个部分：
 
 下位机固件、硬件结构、控制环路、Buck/Mix/Boost 模式、保护逻辑和 C 代码说明请移步[下位机固件 UF4DigitalPower](https://github.com/UF4OVER/UF4DigitalPower_Firmware)
 
-## 实物简介
+## V5实物简介(已过时)
 
 这套项目面向一块基于 `STM32G474CBT6` 的四开关同步整流 Buck-Boost 数字电源控制板：
 
